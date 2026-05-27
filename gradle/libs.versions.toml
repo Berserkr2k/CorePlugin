@@ -10,6 +10,8 @@ sqlite = "3.51.2.0"
 protocollib-modern = "5.4.0"
 protocollib-legacy = "5.3.0"
 placeholderapi = "2.11.6"
+configurate = "4.2.0"
+cloud = "2.0.0-beta.15"
 
 [libraries]
 spigot-legacy = { module = "org.spigotmc:spigot-api", version.ref = "spigotLegacy" }
@@ -30,6 +32,8 @@ protocollib-modern = { module = "net.dmulloy2:ProtocolLib", version.ref = "proto
 protocollib-legacy = { module = "com.comphenix.protocol:ProtocolLib", version.ref = "protocollib-legacy" }
 
 placeholderapi = { module = "me.clip:placeholderapi", version.ref = "placeholderapi" }
+configurate-hocon = { module = "org.spongepowered:configurate-hocon", version.ref = "configurate" }
+cloud-paper = { module = "org.incendo:cloud-paper", version.ref = "cloud" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

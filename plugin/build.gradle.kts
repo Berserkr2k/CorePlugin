@@ -11,16 +11,15 @@ dependencies {
     // Usamos la API moderna como base para compilar
     compileOnly(libs.paper.modern)
     
-    compileOnly(libs.protocollib.legacy)
-
+    // ProtocolLib moderna y PlaceholderAPI
+    compileOnly(libs.protocollib.modern)
     compileOnly("me.clip:placeholderapi:2.12.2")
 
-    // Aquí está la magia: importamos nuestros propios submódulos
-    implementation(project(":core-api"))
-    implementation(project(":core-1_8_R3"))
-    implementation(project(":core-1_21_R3"))
+    // Sponge Configurate HOCON asíncrono e Incendo Cloud v2 para comandos nativos
+    implementation(libs.configurate.hocon)
+    implementation(libs.cloud.paper)
 
-    // Librerías de Adventure para inicializar el BukkitAudiences
+    // Librerías de Adventure para inicializar el BukkitAudiences (si es necesario) y Kyori
     implementation(libs.adventure.api)
     implementation(libs.adventure.bukkit)
     implementation(libs.adventure.minimessage)
@@ -28,7 +27,6 @@ dependencies {
     // Bases de datos asíncronas
     implementation(libs.hikaricp)
     implementation(libs.sqlite.jdbc)
-
 }
 
 tasks {
@@ -36,7 +34,6 @@ tasks {
         archiveClassifier.set("")
 
         val prefix = "com.github.berserkr2k.coreplugin.libs"
-        relocate("net.kyori", "$prefix.kyori")
         relocate("com.zaxxer.hikari", "$prefix.hikari")
     }
 

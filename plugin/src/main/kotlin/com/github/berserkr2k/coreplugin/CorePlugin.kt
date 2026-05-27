@@ -1,210 +1,127 @@
 package com.github.berserkr2k.coreplugin
 
-import com.github.berserkr2k.coreplugin.admin.AdminChatListener
-import com.github.berserkr2k.coreplugin.admin.AdminSessionManager
-import com.github.berserkr2k.coreplugin.api.item.ItemFactory
-import com.github.berserkr2k.coreplugin.api.nametag.NameTagAdapter
-import com.github.berserkr2k.coreplugin.api.ui.ScoreboardAdapter
-import com.github.berserkr2k.coreplugin.api.ui.VisualNotifier
-import com.github.berserkr2k.coreplugin.chat.ChatManager
-import com.github.berserkr2k.coreplugin.chat.PrivateMessageManager
-import com.github.berserkr2k.coreplugin.command.cosmetic.ColorCommand
-import com.github.berserkr2k.coreplugin.command.admin.CoreCommandRouter
-import com.github.berserkr2k.coreplugin.command.chat.MsgCommand
-import com.github.berserkr2k.coreplugin.command.chat.ReplyCommand
-import com.github.berserkr2k.coreplugin.command.chat.SocialSpyCommand
-import com.github.berserkr2k.coreplugin.command.admin.UserAdminCommand
-import com.github.berserkr2k.coreplugin.config.YamlConfig
-import com.github.berserkr2k.coreplugin.database.DatabaseManager
-import com.github.berserkr2k.coreplugin.listener.MenuListener
-import com.github.berserkr2k.coreplugin.nametag.NameTagInterceptor
-import com.github.berserkr2k.coreplugin.nametag.NameTagManager
-import com.github.berserkr2k.coreplugin.scoreboard.SidebarController
-import com.github.berserkr2k.coreplugin.v1_21_R3.ui.ModernVisualNotifier
-import com.github.berserkr2k.coreplugin.v1_8_R3.ui.LegacyVisualNotifier
-import net.kyori.adventure.platform.bukkit.BukkitAudiences
-import net.kyori.adventure.text.minimessage.MiniMessage
-import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.common.ThreadCoordinator
+import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
+import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatModule
+import com.github.berserkr2k.coreplugin.infrastructure.anvil.AnvilModule
+import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramService
+import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramCommand
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardService
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardCommand
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorListener
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorCommand
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
+import com.github.berserkr2k.coreplugin.infrastructure.misc.ChairListener
+import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import org.bukkit.plugin.java.JavaPlugin
+import java.nio.file.Path
+import org.incendo.cloud.paper.LegacyPaperCommandManager
+import org.incendo.cloud.execution.ExecutionCoordinator
+import org.bukkit.command.CommandSender
+import org.bukkit.Bukkit
 
-/**
- * Clase principal del CorePlugin.
- * Actúa como la fachada central (Facade) que inicializa y conecta
- * todos los módulos, bases de datos y adaptadores según la versión del servidor.
- */
-class CorePlugin : JavaPlugin() {
+class CorePlugin(
+    private val paperLogger: net.kyori.adventure.text.logger.slf4j.ComponentLogger,
+    private val dataFolderPath: Path
+) : JavaPlugin() {
 
-    // ========================================================================
-    // LIBRERÍAS EXTERNAS
-    // ========================================================================
-    lateinit var adventure: BukkitAudiences
-
-    // ========================================================================
-    // ADAPTADORES DE VERSIÓN (API)
-    // ========================================================================
-    lateinit var visualNotifier: VisualNotifier
+    lateinit var threadCoordinator: ThreadCoordinator
         private set
-    lateinit var itemFactory: ItemFactory
+    lateinit var configManager: ModularConfigManager
         private set
-    lateinit var nameTagAdapter: NameTagAdapter
+    lateinit var placeholderBridge: LegacyPlaceholderBridge
         private set
-    lateinit var scoreboardAdapter: ScoreboardAdapter
+    lateinit var commandManager: LegacyPaperCommandManager<CommandSender>
         private set
 
-    // ========================================================================
-    // GESTORES DE CONFIGURACIÓN Y DATOS (MANAGERS)
-    // ========================================================================
-    lateinit var mainConfig: YamlConfig
-        private set
-    lateinit var nametagsConfig: YamlConfig
-        private set
-    lateinit var databaseManager: DatabaseManager
-        private set
-
-    // ========================================================================
-    // CONTROLADORES DE LÓGICA DE NEGOCIO (CONTROLLERS)
-    // ========================================================================
-    lateinit var nameTagManager: NameTagManager
-        private set
-    lateinit var adminSessionManager: AdminSessionManager
-        private set
-    lateinit var sidebarController: SidebarController
-        private set
-
-
-    // ========================================================================
-    // CONTROLADORES DE LÓGICA DE COLOR DEL NICK Y CHAT
-    // ========================================================================
-    lateinit var chatManager: ChatManager
-        private set
-
-    lateinit var privateMessageManager: PrivateMessageManager
-        private set
-
-    // ========================================================================
-    // CICLO DE VIDA DEL PLUGIN
-    // ========================================================================
+    private var databaseService: DatabaseService? = null
+    private var chatModule: ChatModule? = null
+    private var anvilModule: AnvilModule? = null
+    private var hologramService: HologramService? = null
+    private var leaderboardService: LeaderboardService? = null
+    private var chairListener: ChairListener? = null
+    private var interfaceService: InterfaceService? = null
 
     override fun onEnable() {
-        // 1. Inicializar librerías base
-        adventure = BukkitAudiences.create(this)
+        threadCoordinator = ThreadCoordinator(this)
+        placeholderBridge = LegacyPlaceholderBridge()
+        configManager = ModularConfigManager(this, dataFolderPath)
 
-        // 2. Cargar configuraciones (YAML)
-        mainConfig = YamlConfig(this, "config.yml")
-        nametagsConfig = YamlConfig(this, "nametags.yml")
+        // Inicializar el MenuManager para prevención de robos y duplicados
+        com.github.berserkr2k.coreplugin.common.gui.MenuManager.init(this)
 
-        // 3. Inyectar adaptadores según la versión de Minecraft
-        if (!setupAdapterPattern()) {
-            logger.severe("Versión de servidor no soportada. Apagando plugin...")
-            server.pluginManager.disablePlugin(this)
-            return
+        // Inicializar el orquestador de comandos nativos de Brigadier en Cloud v2
+        commandManager = LegacyPaperCommandManager.createNative(
+            this,
+            ExecutionCoordinator.simpleCoordinator()
+        )
+
+        // Wrapper de Executor para ejecutar CompletableFutures de forma segura en el planificador asíncrono de Paper
+        val asyncExecutor = java.util.concurrent.Executor { command ->
+            Bukkit.getAsyncScheduler().runNow(this) { _ -> command.run() }
         }
 
-        // 4. Conectar a la Base de Datos
-        databaseManager = DatabaseManager(this)
-        chatManager = ChatManager(this)
-        privateMessageManager = PrivateMessageManager(this)
+        // Inicialización reactiva asíncrona de configuraciones y módulos
+        configManager.loadModuleConfig("messages.conf", MessagesConfig::class.java, MessagesConfig())
+           .thenAcceptAsync({ messagesConfig ->
+                initializeModules(messagesConfig)
+            }, asyncExecutor)
+    }
 
-        if (server.pluginManager.getPlugin("PlaceholderAPI") != null) {
-            com.github.berserkr2k.coreplugin.placeholder.CorePlaceholderExpansion(this).register()
-            logger.info("Variables %core_...% registradas en PlaceholderAPI exitosamente.")
-        }
+    private fun initializeModules(messagesConfig: MessagesConfig) {
+        // 1. Inicializar Base de Datos (Módulo SQL)
+        databaseService = DatabaseService(this, configManager)
+        
+        // 2. Inicializar Módulo de Interfaces (Tablist, Bossbars) sin NMS
+        interfaceService = InterfaceService(this, placeholderBridge, configManager)
+        
+        // 3. Inicializar Módulo de Chat Enriquecido (DeluxeChat Equivalence)
+        chatModule = ChatModule(this, configManager, placeholderBridge)
+        
+        // 4. Inicializar Módulo de Yunques (Moderación y Permisos de Color)
+        anvilModule = AnvilModule(this, configManager)
+        
+        // 5. Inicializar Módulo de Hologramas Interactivos Modernos
+        val holoService = HologramService(this, configManager, placeholderBridge)
+        hologramService = holoService
+        HologramCommand(this, commandManager, holoService)
+        
+        // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands
+        val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge)
+        leaderboardService = lService
+        server.pluginManager.registerEvents(lService, this)
+        
+        // Registrar Comando de Leaderboards
+        LeaderboardCommand(this, commandManager, lService)
+        
+        // Cargar configuración de editor y registrar comandos/listeners
+        configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig())
+            .thenAccept { editorConfig ->
+                ArmorStandEditorCommand(this, commandManager, editorConfig)
+            }
 
-        // 5. Inicializar Controladores y Gestores
-        adminSessionManager = AdminSessionManager()
-        nameTagManager = NameTagManager(this)
-        sidebarController = SidebarController(this)
+        // Registrar listener del editor de ArmorStands
+        server.pluginManager.registerEvents(
+            ArmorStandEditorListener(this, leaderboardService!!, messagesConfig), 
+            this
+        )
 
-        // 6. Registrar Eventos e Interceptores
-        NameTagInterceptor(this).register()
-        server.pluginManager.registerEvents(AdminChatListener(this), this)
-        server.pluginManager.registerEvents(MenuListener(), this)
-
-        // 7. Registrar Comandos
-        val router = CoreCommandRouter() // Asegúrate de que el router no requiera 'this' en su constructor
-        router.register(UserAdminCommand(this))
-        getCommand("core")?.setExecutor(router)
-        getCommand("color")?.setExecutor(ColorCommand(this))
-
-        getCommand("msg")?.setExecutor(MsgCommand(this))
-        getCommand("reply")?.setExecutor(ReplyCommand(this))
-        getCommand("socialspy")?.setExecutor(SocialSpyCommand(this))
-
-        // 8. Mensaje de éxito
-        printStartupBanner()
+        // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
+        val cListener = ChairListener(this)
+        chairListener = cListener
+        server.pluginManager.registerEvents(cListener, this)
+        
+        paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma aislada y asíncrona!")
     }
 
     override fun onDisable() {
-        if (this::adventure.isInitialized) {
-            adventure.close()
-        }
-
-        if (this::sidebarController.isInitialized) {
-            sidebarController.shutdown()
-        }
-
-        if (this::databaseManager.isInitialized) {
-            databaseManager.close()
-            logger.info("Base de datos desconectada de forma segura.")
-        }
-    }
-
-    // ========================================================================
-    // MÉTODOS INTERNOS (SETUP & UTILS)
-    // ========================================================================
-
-    /**
-     * Detecta la versión del servidor y asigna las implementaciones correctas
-     * a las variables de la API (Patrón Adapter).
-     * @return true si la versión es compatible, false en caso contrario.
-     */
-    private fun setupAdapterPattern(): Boolean {
-        val version = Bukkit.getServer().bukkitVersion
-        return when {
-            version.contains("1.8.8") -> {
-                visualNotifier = LegacyVisualNotifier(adventure)
-                itemFactory = com.github.berserkr2k.coreplugin.v1_8_R3.item.LegacyItemFactory()
-                nameTagAdapter = com.github.berserkr2k.coreplugin.v1_8_R3.nametag.LegacyNameTagAdapter()
-
-                // AQUÍ ESTABA EL ERROR: Instanciamos el Scoreboard de la 1.8
-                //scoreboardAdapter = com.github.berserkr2k.coreplugin.v1_8_R3.ui.LegacyScoreboardAdapter()
-                true
-            }
-            version.contains("1.21") -> {
-                visualNotifier = ModernVisualNotifier()
-                itemFactory = com.github.berserkr2k.coreplugin.v1_21_R3.item.ModernItemFactory()
-                nameTagAdapter = com.github.berserkr2k.coreplugin.v1_21_R3.nametag.ModernNameTagAdapter()
-
-                // AQUÍ ESTABA EL ERROR: Instanciamos el Scoreboard moderno
-                scoreboardAdapter = com.github.berserkr2k.coreplugin.v1_21_R3.ui.ModernScoreboardAdapter()
-                true
-            }
-            else -> false
-        }
-    }
-
-    /**
-     * Dibuja un banner ASCII en la consola usando la API Adventure
-     * para soportar gradientes y colores hexadecimales.
-     */
-    private fun printStartupBanner() {
-        val console = adventure.console()
-        val mm = MiniMessage.miniMessage()
-        val version = description.version
-        val mcVersion = server.bukkitVersion
-
-        val banner = """
-            <dark_gray>====================================================
-            <green>       ____               <gold>CorePlugin
-            <green>      / __ \              <gray>Versión: <white>v$version
-            <green>     | |  | |             <gray>Motor: <aqua>$mcVersion
-            <green>     | |__| |             <gray>Estado: <green><bold>SISTEMA ACTIVO
-            <green>      \____/              <gray>Autor: <white>Berserkr2k
-            <dark_gray>====================================================
-        """.trimIndent()
-
-        banner.lines().forEach { line ->
-            console.sendMessage(mm.deserialize(line))
-        }
+        hologramService?.shutdown()
+        leaderboardService?.shutdown()
+        chairListener?.shutdown()
+        databaseService?.shutdown()
+        configManager.shutdown()
     }
 }
