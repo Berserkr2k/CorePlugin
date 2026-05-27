@@ -162,7 +162,8 @@ class EconomyService(
             stmt.executeQuery().use { rs ->
                 val metaData = rs.metaData
                 for (i in 1..metaData.columnCount) {
-                    existingColumns.add(metaData.getColumnName(i).lowercase())
+                    val rawName = rs.metaData.getColumnLabel(i) ?: rs.metaData.getColumnName(i)
+                    existingColumns.add(rawName.lowercase().substringAfter('.'))
                 }
             }
         }
