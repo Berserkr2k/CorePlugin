@@ -49,10 +49,18 @@ class AnvilListener(private val config: AnvilConfig) : Listener {
 
         val formattedDisplayName: Component = when {
             player.hasPermission(config.permissionColor) -> {
-                MiniMessage.miniMessage().deserialize(renameText)
+                if (renameText.contains("<") && renameText.contains(">")) {
+                    MiniMessage.miniMessage().deserialize(renameText)
+                } else {
+                    net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(renameText)
+                }
             }
             player.hasPermission(config.permissionStyle) -> {
-                styleParser.deserialize(renameText)
+                if (renameText.contains("&")) {
+                    net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand().deserialize(renameText)
+                } else {
+                    styleParser.deserialize(renameText)
+                }
             }
             else -> {
                 Component.text(renameText)

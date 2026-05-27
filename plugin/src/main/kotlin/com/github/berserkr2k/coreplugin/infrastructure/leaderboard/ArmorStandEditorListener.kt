@@ -40,7 +40,7 @@ class ArmorStandEditorListener(
             playerEditingSessions[player.uniqueId] = target.uniqueId
             
             // Abrir la GUI nativa del editor
-            ArmorStandEditorGui.open(player, target)
+            ArmorStandEditorGui.open(plugin, player, target)
         }
     }
 }

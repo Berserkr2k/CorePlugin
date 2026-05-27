@@ -48,6 +48,9 @@ class CorePlugin(
         placeholderBridge = LegacyPlaceholderBridge()
         configManager = ModularConfigManager(this, dataFolderPath)
 
+        // Inicializar el MenuManager para prevención de robos y duplicados
+        com.github.berserkr2k.coreplugin.common.gui.MenuManager.init(this)
+
         // Inicializar el orquestador de comandos nativos de Brigadier en Cloud v2
         commandManager = LegacyPaperCommandManager.createNative(
             this,

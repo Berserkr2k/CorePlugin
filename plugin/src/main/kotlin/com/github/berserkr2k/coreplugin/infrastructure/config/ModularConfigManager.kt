@@ -57,6 +57,26 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
         })
     }
 
+    /**
+     * Guarda de forma asíncrona una instancia de configuración en su archivo HOCON correspondiente.
+     */
+    fun <T : Any> saveModuleConfig(fileName: String, configClass: Class<T>, instance: T): CompletableFuture<Void> {
+        return CompletableFuture.runAsync({
+            val file = configDirectory.resolve(fileName)
+            val loader = loaders[fileName] ?: HoconConfigurationLoader.builder().path(file).build()
+            try {
+                val root = loader.load() // Carga el nodo existente para mantener comentarios
+                val mapper = ObjectMapper.factory().get(configClass)
+                mapper.save(instance, root)
+                loader.save(root)
+                loadedConfigs[fileName] = instance
+            } catch (e: ConfigurateException) {
+                plugin.logger.severe("Fallo al guardar HOCON: $fileName")
+                throw RuntimeException(e)
+            }
+        })
+    }
+
     fun shutdown() {
         loadedConfigs.clear()
         loaders.clear()

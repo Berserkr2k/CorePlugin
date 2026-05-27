@@ -18,9 +18,18 @@ class ModernHologram(
     private val lines = CopyOnWriteArrayList<Display>()
     private var interactionEntity: Interaction? = null
     private val miniMessage = MiniMessage.miniMessage()
+    private val legacySerializer = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand()
     private val lineSpacing = 0.35
     
     var clickCommand: String? = null
+
+    private fun parseText(text: String): net.kyori.adventure.text.Component {
+        return if (text.contains("<") && text.contains(">")) {
+            miniMessage.deserialize(text)
+        } else {
+            legacySerializer.deserialize(text)
+        }
+    }
 
     /**
      * Construye y renderiza el holograma en la región correspondiente al bloque tridimensional.
@@ -31,7 +40,7 @@ class ModernHologram(
             
             for (lineText in textLines) {
                 val textDisplay = location.world.spawn(currentLoc, TextDisplay::class.java) { entity ->
-                    entity.text(miniMessage.deserialize(lineText))
+                    entity.text(parseText(lineText))
                     entity.billboard = Display.Billboard.CENTER
                     entity.isShadowed = true
                     entity.isPersistent = true
@@ -56,12 +65,17 @@ class ModernHologram(
     /**
      * Elimina físicamente las entidades asociadas al holograma.
      */
-    fun delete() {
-        Bukkit.getRegionScheduler().execute(plugin, location) {
+    fun delete(forceSync: Boolean = false) {
+        val action = {
             lines.forEach { it.remove() }
             lines.clear()
             interactionEntity?.remove()
             interactionEntity = null
+        }
+        if (forceSync || !plugin.isEnabled) {
+            action()
+        } else {
+            Bukkit.getRegionScheduler().execute(plugin, location, action)
         }
     }
 

@@ -39,22 +39,43 @@ class HologramService(
     }
 
     /**
-     * Crea dinámicamente un holograma interactivo en el mundo físico y lo registra en memoria.
+     * Crea dinámicamente un holograma interactivo en el mundo físico y lo registra en memoria y disco.
      */
     fun createHologram(id: String, location: Location, lines: List<String>, clickCommand: String? = null): ModernHologram {
         val holo = ModernHologram(id, location, plugin)
         holo.clickCommand = clickCommand
         holo.spawn(lines)
         activeHolograms[id] = holo
+
+        // Actualizar la configuración y guardarla en disco
+        val newHolograms = config.holograms.toMutableMap()
+        newHolograms[id] = HologramConfig.PersistedHologram(
+            world = location.world.name,
+            x = location.x,
+            y = location.y,
+            z = location.z,
+            lines = lines,
+            clickCommand = clickCommand
+        )
+        config = HologramConfig(newHolograms)
+        configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
+
         return holo
     }
 
     /**
-     * Elimina físicamente un holograma por su identificador.
+     * Elimina físicamente un holograma por su identificador y lo remueve del disco.
      */
     fun deleteHologram(id: String): Boolean {
         val holo = activeHolograms.remove(id) ?: return false
         holo.delete()
+
+        // Actualizar la configuración y guardarla en disco
+        val newHolograms = config.holograms.toMutableMap()
+        newHolograms.remove(id)
+        config = HologramConfig(newHolograms)
+        configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
+
         return true
     }
 
@@ -68,10 +89,10 @@ class HologramService(
     fun getActiveHolograms(): Map<String, ModernHologram> = activeHolograms
 
     /**
-     * Desintegra físicamente todos los hologramas activos.
+     * Desintegra físicamente todos los hologramas activos de forma síncrona y segura en onDisable.
      */
     fun shutdown() {
-        activeHolograms.values.forEach { it.delete() }
+        activeHolograms.values.forEach { it.delete(true) }
         activeHolograms.clear()
     }
 }
