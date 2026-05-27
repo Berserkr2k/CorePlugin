@@ -9,7 +9,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
-import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 
 class ModularConfigManager(private val plugin: Plugin, private val configDirectory: Path) {
@@ -24,6 +23,7 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
 
     /**
      * Carga de forma asíncrona un archivo de configuración HOCON mapeándolo a un tipo específico.
+     * Guarda automáticamente los nuevos campos predeterminados en el disco.
      */
     fun <T : Any> loadModuleConfig(fileName: String, configClass: Class<T>, defaultInstance: T): CompletableFuture<T> {
         return CompletableFuture.supplyAsync({
@@ -46,6 +46,10 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
                     mappedInstance = defaultInstance
                 } else {
                     mappedInstance = mapper.load(root) ?: defaultInstance
+                    // Guardado automático inmediato: si el archivo físico carece de nuevos campos añadidos en Kotlin,
+                    // Sponge Configurate los añade de forma segura sin borrar los comentarios del usuario.
+                    mapper.save(mappedInstance, root)
+                    loader.save(root)
                 }
 
                 loadedConfigs[fileName] = mappedInstance

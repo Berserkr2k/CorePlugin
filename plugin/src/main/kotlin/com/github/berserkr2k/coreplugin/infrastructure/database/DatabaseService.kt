@@ -14,6 +14,7 @@ class DatabaseService(
     private var dataSource: HikariDataSource? = null
     lateinit var config: DatabaseConfig
         private set
+    val initFuture = java.util.concurrent.CompletableFuture<Void>()
 
     init {
         // Inicialización reactiva asíncrona de la configuración y el pool de conexiones
@@ -21,6 +22,10 @@ class DatabaseService(
             .thenAccept { loadedConfig ->
                 this.config = loadedConfig
                 initializePool()
+                initFuture.complete(null)
+            }.exceptionally { ex ->
+                initFuture.completeExceptionally(ex)
+                null
             }
     }
 

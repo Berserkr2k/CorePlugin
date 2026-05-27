@@ -10,13 +10,14 @@ import com.github.berserkr2k.coreplugin.infrastructure.anvil.AnvilModule
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramService
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardService
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorListener
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
+import com.github.berserkr2k.coreplugin.infrastructure.misc.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import org.bukkit.plugin.java.JavaPlugin
 import java.nio.file.Path
-import java.util.logging.Logger
 import org.incendo.cloud.paper.LegacyPaperCommandManager
 import org.incendo.cloud.execution.ExecutionCoordinator
 import org.bukkit.command.CommandSender
@@ -41,6 +42,7 @@ class CorePlugin(
     private var anvilModule: AnvilModule? = null
     private var hologramService: HologramService? = null
     private var leaderboardService: LeaderboardService? = null
+    private var chairListener: ChairListener? = null
     private var interfaceService: InterfaceService? = null
 
     override fun onEnable() {
@@ -83,12 +85,17 @@ class CorePlugin(
         anvilModule = AnvilModule(this, configManager)
         
         // 5. Inicializar Módulo de Hologramas Interactivos Modernos
-        val holoService = HologramService(this, configManager)
+        val holoService = HologramService(this, configManager, placeholderBridge)
         hologramService = holoService
         HologramCommand(this, commandManager, holoService)
         
         // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands
-        leaderboardService = LeaderboardService(this, configManager, messagesConfig)
+        val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge)
+        leaderboardService = lService
+        server.pluginManager.registerEvents(lService, this)
+        
+        // Registrar Comando de Leaderboards
+        LeaderboardCommand(this, commandManager, lService)
         
         // Cargar configuración de editor y registrar comandos/listeners
         configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig())
@@ -101,6 +108,11 @@ class CorePlugin(
             ArmorStandEditorListener(this, leaderboardService!!, messagesConfig), 
             this
         )
+
+        // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
+        val cListener = ChairListener(this)
+        chairListener = cListener
+        server.pluginManager.registerEvents(cListener, this)
         
         paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma aislada y asíncrona!")
     }
@@ -108,6 +120,7 @@ class CorePlugin(
     override fun onDisable() {
         hologramService?.shutdown()
         leaderboardService?.shutdown()
+        chairListener?.shutdown()
         databaseService?.shutdown()
         configManager.shutdown()
     }

@@ -20,6 +20,8 @@ class CustomMenu(
 ) {
     val inventory: Inventory = Bukkit.createInventory(null, slots, title)
     private val clickHandlers = ConcurrentHashMap<Int, (Player, InventoryClickEvent) -> Unit>()
+    val interactableSlots = ConcurrentHashMap.newKeySet<Int>()
+    var onClose: ((Player) -> Unit)? = null
 
     /**
      * Define un ítem en un slot y su manejador de evento al hacer clic.
@@ -71,28 +73,45 @@ object MenuManager : Listener {
         val inventory = event.inventory
         val menu = activeMenus[inventory] ?: return
 
-        // Cancelamos todo evento de click dentro de menús personalizados para prevenir robo (antisteal)
-        event.isCancelled = true
-
         // Si el click ocurre fuera de la ventana del menú, no hacemos nada
         if (event.rawSlot < 0) return
 
-        // Procesamos la lógica de click solo si ocurre dentro de los slots del menú superior
+        // Procesamos la lógica de click
         if (event.rawSlot < event.inventory.size) {
-            menu.handleInventoryClick(event)
+            if (menu.interactableSlots.contains(event.rawSlot)) {
+                // Permitimos la interacción estándar para colocar/quitar ítems en estos slots
+                event.isCancelled = false
+            } else {
+                event.isCancelled = true
+                menu.handleInventoryClick(event)
+            }
+        } else {
+            // Permitimos clicks en el propio inventario del jugador para mover ítems,
+            // excepto si están intentando hacer Shift-Click para meter un ítem en un slot no permitido
+            if (event.isShiftClick) {
+                event.isCancelled = true // Previene bypasses mediante Shift-Click
+            } else {
+                event.isCancelled = false
+            }
         }
     }
 
     @EventHandler
     fun onInventoryDrag(event: InventoryDragEvent) {
         val inventory = event.inventory
-        if (activeMenus.containsKey(inventory)) {
-            event.isCancelled = true // Antisteal absoluto al arrastrar ítems (anti-dupe)
+        val menu = activeMenus[inventory] ?: return
+        
+        // Si arrastran en cualquier slot del menú que no sea interactuable, cancelar
+        val hasNonInteractableDrag = event.rawSlots.any { it < inventory.size && !menu.interactableSlots.contains(it) }
+        if (hasNonInteractableDrag) {
+            event.isCancelled = true
         }
     }
 
     @EventHandler
     fun onInventoryClose(event: InventoryCloseEvent) {
-        activeMenus.remove(event.inventory)
+        val player = event.player as? Player ?: return
+        val menu = activeMenus.remove(event.inventory)
+        menu?.onClose?.invoke(player)
     }
 }

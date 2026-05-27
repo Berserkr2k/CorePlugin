@@ -14,13 +14,20 @@ class LegacyPlaceholderBridge {
      * Procesa y convierte texto heredado con variables en un componente Adventure MiniMessage de forma segura.
      */
     fun parseLegacyStringSecurely(player: Player, text: String): Component {
-        val resolvedText = if (isPapiEnabled) {
+        val resolvedText = parsePlaceholder(player, text)
+        return miniMessage.deserialize(resolvedText)
+    }
+
+    /**
+     * Resuelve asíncronamente un String con placeholders mediante PlaceholderAPI o reemplazos nativos si está deshabilitado.
+     */
+    fun parsePlaceholder(player: Player, text: String): String {
+        return if (isPapiEnabled) {
             PapiHook.setPlaceholders(player, text)
         } else {
             text.replace("%player_name%", player.name)
                 .replace("%player_displayname%", player.name)
         }
-        return miniMessage.deserialize(resolvedText)
     }
 
     // El uso de un objeto interno evita que el ClassLoader intente cargar clases de PlaceholderAPI
