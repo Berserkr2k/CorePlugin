@@ -1,0 +1,82 @@
+# ==========================================
+#        CORE PLUGIN - CONFIGURACIÓN
+# ==========================================
+
+Database:
+  # Opciones: SQLITE (Local por servidor) o MYSQL (Global/MariaDB)
+  Type: "SQLITE"
+
+  # Credenciales (Solo se usan si Type es MYSQL)
+  Host: "127.0.0.1"
+  Port: 3306
+  Name: "servidor_db"
+  User: "root"
+  Password: "password"
+
+  # Prefijo para las tablas.
+  # Útil para aislar datos usando una misma base de datos (ej. "survival_", "lobby_")
+  TablePrefix: "global_"
+
+# Formatos de chat interactivos (Estilo DeluxeChat)
+# IMPORTANTE: El formato 'default' es obligatorio.
+# La prioridad funciona así: 1 es la más alta (gana), 100 es la más baja.
+formats:
+  default:
+    priority: 99
+    prefix: '&7[%vault_group%&7] '
+    name_color: '&b'
+    name: '%player_name%'
+    suffix: '&7> '
+    chat_color: '&f'
+    prefix_tooltip:
+      - '%player_name%'
+    name_tooltip:
+      - '&eHaz clic para enviar un mensaje privado.'
+    suffix_tooltip: [ ]
+    prefix_click_command: '/ranks '
+    name_click_command: '/msg %player_name% '
+    suffix_click_command: ''
+
+  staff:
+    priority: 1
+    prefix: '%luckperms_prefix%'
+    name_color: '&8'
+    name: '%core_nickname%'
+    suffix: '&f: '
+    chat_color: '&7'
+    prefix_tooltip:
+      - '&b» &6%player_name%'
+      - ''
+      - '&6» &bRango(s): %luckperms_groups%'
+      - '&6» &aMonedas: &r%core_coins%'
+      - ''
+      - '&eClic para enviar un mensaje'
+    name_tooltip:
+      - '&b» &6%player_name%'
+      - ''
+      - '&6» &bRango(s): %luckperms_groups%'
+      - '&6» &aMonedas: &r%core_coins%'
+      - ''
+      - '&eClic para enviar un mensaje'
+    suffix_tooltip: [ ]
+    prefix_click_command: '/msg %player_name% '
+    name_click_command: '/msg %player_name% '
+    suffix_click_command: '/msg %player_name% '
+
+  vip:
+    priority: 2
+    prefix: '%luckperms_prefix%'
+    name_color: '&8'
+    name: '%core_nickname%'
+    suffix: '&f: '
+    chat_color: '&7'
+    prefix_tooltip:
+      - '&b» &6%player_name%'
+      - '&6» &bRango(s): %luckperms_groups%'
+      - '&6» &aMonedas: &r%core_coins%'
+    name_tooltip:
+      - '&eClic para enviar un mensaje'
+    suffix_tooltip: [ ]
+    prefix_click_command: '/msg %player_name% '
+    name_click_command: '/msg %player_name% '
+    suffix_click_command: ''

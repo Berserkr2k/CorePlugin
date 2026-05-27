@@ -1,0 +1,24 @@
+name: CorePlugin
+version: "1.0.0"
+main: com.github.berserkr2k.coreplugin.CorePlugin
+author: Berserkr2k
+description: Core modular multi-versión en Kotlin
+api-version: "1.13"
+depend: [ProtocolLib]
+softdepend: ["PlaceholderAPI"]
+
+commands:
+  core:
+    description: Comando principal del Core
+    aliases: [cp]
+  color:
+    description: Cambia tu color de chat
+  msg:
+    description: Envia un mensaje privado interactivo
+    aliases: [tell, w, m, pm]
+  reply:
+    description: Responde al ultimo mensaje privado
+    aliases: [r, responder]
+  socialspy:
+    description: Activa/Desactiva el espionaje de mensajes
+    aliases: [spy]
