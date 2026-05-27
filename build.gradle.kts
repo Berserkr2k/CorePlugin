@@ -19,6 +19,8 @@ subprojects {
         maven("https://repo.dmulloy2.net/repository/public/")
 
         maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
+        maven("https://jitpack.io")
+        maven("https://repo.codemc.io/repository/creatorfromhell/")
     }
 
     // --- LÓGICA DE COMPILACIÓN MODERNA ---

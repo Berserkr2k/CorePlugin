@@ -16,6 +16,12 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEdi
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
 import com.github.berserkr2k.coreplugin.infrastructure.misc.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
+import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
+import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyListener
+import com.github.berserkr2k.coreplugin.infrastructure.economy.VaultEconomyHook
+import com.github.berserkr2k.coreplugin.infrastructure.economy.Vault2EconomyHook
+import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
+import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
 import org.bukkit.plugin.java.JavaPlugin
 import java.nio.file.Path
 import org.incendo.cloud.paper.LegacyPaperCommandManager
@@ -44,6 +50,7 @@ class CorePlugin(
     private var leaderboardService: LeaderboardService? = null
     private var chairListener: ChairListener? = null
     private var interfaceService: InterfaceService? = null
+    private var economyService: EconomyService? = null
 
     override fun onEnable() {
         threadCoordinator = ThreadCoordinator(this)
@@ -113,6 +120,48 @@ class CorePlugin(
         val cListener = ChairListener(this)
         chairListener = cListener
         server.pluginManager.registerEvents(cListener, this)
+
+        // 8. Inicializar Módulo de Economía Multi-Divisa Altamente Seguro
+        val ecoService = EconomyService(this, configManager, databaseService!!)
+        economyService = ecoService
+        
+        server.pluginManager.registerEvents(EconomyListener(this, ecoService), this)
+
+        if (server.pluginManager.isPluginEnabled("Vault")) {
+            server.servicesManager.register(
+                net.milkbowl.vault.economy.Economy::class.java,
+                VaultEconomyHook(ecoService),
+                this,
+                org.bukkit.plugin.ServicePriority.Highest
+            )
+            server.servicesManager.register(
+                net.milkbowl.vault2.economy.Economy::class.java,
+                Vault2EconomyHook(ecoService),
+                this,
+                org.bukkit.plugin.ServicePriority.Highest
+            )
+            paperLogger.info("¡Wrappers seguros de Vault (Legacy) y Vault2 (VaultUnlocked) registrados con prioridad Máxima!")
+        }
+
+        ecoService.initFuture.thenAccept {
+            Bukkit.getScheduler().runTask(this, Runnable {
+                WalletCommand(this, commandManager, ecoService)
+                
+                if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
+                    EconomyPlaceholderExpansion(ecoService).register()
+                    paperLogger.info("¡Expansión de economía de PlaceholderAPI registrada con éxito!")
+                }
+
+                // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
+                threadCoordinator.runTimerAsync(72000, 1728000) {
+                    ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
+                        if (deleted > 0) {
+                            paperLogger.info("¡Purga de base de datos completada! $deleted cuentas inactivas eliminadas.")
+                        }
+                    }
+                }
+            })
+        }
         
         paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma aislada y asíncrona!")
     }

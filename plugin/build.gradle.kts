@@ -14,6 +14,7 @@ dependencies {
     // ProtocolLib moderna y PlaceholderAPI
     compileOnly(libs.protocollib.modern)
     compileOnly("me.clip:placeholderapi:2.12.2")
+    compileOnly("net.milkbowl.vault:VaultUnlockedAPI:2.16")
 
     // Sponge Configurate HOCON asíncrono e Incendo Cloud v2 para comandos nativos
     implementation(libs.configurate.hocon)
