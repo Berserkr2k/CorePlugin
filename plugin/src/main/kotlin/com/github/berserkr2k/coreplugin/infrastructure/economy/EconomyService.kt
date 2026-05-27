@@ -157,12 +157,14 @@ class EconomyService(
     }
 
     private fun checkAndAddColumns(conn: Connection) {
-        val metaData = conn.prepareStatement("SELECT * FROM player_economy LIMIT 0").use { stmt ->
-            stmt.executeQuery().metaData
-        }
         val existingColumns = mutableSetOf<String>()
-        for (i in 1..metaData.columnCount) {
-            existingColumns.add(metaData.getColumnName(i).lowercase())
+        conn.prepareStatement("SELECT * FROM player_economy LIMIT 0").use { stmt ->
+            stmt.executeQuery().use { rs ->
+                val metaData = rs.metaData
+                for (i in 1..metaData.columnCount) {
+                    existingColumns.add(metaData.getColumnName(i).lowercase())
+                }
+            }
         }
 
         for (currency in currencies.values) {
