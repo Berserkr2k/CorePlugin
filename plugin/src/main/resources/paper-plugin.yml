@@ -1,0 +1,15 @@
+name: CorePlugin
+version: "1.0.0"
+main: com.github.berserkr2k.coreplugin.CorePlugin
+bootstrapper: com.github.berserkr2k.coreplugin.PluginBootstrap
+api-version: "1.21"
+dependencies:
+  server:
+    ProtocolLib:
+      load: BEFORE
+      required: true
+      join-classpath: true
+    PlaceholderAPI:
+      load: BEFORE
+      required: false
+      join-classpath: true
