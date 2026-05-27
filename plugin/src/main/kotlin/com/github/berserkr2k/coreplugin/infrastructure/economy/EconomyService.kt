@@ -28,12 +28,12 @@ class EconomyService(
     val initFuture = CompletableFuture<Void>()
 
     init {
-        // Asegurar que la base de datos esté lista antes de inicializar la economía
-        databaseService.initFuture.thenAccept {
+        // Asegurar que la base de datos esté lista antes de inicializar la economía (síncronamente)
+        try {
             setupCurrenciesAndDatabase()
-        }.exceptionally { ex ->
+        } catch (ex: Exception) {
             initFuture.completeExceptionally(ex)
-            null
+            throw ex
         }
     }
 
@@ -47,22 +47,23 @@ class EconomyService(
         }
 
         val configFiles = currenciesFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
-        val loadFutures = configFiles.map { file ->
+        for (file in configFiles) {
             val relativePath = "currencies/${file.name}"
-            configManager.loadModuleConfig(relativePath, CurrencyConfig::class.java, CurrencyConfig())
-                .thenAccept { loadedConfig ->
-                    currencies[loadedConfig.id] = loadedConfig
-                }
+            try {
+                val loadedConfig = configManager.loadModuleConfig(relativePath, CurrencyConfig::class.java, CurrencyConfig()).join()
+                currencies[loadedConfig.id] = loadedConfig
+            } catch (e: Exception) {
+                plugin.logger.severe("Error al cargar la divisa desde ${file.name}: ${e.message}")
+            }
         }
 
-        CompletableFuture.allOf(*loadFutures.toTypedArray()).thenAccept {
-            // Inicializar base de datos
+        try {
             initializeDatabaseTables()
             initFuture.complete(null)
             plugin.logger.info("¡Módulo de Economía Multi-Divisa inicializado con ${currencies.size} monedas!")
-        }.exceptionally { ex ->
-            initFuture.completeExceptionally(ex)
-            null
+        } catch (e: Exception) {
+            initFuture.completeExceptionally(e)
+            throw e
         }
     }
 

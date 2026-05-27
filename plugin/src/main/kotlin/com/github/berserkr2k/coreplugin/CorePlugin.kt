@@ -67,15 +67,13 @@ class CorePlugin(
         )
 
         // Wrapper de Executor para ejecutar CompletableFutures de forma segura en el planificador asíncrono de Paper
-        val asyncExecutor = java.util.concurrent.Executor { command ->
-            Bukkit.getAsyncScheduler().runNow(this) { _ -> command.run() }
+        try {
+            val messagesConfig = configManager.loadModuleConfig("messages.conf", MessagesConfig::class.java, MessagesConfig()).join()
+            initializeModules(messagesConfig)
+        } catch (e: Exception) {
+            paperLogger.error("Error crítico al inicializar el CorePlugin: ${e.message}", e)
+            server.pluginManager.disablePlugin(this)
         }
-
-        // Inicialización reactiva asíncrona de configuraciones y módulos
-        configManager.loadModuleConfig("messages.conf", MessagesConfig::class.java, MessagesConfig())
-           .thenAcceptAsync({ messagesConfig ->
-                initializeModules(messagesConfig)
-            }, asyncExecutor)
     }
 
     private fun initializeModules(messagesConfig: MessagesConfig) {
@@ -104,11 +102,9 @@ class CorePlugin(
         // Registrar Comando de Leaderboards
         LeaderboardCommand(this, commandManager, lService)
         
-        // Cargar configuración de editor y registrar comandos/listeners
-        configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig())
-            .thenAccept { editorConfig ->
-                ArmorStandEditorCommand(this, commandManager, editorConfig)
-            }
+        // Cargar configuración de editor y registrar comandos/listeners síncronamente
+        val editorConfig = configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig()).join()
+        ArmorStandEditorCommand(this, commandManager, editorConfig)
 
         // Registrar listener del editor de ArmorStands
         server.pluginManager.registerEvents(
@@ -143,27 +139,24 @@ class CorePlugin(
             paperLogger.info("¡Wrappers seguros de Vault (Legacy) y Vault2 (VaultUnlocked) registrados con prioridad Máxima!")
         }
 
-        ecoService.initFuture.thenAccept {
-            Bukkit.getScheduler().runTask(this, Runnable {
-                WalletCommand(this, commandManager, ecoService, messagesConfig)
-                
-                if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
-                    EconomyPlaceholderExpansion(ecoService).register()
-                    paperLogger.info("¡Expansión de economía de PlaceholderAPI registrada con éxito!")
-                }
+        // Registrar Billetera y Comandos Dinámicos de Divisas
+        WalletCommand(this, commandManager, ecoService, messagesConfig)
+        
+        if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
+            EconomyPlaceholderExpansion(ecoService).register()
+            paperLogger.info("¡Expansión de economía de PlaceholderAPI registrada con éxito!")
+        }
 
-                // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
-                threadCoordinator.runTimerAsync(72000, 1728000) {
-                    ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
-                        if (deleted > 0) {
-                            paperLogger.info("¡Purga de base de datos completada! $deleted cuentas inactivas eliminadas.")
-                        }
-                    }
+        // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
+        threadCoordinator.runTimerAsync(72000, 1728000) {
+            ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
+                if (deleted > 0) {
+                    paperLogger.info("¡Purga de base de datos completada! $deleted cuentas inactivas eliminadas.")
                 }
-            })
+            }
         }
         
-        paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma aislada y asíncrona!")
+        paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma síncrona y robusta!")
     }
 
     override fun onDisable() {

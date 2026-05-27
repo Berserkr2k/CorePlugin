@@ -17,16 +17,16 @@ class DatabaseService(
     val initFuture = java.util.concurrent.CompletableFuture<Void>()
 
     init {
-        // Inicialización reactiva asíncrona de la configuración y el pool de conexiones
-        configManager.loadModuleConfig("database.conf", DatabaseConfig::class.java, DatabaseConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                initializePool()
-                initFuture.complete(null)
-            }.exceptionally { ex ->
-                initFuture.completeExceptionally(ex)
-                null
-            }
+        // Inicialización síncrona de la configuración y el pool de conexiones
+        try {
+            val loadedConfig = configManager.loadModuleConfig("database.conf", DatabaseConfig::class.java, DatabaseConfig()).join()
+            this.config = loadedConfig
+            initializePool()
+            initFuture.complete(null)
+        } catch (ex: Exception) {
+            initFuture.completeExceptionally(ex)
+            throw ex
+        }
     }
 
     private fun initializePool() {
