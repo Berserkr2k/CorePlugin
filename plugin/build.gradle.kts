@@ -34,7 +34,6 @@ tasks {
         archiveClassifier.set("")
 
         val prefix = "com.github.berserkr2k.coreplugin.libs"
-        relocate("net.kyori", "$prefix.kyori")
         relocate("com.zaxxer.hikari", "$prefix.hikari")
     }
 
