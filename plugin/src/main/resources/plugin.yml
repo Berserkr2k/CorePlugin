@@ -1,5 +1,5 @@
 name: CorePlugin
-version: "1.0.0"
+version: "1.0.1"
 main: com.github.berserkr2k.coreplugin.CorePlugin
 author: Berserkr2k
 description: Core modular multi-versión en Kotlin

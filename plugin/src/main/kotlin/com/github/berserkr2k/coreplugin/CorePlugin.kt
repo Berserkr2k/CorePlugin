@@ -145,7 +145,7 @@ class CorePlugin(
 
         ecoService.initFuture.thenAccept {
             Bukkit.getScheduler().runTask(this, Runnable {
-                WalletCommand(this, commandManager, ecoService)
+                WalletCommand(this, commandManager, ecoService, messagesConfig)
                 
                 if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
                     EconomyPlaceholderExpansion(ecoService).register()

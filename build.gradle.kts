@@ -8,7 +8,7 @@ subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
     group = "com.github.berserkr2k.coreplugin" // Usando tu alias de Github
-    version = "1.0.0"
+    version = "1.0.1"
 
     repositories {
         mavenCentral()
