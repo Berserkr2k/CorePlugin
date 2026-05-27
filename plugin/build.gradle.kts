@@ -20,14 +20,9 @@ dependencies {
     implementation(libs.configurate.hocon)
     implementation(libs.cloud.paper)
 
-    // Librerías de Adventure para inicializar el BukkitAudiences (si es necesario) y Kyori
-    implementation(libs.adventure.api)
-    implementation(libs.adventure.bukkit)
-    implementation(libs.adventure.minimessage)
-
     // Bases de datos asíncronas
     implementation(libs.hikaricp)
-    implementation(libs.sqlite.jdbc)
+    compileOnly(libs.sqlite.jdbc)
 }
 
 tasks {
