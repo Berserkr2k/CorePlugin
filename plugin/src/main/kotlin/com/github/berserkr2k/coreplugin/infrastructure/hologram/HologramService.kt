@@ -21,6 +21,7 @@ class HologramService(
     private val placeholderBridge: LegacyPlaceholderBridge
 ) {
     private val activeHolograms = ConcurrentHashMap<String, ModernHologram>()
+    private val refreshTasks = ConcurrentHashMap<String, io.papermc.paper.threadedregions.scheduler.ScheduledTask>()
     lateinit var config: HologramConfig
         private set
 
@@ -49,10 +50,16 @@ class HologramService(
                         val loc = Location(world, ph.x, ph.y, ph.z)
                         val holo = ModernHologram(id, loc, plugin, placeholderBridge)
                         holo.clickCommand = ph.clickCommand
-                        holo.lineSpacing = loadedConfig.lineSpacing
-                        holo.backgroundColor = loadedConfig.backgroundColor
+                        holo.lineSpacing = ph.lineSpacing
+                        holo.backgroundColor = ph.backgroundColor
+                        holo.renderDistance = ph.renderDistance
                         holo.setup(ph.lines)
                         activeHolograms[id] = holo
+
+                        // Si es actualizable, programar su propia tarea de actualización
+                        if (ph.updatable) {
+                            scheduleHologramUpdate(holo, ph.updateInterval)
+                        }
                     }
                 }
                 
@@ -71,11 +78,13 @@ class HologramService(
             }
     }
 
+
     private fun updateTracking() {
         val players = Bukkit.getOnlinePlayers()
         for (player in players) {
             activeHolograms.values.forEach { holo ->
-                val inRange = player.world == holo.location.world && player.location.distanceSquared(holo.location) <= 48 * 48
+                val dist = holo.renderDistance.toDouble()
+                val inRange = player.world == holo.location.world && player.location.distanceSquared(holo.location) <= dist * dist
                 val isViewing = holo.viewers.contains(player.uniqueId)
                 if (inRange && !isViewing) {
                     holo.showTo(player)
@@ -114,22 +123,39 @@ class HologramService(
     /**
      * Crea dinámicamente un holograma packet-based e impone unicidad eliminando cualquier duplicado previo.
      */
-    fun createHologram(id: String, location: Location, lines: List<String>, clickCommand: String? = null): ModernHologram {
+    fun createHologram(
+        id: String,
+        location: Location,
+        lines: List<String>,
+        clickCommand: String? = null,
+        lineSpacing: Double? = null,
+        backgroundColor: Int? = null,
+        updatable: Boolean = false,
+        updateInterval: Int = 1,
+        renderDistance: Int? = null
+    ): ModernHologram {
         // Garantizar unicidad del ID
         deleteHologram(id)
 
         val holo = ModernHologram(id, location, plugin, placeholderBridge)
         holo.clickCommand = clickCommand
-        holo.lineSpacing = config.lineSpacing
-        holo.backgroundColor = config.backgroundColor
+        holo.lineSpacing = lineSpacing ?: 0.28
+        holo.backgroundColor = backgroundColor ?: 1073741824
+        holo.renderDistance = renderDistance ?: 48
         holo.setup(lines)
         activeHolograms[id] = holo
 
         // Mostrar instantáneamente a los jugadores en rango
         Bukkit.getOnlinePlayers().forEach { player ->
-            if (player.world == location.world && player.location.distanceSquared(location) <= 48 * 48) {
+            val dist = holo.renderDistance.toDouble()
+            if (player.world == location.world && player.location.distanceSquared(location) <= dist * dist) {
                 holo.showTo(player)
             }
+        }
+
+        // Si es actualizable, programar su propia tarea de actualización
+        if (updatable) {
+            scheduleHologramUpdate(holo, updateInterval)
         }
 
         // Actualizar y persistir la configuración modular en HOCON
@@ -140,9 +166,14 @@ class HologramService(
             y = location.y,
             z = location.z,
             lines = lines,
-            clickCommand = clickCommand
+            clickCommand = clickCommand,
+            lineSpacing = lineSpacing ?: 0.28,
+            backgroundColor = backgroundColor ?: 1073741824,
+            updatable = updatable,
+            updateInterval = updateInterval,
+            renderDistance = renderDistance ?: 48
         )
-        config = HologramConfig(config.lineSpacing, config.backgroundColor, newHolograms)
+        config = HologramConfig(newHolograms)
         configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
 
         return holo
@@ -159,7 +190,7 @@ class HologramService(
         val ph = newHolograms[id]
         if (ph != null) {
             newHolograms[id] = ph.copy(lines = lines)
-            config = HologramConfig(config.lineSpacing, config.backgroundColor, newHolograms)
+            config = HologramConfig(newHolograms)
             configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
         }
         return true
@@ -192,7 +223,7 @@ class HologramService(
                 z = newLocation.z,
                 world = newLocation.world.name
             )
-            config = HologramConfig(config.lineSpacing, config.backgroundColor, newHolograms)
+            config = HologramConfig(newHolograms)
             configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
         }
         return true
@@ -202,12 +233,13 @@ class HologramService(
      * Elimina el holograma físicamente para todos los clientes y lo remueve del disco.
      */
     fun deleteHologram(id: String): Boolean {
+        refreshTasks.remove(id)?.cancel()
         val holo = activeHolograms.remove(id) ?: return false
         holo.delete()
 
         val newHolograms = config.holograms.toMutableMap()
         newHolograms.remove(id)
-        config = HologramConfig(config.lineSpacing, config.backgroundColor, newHolograms)
+        config = HologramConfig(newHolograms)
         configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
 
         return true
@@ -221,7 +253,49 @@ class HologramService(
 
     fun getActiveHolograms(): Map<String, ModernHologram> = activeHolograms
 
+    /**
+     * Recarga todos los hologramas desde el archivo de configuración HOCON.
+     */
+    fun reloadHolograms(): java.util.concurrent.CompletableFuture<Void> {
+        shutdown()
+        return configManager.loadModuleConfig("holograms.conf", HologramConfig::class.java, HologramConfig())
+            .thenAccept { loadedConfig ->
+                this.config = loadedConfig
+                loadedConfig.holograms.forEach { (id, ph) ->
+                    val world = Bukkit.getWorld(ph.world)
+                    if (world != null) {
+                        val loc = Location(world, ph.x, ph.y, ph.z)
+                        val holo = ModernHologram(id, loc, plugin, placeholderBridge)
+                        holo.clickCommand = ph.clickCommand
+                        holo.lineSpacing = ph.lineSpacing
+                        holo.backgroundColor = ph.backgroundColor
+                        holo.renderDistance = ph.renderDistance
+                        holo.setup(ph.lines)
+                        activeHolograms[id] = holo
+
+                        if (ph.updatable) {
+                            scheduleHologramUpdate(holo, ph.updateInterval)
+                        }
+                    }
+                }
+                plugin.logger.info("¡Se han recargado con éxito ${activeHolograms.size} hologramas desde holograms.conf!")
+            }
+    }
+
+    private fun scheduleHologramUpdate(holo: ModernHologram, intervalMinutes: Int) {
+        refreshTasks.remove(holo.id)?.cancel()
+        val intervalSeconds = (intervalMinutes * 60).toLong()
+        val task = Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+            if (activeHolograms.containsKey(holo.id)) {
+                holo.refreshForViewers()
+            }
+        }, intervalSeconds, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS)
+        refreshTasks[holo.id] = task
+    }
+
     fun shutdown() {
+        refreshTasks.values.forEach { it.cancel() }
+        refreshTasks.clear()
         activeHolograms.values.forEach { it.delete(true) }
         activeHolograms.clear()
     }

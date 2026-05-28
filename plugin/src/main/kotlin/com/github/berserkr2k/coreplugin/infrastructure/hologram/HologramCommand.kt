@@ -163,5 +163,23 @@ class HologramCommand(
                     }
                 }
         )
+
+        // 7. /core hologram reload
+        manager.command(
+            manager.commandBuilder("core")
+                .literal("hologram")
+                .literal("reload")
+                .permission("core.hologram.admin")
+                .handler { context ->
+                    val sender = context.sender()
+                    sender.sendMessage(miniMessage.deserialize("<yellow>Recargando hologramas desde la configuración...</yellow>"))
+                    hologramService.reloadHolograms().thenAccept {
+                        sender.sendMessage(miniMessage.deserialize("<green>¡Todos los hologramas han sido recargados exitosamente!</green>"))
+                    }.exceptionally { ex ->
+                        sender.sendMessage(miniMessage.deserialize("<red>Error crítico al recargar hologramas: ${ex.message}</red>"))
+                        null
+                    }
+                }
+        )
     }
 }

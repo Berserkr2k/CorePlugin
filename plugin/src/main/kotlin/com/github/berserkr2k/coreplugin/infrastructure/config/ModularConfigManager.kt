@@ -5,6 +5,7 @@ import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import org.spongepowered.configurate.loader.ConfigurationLoader
 import org.spongepowered.configurate.objectmapping.ObjectMapper
 import org.spongepowered.configurate.ConfigurateException
+import org.spongepowered.configurate.util.NamingSchemes
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -14,6 +15,10 @@ import org.bukkit.plugin.Plugin
 class ModularConfigManager(private val plugin: Plugin, private val configDirectory: Path) {
     private val loadedConfigs = ConcurrentHashMap<String, Any>()
     private val loaders = ConcurrentHashMap<String, ConfigurationLoader<CommentedConfigurationNode>>()
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
 
     init {
         if (Files.notExists(configDirectory)) {
@@ -37,7 +42,7 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
 
             try {
                 val root = loader.load()
-                val mapper = ObjectMapper.factory().get(configClass)
+                val mapper = mapperFactory.get(configClass)
                 val mappedInstance: T
                 
                 if (root.empty()) {
@@ -70,7 +75,7 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
             val loader = loaders[fileName] ?: HoconConfigurationLoader.builder().path(file).build()
             try {
                 val root = loader.load() // Carga el nodo existente para mantener comentarios
-                val mapper = ObjectMapper.factory().get(configClass)
+                val mapper = mapperFactory.get(configClass)
                 mapper.save(instance, root)
                 loader.save(root)
                 loadedConfigs[fileName] = instance
@@ -80,6 +85,7 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
             }
         })
     }
+
 
     fun shutdown() {
         loadedConfigs.clear()

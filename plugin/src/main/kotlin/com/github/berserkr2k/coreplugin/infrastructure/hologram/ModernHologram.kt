@@ -44,6 +44,7 @@ class ModernHologram(
     // Parámetros dinámicos y configurables
     var lineSpacing: Double = 0.28
     var backgroundColor: Int = 1073741824
+    var renderDistance: Int = 48
 
     companion object {
         private val idCounter = java.util.concurrent.atomic.AtomicInteger(200000000)
@@ -191,6 +192,49 @@ class ModernHologram(
             protocolManager.sendServerPacket(player, destroyPacket)
         } catch (e: Exception) {
             // Player might have disconnected
+        }
+    }
+
+    /**
+     * Refresca las líneas del holograma para todos los espectadores activos (actualizando Placeholders sin parpadeo).
+     */
+    fun refreshForViewers() {
+        val protocolManager = ProtocolLibrary.getProtocolManager()
+        val textSerializer = WrappedDataWatcher.Registry.getChatComponentSerializer(false)
+        val byteSerializer = WrappedDataWatcher.Registry.get(java.lang.Byte::class.java)
+        val intSerializer = WrappedDataWatcher.Registry.get(java.lang.Integer::class.java)
+
+        for (viewerUuid in viewers) {
+            val player = Bukkit.getPlayer(viewerUuid) ?: continue
+            if (!player.isOnline) continue
+
+            for (i in textLines.indices) {
+                if (i >= textEntityIds.size) break
+                val entityId = textEntityIds[i]
+                val lineText = textLines[i]
+
+                val metadataPacket = PacketContainer(PacketType.Play.Server.ENTITY_METADATA)
+                metadataPacket.getIntegers().write(0, entityId)
+
+                val textComp = parseText(lineText, player)
+                val jsonText = GsonComponentSerializer.gson().serialize(textComp)
+                val chatComp = WrappedChatComponent.fromJson(jsonText)
+
+                val dataValues = listOf(
+                    WrappedDataValue(23, textSerializer, chatComp.handle), // Text (Non-optional Component)
+                    WrappedDataValue(15, byteSerializer, 3.toByte()),       // Billboard: CENTER (3)
+                    WrappedDataValue(25, intSerializer, backgroundColor),   // Background Color (Configurable)
+                    WrappedDataValue(24, intSerializer, 3000),              // Line Width: 3000 (Prevents wrapping)
+                    WrappedDataValue(27, byteSerializer, 1.toByte())        // Options: 1 (Has Shadow, disables default background)
+                )
+
+                metadataPacket.getDataValueCollectionModifier().write(0, dataValues)
+                try {
+                    protocolManager.sendServerPacket(player, metadataPacket)
+                } catch (e: Exception) {
+                    // Ignore client disconnection
+                }
+            }
         }
     }
 

@@ -175,6 +175,7 @@ class EconomyService(
                     stmt.executeUpdate("ALTER TABLE player_economy ADD COLUMN $col DECIMAL(20,4) NOT NULL DEFAULT ${currency.initialBalance}")
                 }
                 plugin.logger.info("Columna dinámica registrada en base de datos: player_economy ($col)")
+                existingColumns.add(col.lowercase())
             }
         }
     }

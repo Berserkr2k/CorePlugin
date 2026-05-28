@@ -5,7 +5,7 @@ author: Berserkr2k
 description: Core modular multi-versión en Kotlin
 api-version: "1.13"
 depend: [ProtocolLib]
-softdepend: ["PlaceholderAPI"]
+softdepend: ["PlaceholderAPI", "Vault", "VaultUnlocked"]
 
 commands:
   core:

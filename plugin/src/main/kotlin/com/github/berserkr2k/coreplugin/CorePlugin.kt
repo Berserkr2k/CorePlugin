@@ -18,8 +18,6 @@ import com.github.berserkr2k.coreplugin.infrastructure.misc.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyListener
-import com.github.berserkr2k.coreplugin.infrastructure.economy.VaultEconomyHook
-import com.github.berserkr2k.coreplugin.infrastructure.economy.Vault2EconomyHook
 import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
 import org.bukkit.plugin.java.JavaPlugin
@@ -123,21 +121,40 @@ class CorePlugin(
         
         server.pluginManager.registerEvents(EconomyListener(this, ecoService), this)
 
-        if (server.pluginManager.isPluginEnabled("Vault")) {
-            server.servicesManager.register(
-                net.milkbowl.vault.economy.Economy::class.java,
-                VaultEconomyHook(ecoService),
-                this,
-                org.bukkit.plugin.ServicePriority.Highest
-            )
-            server.servicesManager.register(
-                net.milkbowl.vault2.economy.Economy::class.java,
-                Vault2EconomyHook(ecoService),
-                this,
-                org.bukkit.plugin.ServicePriority.Highest
-            )
-            paperLogger.info("¡Wrappers seguros de Vault (Legacy) y Vault2 (VaultUnlocked) registrados con prioridad Máxima!")
+        val isVaultEnabled = server.pluginManager.isPluginEnabled("Vault")
+        val isVaultUnlockedEnabled = server.pluginManager.isPluginEnabled("VaultUnlocked")
+
+        if (isVaultEnabled || isVaultUnlockedEnabled) {
+            var registeredLegacy = false
+            var registeredVault2 = false
+
+            // Intentar registrar Vault Legacy
+            try {
+                Class.forName("net.milkbowl.vault.economy.Economy")
+                com.github.berserkr2k.coreplugin.infrastructure.economy.LegacyVaultRegisterHelper.register(this, ecoService)
+                registeredLegacy = true
+            } catch (e: Throwable) {
+                // Omitir
+            }
+
+            // Intentar registrar Vault2 (VaultUnlocked)
+            try {
+                Class.forName("net.milkbowl.vault2.economy.Economy")
+                com.github.berserkr2k.coreplugin.infrastructure.economy.Vault2RegisterHelper.register(this, ecoService)
+                registeredVault2 = true
+            } catch (e: Throwable) {
+                // Omitir
+            }
+
+            if (registeredLegacy && registeredVault2) {
+                paperLogger.info("¡Wrappers seguros de Vault (Legacy) y Vault2 (VaultUnlocked) registrados con prioridad Máxima!")
+            } else if (registeredLegacy) {
+                paperLogger.info("¡Wrapper seguro de Vault (Legacy) registrado con prioridad Máxima!")
+            } else if (registeredVault2) {
+                paperLogger.info("¡Wrapper seguro de Vault2 (VaultUnlocked) registrado con prioridad Máxima!")
+            }
         }
+
 
         // Registrar Billetera y Comandos Dinámicos de Divisas
         WalletCommand(this, commandManager, ecoService, messagesConfig)

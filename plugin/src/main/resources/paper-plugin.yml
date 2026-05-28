@@ -13,3 +13,12 @@ dependencies:
       load: BEFORE
       required: false
       join-classpath: true
+    Vault:
+      load: BEFORE
+      required: false
+      join-classpath: true
+    VaultUnlocked:
+      load: BEFORE
+      required: false
+      join-classpath: true
+
