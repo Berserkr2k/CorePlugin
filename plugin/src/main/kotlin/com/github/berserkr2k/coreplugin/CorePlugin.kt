@@ -6,7 +6,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManag
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
 import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatModule
-import com.github.berserkr2k.coreplugin.infrastructure.anvil.AnvilModule
+import com.github.berserkr2k.coreplugin.infrastructure.mechanics.AnvilModule
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramService
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardService
@@ -14,7 +14,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardCo
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorListener
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
-import com.github.berserkr2k.coreplugin.infrastructure.misc.ChairListener
+import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyListener
@@ -26,6 +26,15 @@ import org.incendo.cloud.paper.LegacyPaperCommandManager
 import org.incendo.cloud.execution.ExecutionCoordinator
 import org.bukkit.command.CommandSender
 import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.UtilityService
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.FlyCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.SpeedCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.HatCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.FeedCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.HealCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.AnvilCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.EnderChestCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.ExpCommand
 
 class CorePlugin(
     private val paperLogger: net.kyori.adventure.text.logger.slf4j.ComponentLogger,
@@ -49,6 +58,7 @@ class CorePlugin(
     private var chairListener: ChairListener? = null
     private var interfaceService: InterfaceService? = null
     private var economyService: EconomyService? = null
+    private var utilityService: UtilityService? = null
 
     override fun onEnable() {
         threadCoordinator = ThreadCoordinator(this)
@@ -164,6 +174,19 @@ class CorePlugin(
             paperLogger.info("¡Expansión de economía de PlaceholderAPI registrada con éxito!")
         }
 
+        // 9. Inicializar Módulo de Utilidades Modulares
+        val uService = UtilityService(this, configManager, messagesConfig)
+        utilityService = uService
+        
+        FlyCommand(this, commandManager, uService, messagesConfig)
+        SpeedCommand(this, commandManager, messagesConfig)
+        HatCommand(this, commandManager, messagesConfig)
+        FeedCommand(this, commandManager, messagesConfig)
+        HealCommand(this, commandManager, messagesConfig)
+        AnvilCommand(this, commandManager, uService, messagesConfig)
+        EnderChestCommand(this, commandManager, messagesConfig)
+        ExpCommand(this, commandManager, messagesConfig)
+
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
         threadCoordinator.runTimerAsync(72000, 1728000) {
             ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
@@ -173,10 +196,52 @@ class CorePlugin(
             }
         }
         
-        paperLogger.info("¡Todos los módulos del plugin Core se han cargado de forma síncrona y robusta!")
+        // Imprimir Dashboard Visual Premium de Estado de Módulos
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        val logo = """
+<gold>  ___ ___  ___  ___ ___ _   _   _ ___ ___ ___ 
+ / __/ _ \| _ \/ __| _ \ | | | | | __|_ _|_ _|
+| (_| (_) |   / (_ |  _/ |_| |_| | _| | | | | 
+ \___\___/|_|_\\___|_| |____\___/|___|___|___|</gold>
+        """.trimIndent()
+        
+        val dashboard = """
+$logo
+<dark_gray>======================================================</dark_gray>
+<yellow><bold>          COREPLUGIN MODULES STATUS</bold></yellow>
+<dark_gray>======================================================</dark_gray>
+ <gray>⚡ <gold>Base de Datos</gold>      : <green>[ ACTIVO ]</green> (SQLite JDBC)</gray>
+ <gray>⚡ <gold>Interfaces</gold>         : <green>[ ACTIVO ]</green> (Tablist & Bossbars)</gray>
+ <gray>⚡ <gold>Chat Enriquecido</gold>   : <green>[ ACTIVO ]</green> (DeluxeChat Equiv)</gray>
+ <gray>⚡ <gold>Yunques</gold>            : <green>[ ACTIVO ]</green> (Filtros & Colores)</gray>
+ <gray>⚡ <gold>Hologramas</gold>         : <green>[ ACTIVO ]</green> (Packet-Based)</gray>
+ <gray>⚡ <gold>Podios Físicos</gold>     : <green>[ ACTIVO ]</green> (ArmorStands Editor)</gray>
+ <gray>⚡ <gold>Mecánica Sillas</gold>    : <green>[ ACTIVO ]</green> (Stairs Sitting)</gray>
+ <gray>⚡ <gold>Economía</gold>           : <green>[ ACTIVO ]</green> (Multi-Divisa & Vault)</gray>
+ <gray>⚡ <gold>Utilidades</gold>         : <green>[ ACTIVO ]</green> (Modular Commands)</gray>
+<dark_gray>======================================================</dark_gray>
+<green>¡Todos los módulos del plugin Core cargados de forma síncrona!</green>
+        """.trimIndent()
+
+        paperLogger.info(mm.deserialize(dashboard))
     }
 
     override fun onDisable() {
+        val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
+        val shutdownMessage = """
+<dark_gray>======================================================</dark_gray>
+<red><bold>          COREPLUGIN SHUTTING DOWN</bold></red>
+<dark_gray>======================================================</dark_gray>
+ <gray>🔌 <red>Hologramas</red>      : <gold>[ DESACTIVADO ]</gold> (Cerrando visores...)</gray>
+ <gray>🔌 <red>Podios</red>          : <gold>[ DESACTIVADO ]</gold> (Limpiando ArmorStands...)</gray>
+ <gray>🔌 <red>Sillas</red>          : <gold>[ DESACTIVADO ]</gold> (Desmontando jugadores...)</gray>
+ <gray>🔌 <red>Base de Datos</red>   : <gold>[ DESACTIVADO ]</gold> (Cerrando pool Hikari...)</gray>
+ <gray>🔌 <red>Configuraciones</red> : <gold>[ DESACTIVADO ]</gold> (Guardando cambios...)</gray>
+<dark_gray>======================================================</dark_gray>
+<red>¡CorePlugin desactivado y datos persistidos con éxito!</red>
+        """.trimIndent()
+        paperLogger.info(mm.deserialize(shutdownMessage))
+
         hologramService?.shutdown()
         leaderboardService?.shutdown()
         chairListener?.shutdown()

@@ -40,5 +40,50 @@ data class MessagesConfig(
         "eco-set-failed" to "<red>Error al establecer saldo. Fuera del límite máximo.</red>",
         "alias-no-permission-other" to "<red>No tienes permiso para ver el saldo de otros jugadores.</red>",
         "alias-usage" to "<red>Uso: /<alias> <player></red>"
+    ),
+    val utility: Map<String, String> = mapOf(
+        "fly-enabled" to "<green>Modo de vuelo habilitado.</green>",
+        "fly-disabled" to "<red>Modo de vuelo deshabilitado.</red>",
+        "fly-enabled-other" to "<green>Modo de vuelo habilitado para <player>.</green>",
+        "fly-disabled-other" to "<red>Modo de vuelo deshabilitado para <player>.</red>",
+        "fly-world-not-allowed" to "<red>El vuelo no está permitido en este mundo.</red>",
+        "fly-world-left" to "<red>Has salido de un mundo permitido para volar. Modo de vuelo desactivado.</red>",
+        
+        "speed-invalid" to "<red>Velocidad inválida. Debe ser un número entre 1 y 10.</red>",
+        "speed-fly-set" to "<green>Velocidad de vuelo establecida en <speed>.</green>",
+        "speed-walk-set" to "<green>Velocidad de caminata establecida en <speed>.</green>",
+        "speed-fly-set-other" to "<green>Velocidad de vuelo de <player> establecida en <speed>.</green>",
+        "speed-walk-set-other" to "<green>Velocidad de caminata de <player> establecida en <speed>.</green>",
+        
+        "hat-equipped" to "<green>¡Te has puesto el ítem en la cabeza!</green>",
+        "hat-empty" to "<red>Debes tener un ítem en la mano para usarlo de sombrero.</red>",
+        
+        "feed-success" to "<green>¡Tu apetito ha sido saciado!</green>",
+        "feed-success-other" to "<green>¡Has saciado el apetito de <player>!</green>",
+        "feed-success-by-admin" to "<green>¡Un administrador ha saciado tu apetito!</green>",
+        
+        "heal-success" to "<green>¡Has sido curado y purificado!</green>",
+        "heal-success-other" to "<green>¡Has curado y purificado a <player>!</green>",
+        "heal-success-by-admin" to "<green>¡Un administrador te ha curado y purificado!</green>",
+        
+        "anvil-opened" to "<green>Abriendo yunque virtual...</green>",
+        
+        "enderchest-opened" to "<green>Abriendo tu cofre de ender...</green>",
+        "enderchest-opened-other" to "<green>Abriendo cofre de ender de <player>...</green>",
+        
+        "exp-get" to "<gray>Experiencia de <white><player></white>: </gray><green><level> niveles</green> <gray>(<xp> XP totales)</gray>",
+        "exp-set" to "<green>Has establecido la experiencia de <player> en <amount> XP.</green>",
+        "exp-give" to "<green>Has dado <amount> XP a <player>.</green>",
+        "exp-reset" to "<green>Has restablecido la experiencia de <player> a 0.</green>",
+        "exp-set-by-admin" to "<green>Tu experiencia ha sido establecida en <amount> XP.</green>",
+        "exp-give-by-admin" to "<green>Has recibido <amount> XP.</green>",
+        "exp-reset-by-admin" to "<red>Tu experiencia ha sido restablecida a 0.</red>",
+        
+        "only-players" to "<red>Solo jugadores pueden ejecutar este comando.</red>",
+        "no-permission-other" to "<red>No tienes permiso para aplicar esto a otros jugadores.</red>",
+        "player-not-found" to "<red>El jugador especificado no existe o está desconectado.</red>",
+        
+        "speed-reset" to "<green>Tu velocidad de vuelo y caminata ha sido restablecida a los valores por defecto.</green>",
+        "speed-reset-other" to "<green>Velocidad de vuelo y caminata de <player> restablecida a los valores por defecto.</green>"
     )
 )

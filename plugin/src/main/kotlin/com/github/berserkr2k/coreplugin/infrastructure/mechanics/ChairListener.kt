@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.infrastructure.misc
+package com.github.berserkr2k.coreplugin.infrastructure.mechanics
 
 import org.bukkit.Bukkit
 import org.bukkit.Location

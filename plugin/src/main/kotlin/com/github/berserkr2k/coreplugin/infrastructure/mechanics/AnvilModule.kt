@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.infrastructure.anvil
+package com.github.berserkr2k.coreplugin.infrastructure.mechanics
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Bukkit
