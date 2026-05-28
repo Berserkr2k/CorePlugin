@@ -5,7 +5,8 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 @ConfigSerializable
 data class UtilityConfig(
     val fly: FlySettings = FlySettings(),
-    val anvil: AnvilSettings = AnvilSettings()
+    val anvil: AnvilSettings = AnvilSettings(),
+    val bossbar: BossBarSettings = BossBarSettings()
 ) {
     @ConfigSerializable
     data class FlySettings(
@@ -15,5 +16,12 @@ data class UtilityConfig(
     @ConfigSerializable
     data class AnvilSettings(
         val sound: String = "BLOCK_ANVIL_PLACE"
+    )
+
+    @ConfigSerializable
+    data class BossBarSettings(
+        val defaultColor: String = "PURPLE",
+        val defaultOverlay: String = "PROGRESS",
+        val defaultDurationSeconds: Int = 10
     )
 }

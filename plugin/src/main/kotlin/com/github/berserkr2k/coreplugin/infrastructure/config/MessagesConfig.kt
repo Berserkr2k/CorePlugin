@@ -84,6 +84,10 @@ data class MessagesConfig(
         "player-not-found" to "<red>El jugador especificado no existe o está desconectado.</red>",
         
         "speed-reset" to "<green>Tu velocidad de vuelo y caminata ha sido restablecida a los valores por defecto.</green>",
-        "speed-reset-other" to "<green>Velocidad de vuelo y caminata de <player> restablecida a los valores por defecto.</green>"
+        "speed-reset-other" to "<green>Velocidad de vuelo y caminata de <player> restablecida a los valores por defecto.</green>",
+        
+        "broadcast-usage" to "<red>Uso: /broadcast <chat/title/actionbar/bossbar> <mensaje></red>",
+        "broadcast-invalid-type" to "<red>Tipo de broadcast inválido. Tipos válidos: chat, title, actionbar, bossbar</red>",
+        "sendtitle-usage" to "<red>Uso: /sendtitle <player> <titulo>[|subtitulo]</red>"
     )
 )

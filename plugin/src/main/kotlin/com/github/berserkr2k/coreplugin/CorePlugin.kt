@@ -35,6 +35,8 @@ import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.HealComma
 import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.AnvilCommand
 import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.EnderChestCommand
 import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.ExpCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.BroadcastCommand
+import com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.SendTitleCommand
 
 class CorePlugin(
     private val paperLogger: net.kyori.adventure.text.logger.slf4j.ComponentLogger,
@@ -186,6 +188,8 @@ class CorePlugin(
         AnvilCommand(this, commandManager, uService, messagesConfig)
         EnderChestCommand(this, commandManager, messagesConfig)
         ExpCommand(this, commandManager, messagesConfig)
+        BroadcastCommand(this, commandManager, uService, messagesConfig)
+        SendTitleCommand(this, commandManager, messagesConfig)
 
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
         threadCoordinator.runTimerAsync(72000, 1728000) {
