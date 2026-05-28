@@ -190,6 +190,11 @@ class CorePlugin(
         ExpCommand(this, commandManager, messagesConfig)
         BroadcastCommand(this, commandManager, uService, messagesConfig)
         SendTitleCommand(this, commandManager, messagesConfig)
+        
+        // 10. Inicializar Módulo Premium de Kits
+        val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, databaseService!!, ecoService, messagesConfig)
+        val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, kService)
+        com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis)
 
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
         threadCoordinator.runTimerAsync(72000, 1728000) {
@@ -223,6 +228,7 @@ $logo
  <gray>⚡ <gold>Mecánica Sillas</gold>    : <green>[ ACTIVO ]</green> (Stairs Sitting)</gray>
  <gray>⚡ <gold>Economía</gold>           : <green>[ ACTIVO ]</green> (Multi-Divisa & Vault)</gray>
  <gray>⚡ <gold>Utilidades</gold>         : <green>[ ACTIVO ]</green> (Modular Commands)</gray>
+ <gray>⚡ <gold>Kits Premium</gold>       : <green>[ ACTIVO ]</green> (HOCON & GUIs)</gray>
 <dark_gray>======================================================</dark_gray>
 <green>¡Todos los módulos del plugin Core cargados de forma síncrona!</green>
         """.trimIndent()
