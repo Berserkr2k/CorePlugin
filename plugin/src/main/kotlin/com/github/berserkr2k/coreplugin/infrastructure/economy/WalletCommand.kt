@@ -8,6 +8,7 @@ import org.incendo.cloud.CommandManager
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.common.FancyLogger
 import java.math.BigDecimal
 import java.util.UUID
 
@@ -235,6 +236,7 @@ class WalletCommand(
                             val formatted = economyService.formatBalance(currency.id, amount)
                             sender.sendMessage(miniMessage.deserialize(getMsg("eco-give-sender", "amount" to formatted, "target" to targetName)))
                             targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-give-receiver", "amount" to formatted)))
+                            FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha dado $formatted a ${targetName}.")
                         } else {
                             sender.sendMessage(miniMessage.deserialize(getMsg("eco-give-failed")))
                         }
@@ -280,6 +282,7 @@ class WalletCommand(
                             val formatted = economyService.formatBalance(currency.id, amount)
                             sender.sendMessage(miniMessage.deserialize(getMsg("eco-take-sender", "amount" to formatted, "target" to targetName)))
                             targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-take-receiver", "amount" to formatted)))
+                            FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha retirado $formatted a ${targetName}.")
                         } else {
                             sender.sendMessage(miniMessage.deserialize(getMsg("eco-take-failed")))
                         }
@@ -329,6 +332,7 @@ class WalletCommand(
                                 val formatted = economyService.formatBalance(currency.id, amount)
                                 sender.sendMessage(miniMessage.deserialize(getMsg("eco-set-sender", "amount" to formatted, "target" to targetName)))
                                 targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-set-receiver", "amount" to formatted)))
+                                FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha establecido el saldo de ${targetName} en $formatted.")
                             } else {
                                 sender.sendMessage(miniMessage.deserialize(getMsg("eco-set-failed")))
                             }

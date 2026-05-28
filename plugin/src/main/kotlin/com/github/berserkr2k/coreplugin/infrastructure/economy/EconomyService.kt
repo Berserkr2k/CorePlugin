@@ -297,6 +297,27 @@ class EconomyService(
     }
 
     /**
+     * Garantiza de forma segura que exista una fila de datos para el jugador en player_economy.
+     * Esto evita que las sentencias UPDATE subsiguientes fallen silenciosamente al no encontrar la fila.
+     */
+    private fun ensurePlayerRowExists(conn: java.sql.Connection, uuid: UUID) {
+        val checkPs = conn.prepareStatement("SELECT 1 FROM player_economy WHERE uuid = ?")
+        checkPs.setString(1, uuid.toString())
+        val rs = checkPs.executeQuery()
+        val exists = rs.next()
+        rs.close()
+        checkPs.close()
+
+        if (!exists) {
+            val insertPs = conn.prepareStatement("INSERT INTO player_economy (uuid, last_seen) VALUES (?, ?)")
+            insertPs.setString(1, uuid.toString())
+            insertPs.setLong(2, System.currentTimeMillis())
+            insertPs.executeUpdate()
+            insertPs.close()
+        }
+    }
+
+    /**
      * Modifica el balance de una divisa en caché de forma asíncrona y lo impacta en la base de datos de manera segura.
      */
     fun modifyBalance(uuid: UUID, currencyId: String, amount: BigDecimal, type: String): CompletableFuture<Boolean> {
@@ -307,6 +328,9 @@ class EconomyService(
             databaseService.getConnection().use { conn ->
                 conn.autoCommit = false
                 try {
+                    // Garantizar la existencia de la fila
+                    ensurePlayerRowExists(conn, uuid)
+
                     // 1. Obtener balance con row-locking
                     val query = if (isSQLite) {
                         "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
@@ -385,6 +409,9 @@ class EconomyService(
                 databaseService.getConnection().use { conn ->
                     conn.autoCommit = false
                     try {
+                        // Garantizar la existencia de la fila
+                        ensurePlayerRowExists(conn, uuid)
+
                         val query = if (isSQLite) {
                             "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
                         } else {
@@ -453,6 +480,9 @@ class EconomyService(
                 databaseService.getConnection().use { conn ->
                     conn.autoCommit = false
                     try {
+                        // Garantizar la existencia de la fila
+                        ensurePlayerRowExists(conn, uuid)
+
                         val query = if (isSQLite) {
                             "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
                         } else {
@@ -512,6 +542,10 @@ class EconomyService(
             databaseService.getConnection().use { conn ->
                 conn.autoCommit = false
                 try {
+                    // Garantizar la existencia de ambas filas para que el row locking y updates funcionen
+                    ensurePlayerRowExists(conn, sender)
+                    ensurePlayerRowExists(conn, receiver)
+
                     // 1. Obtener y bloquear saldos
                     val query = if (isSQLite) {
                         "SELECT uuid, ${currency.dbColumn} FROM player_economy WHERE uuid IN (?, ?)"
