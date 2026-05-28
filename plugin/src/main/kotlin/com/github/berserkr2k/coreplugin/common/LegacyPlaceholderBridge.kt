@@ -11,11 +11,11 @@ class LegacyPlaceholderBridge {
     private val isPapiEnabled = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")
 
     /**
-     * Procesa y convierte texto heredado con variables en un componente Adventure MiniMessage de forma segura.
+     * Procesa y convierte texto heredado con variables en un componente Adventure de forma segura, soportando tanto MiniMessage como formato heredado.
      */
     fun parseLegacyStringSecurely(player: Player, text: String): Component {
         val resolvedText = parsePlaceholder(player, text)
-        return miniMessage.deserialize(resolvedText)
+        return ColorUtility.parse(resolvedText)
     }
 
     /**

@@ -18,7 +18,9 @@ class WalletCommand(
     private val economyService: EconomyService,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = MiniMessage.miniMessage()
+    private val miniMessage = object {
+        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
+    }
 
     init {
         registerWalletCommands()

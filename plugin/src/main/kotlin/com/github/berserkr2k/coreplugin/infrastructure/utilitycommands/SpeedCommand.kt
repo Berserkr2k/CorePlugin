@@ -14,7 +14,9 @@ class SpeedCommand(
     private val manager: CommandManager<CommandSender>,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = MiniMessage.miniMessage()
+    private val miniMessage = object {
+        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
+    }
 
     init {
         // 1. /speed <1-10> [player]

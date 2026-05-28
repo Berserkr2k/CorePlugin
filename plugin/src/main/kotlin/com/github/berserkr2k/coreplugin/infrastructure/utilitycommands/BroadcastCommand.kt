@@ -8,10 +8,10 @@ import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 import org.incendo.cloud.parser.standard.StringParser.greedyStringParser
-import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.util.Ticks
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class BroadcastCommand(
     private val plugin: Plugin,
@@ -19,7 +19,6 @@ class BroadcastCommand(
     private val utilityService: UtilityService,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = MiniMessage.miniMessage()
 
     init {
         val broadcastBuilder = manager.commandBuilder("broadcast")
@@ -31,7 +30,7 @@ class BroadcastCommand(
                 .required("message", greedyStringParser())
                 .handler { context ->
                     val message = context.get<String>("message")
-                    val component = miniMessage.deserialize(message)
+                    val component = ColorUtility.parse(message)
                     Bukkit.getOnlinePlayers().forEach { player ->
                         player.sendMessage(component)
                     }
@@ -45,7 +44,7 @@ class BroadcastCommand(
                 .required("message", greedyStringParser())
                 .handler { context ->
                     val message = context.get<String>("message")
-                    val component = miniMessage.deserialize(message)
+                    val component = ColorUtility.parse(message)
                     Bukkit.getOnlinePlayers().forEach { player ->
                         player.sendActionBar(component)
                     }
@@ -62,75 +61,72 @@ class BroadcastCommand(
                 }
         )
 
-        // 4.1 /broadcast bossbar <message>
+        // 4. /broadcast bossbar <arguments>
         manager.command(
             broadcastBuilder.literal("bossbar")
-                .required("message", greedyStringParser())
+                .required("arguments", greedyStringParser())
                 .handler { context ->
-                    val message = context.get<String>("message")
-                    sendBossBarBroadcast(message, null, null)
-                }
-        )
+                    val arguments = context.get<String>("arguments")
+                    val input = arguments.trim()
+                    val parts = input.split(Regex("\\s+"))
 
-        // 4.2 /broadcast bossbar <color> <message>
-        manager.command(
-            broadcastBuilder.literal("bossbar")
-                .required("color", stringParser())
-                .required("message", greedyStringParser())
-                .handler { context ->
-                    val color = context.get<String>("color")
-                    val message = context.get<String>("message")
-                    
-                    val validColor = try {
-                        BossBar.Color.valueOf(color.uppercase())
-                    } catch (e: Exception) {
-                        null
+                    var parsedColor: String? = null
+                    var parsedDuration: Int? = null
+                    var messageStartIndex = 0
+
+                    if (parts.isNotEmpty()) {
+                        val firstWord = parts[0]
+                        val colorEnum = try {
+                            BossBar.Color.valueOf(firstWord.uppercase())
+                        } catch (e: Exception) {
+                            null
+                        }
+
+                        if (colorEnum != null) {
+                            parsedColor = firstWord
+                            messageStartIndex += firstWord.length
+
+                            // Consumir espacios después del color
+                            while (messageStartIndex < input.length && input[messageStartIndex].isWhitespace()) {
+                                messageStartIndex++
+                            }
+
+                            val secondWord = parts.getOrNull(1)
+                            if (secondWord != null) {
+                                val durationVal = secondWord.toIntOrNull()
+                                if (durationVal != null) {
+                                    parsedDuration = durationVal
+                                    messageStartIndex += secondWord.length
+
+                                    // Consumir espacios después de la duración
+                                    while (messageStartIndex < input.length && input[messageStartIndex].isWhitespace()) {
+                                        messageStartIndex++
+                                    }
+                                }
+                            }
+                        } else {
+                            // Si la primera palabra no es un color, verificar si es duración
+                            val durationVal = firstWord.toIntOrNull()
+                            if (durationVal != null) {
+                                parsedDuration = durationVal
+                                messageStartIndex += firstWord.length
+
+                                // Consumir espacios después de la duración
+                                while (messageStartIndex < input.length && input[messageStartIndex].isWhitespace()) {
+                                    messageStartIndex++
+                                }
+                            }
+                        }
                     }
 
-                    if (validColor != null) {
-                        sendBossBarBroadcast(message, color, null)
+                    val finalMessage = if (messageStartIndex < input.length) {
+                        val msg = input.substring(messageStartIndex)
+                        if (msg.trim().isEmpty()) input else msg
                     } else {
-                        // Si el primer argumento no es un color válido, es parte del mensaje
-                        sendBossBarBroadcast("$color $message", null, null)
-                    }
-                }
-        )
-
-        // 4.3 /broadcast bossbar <duration> <message>
-        manager.command(
-            broadcastBuilder.literal("bossbar")
-                .required("duration", integerParser())
-                .required("message", greedyStringParser())
-                .handler { context ->
-                    val duration = context.get<Int>("duration")
-                    val message = context.get<String>("message")
-                    sendBossBarBroadcast(message, null, duration)
-                }
-        )
-
-        // 4.4 /broadcast bossbar <color> <duration> <message>
-        manager.command(
-            broadcastBuilder.literal("bossbar")
-                .required("color", stringParser())
-                .required("duration", integerParser())
-                .required("message", greedyStringParser())
-                .handler { context ->
-                    val color = context.get<String>("color")
-                    val duration = context.get<Int>("duration")
-                    val message = context.get<String>("message")
-
-                    val validColor = try {
-                        BossBar.Color.valueOf(color.uppercase())
-                    } catch (e: Exception) {
-                        null
+                        input
                     }
 
-                    if (validColor != null) {
-                        sendBossBarBroadcast(message, color, duration)
-                    } else {
-                        // Si el color no es válido, todo (incluido el número) es parte del mensaje
-                        sendBossBarBroadcast("$color $duration $message", null, null)
-                    }
+                    sendBossBarBroadcast(finalMessage, parsedColor, parsedDuration)
                 }
         )
     }
@@ -140,8 +136,8 @@ class BroadcastCommand(
         val mainTitleText = parts[0].trim()
         val subtitleText = if (parts.size > 1) parts[1].trim() else ""
 
-        val mainTitleComp = miniMessage.deserialize(mainTitleText)
-        val subtitleComp = if (subtitleText.isNotEmpty()) miniMessage.deserialize(subtitleText) else net.kyori.adventure.text.Component.empty()
+        val mainTitleComp = ColorUtility.parse(mainTitleText)
+        val subtitleComp = if (subtitleText.isNotEmpty()) ColorUtility.parse(subtitleText) else net.kyori.adventure.text.Component.empty()
 
         val times = Title.Times.times(
             Ticks.duration(10L),
@@ -176,7 +172,7 @@ class BroadcastCommand(
             BossBar.Overlay.PROGRESS
         }
 
-        val nameComp = miniMessage.deserialize(message)
+        val nameComp = ColorUtility.parse(message)
         val bossBar = BossBar.bossBar(nameComp, 1.0f, color, overlay)
 
         // Mostrar a todos los jugadores online
