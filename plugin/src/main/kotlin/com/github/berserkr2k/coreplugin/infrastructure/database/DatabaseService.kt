@@ -36,6 +36,8 @@ class DatabaseService(
             val dbFile = plugin.dataFolder.resolve("database.db")
             hikariConfig.jdbcUrl = "jdbc:sqlite:${dbFile.absolutePath}"
             hikariConfig.driverClassName = "org.sqlite.JDBC"
+            // Habilitar modo WAL y busy_timeout de 5s para alta concurrencia/evitar bloqueos de base de datos
+            hikariConfig.connectionInitSql = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;"
         } else {
             hikariConfig.jdbcUrl = "jdbc:mysql://${config.host}:${config.port}/${config.database}?useSSL=false&characterEncoding=UTF-8"
             hikariConfig.username = config.username
