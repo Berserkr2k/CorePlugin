@@ -34,6 +34,10 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
         return CompletableFuture.supplyAsync({
             val file = configDirectory.resolve(fileName)
             if (Files.notExists(file)) {
+                val parent = file.parent
+                if (parent != null && Files.notExists(parent)) {
+                    Files.createDirectories(parent)
+                }
                 Files.createFile(file)
             }
 

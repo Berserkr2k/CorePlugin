@@ -14,6 +14,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardCo
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorListener
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorCommand
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorGui
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
@@ -114,6 +115,7 @@ class CorePlugin(
         
         // Cargar configuración de editor y registrar comandos/listeners síncronamente
         val editorConfig = configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig()).join()
+        ArmorStandEditorGui.init(this, configManager)
         ArmorStandEditorCommand(this, commandManager, editorConfig)
 
         // Registrar listener del editor de ArmorStands
@@ -193,7 +195,7 @@ class CorePlugin(
         
         // 10. Inicializar Módulo Premium de Kits
         val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, databaseService!!, ecoService, messagesConfig)
-        val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, kService)
+        val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, configManager, kService)
         com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis)
 
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)

@@ -1,6 +1,11 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
+import com.github.berserkr2k.coreplugin.common.gui.MenuConfig
+import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
+import com.github.berserkr2k.coreplugin.common.gui.ItemConfig
+import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
 import org.bukkit.GameMode
 import org.bukkit.entity.ArmorStand
@@ -8,13 +13,40 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.EquipmentSlot
 import org.bukkit.plugin.Plugin
-import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.util.EulerAngle
 import org.bukkit.Bukkit
+import org.spongepowered.configurate.objectmapping.ConfigSerializable
+
+@ConfigSerializable
+data class ArmorStandEditorGuiConfig(
+    val main: MenuConfig = MenuConfig(),
+    val pose: MenuConfig = MenuConfig(),
+    val rotation: MenuConfig = MenuConfig(),
+    val position: MenuConfig = MenuConfig(),
+    val properties: MenuConfig = MenuConfig(),
+    val equipment: MenuConfig = MenuConfig()
+)
 
 object ArmorStandEditorGui {
 
-    private val miniMessage = MiniMessage.miniMessage()
+    private lateinit var plugin: Plugin
+    private lateinit var configManager: ModularConfigManager
+
+    lateinit var guiConfig: ArmorStandEditorGuiConfig
+
+    fun init(plugin: Plugin, configManager: ModularConfigManager) {
+        this.plugin = plugin
+        this.configManager = configManager
+        reloadConfigs()
+    }
+
+    fun reloadConfigs() {
+        guiConfig = configManager.loadModuleConfig(
+            "menus/armorstand-editor.conf",
+            ArmorStandEditorGuiConfig::class.java,
+            createDefaultGuiConfig()
+        ).join()
+    }
 
     /**
      * Menú Principal del Editor
@@ -22,39 +54,27 @@ object ArmorStandEditorGui {
     fun open(plugin: Plugin, player: Player, stand: ArmorStand) {
         val scale = ArmorStandEditorListener.playerScale.computeIfAbsent(player.uniqueId) { ScaleMode.COARSE }
         
+        val scaleLore = if (scale == ScaleMode.COARSE) {
+            "<yellow>Modo actual: <bold>GRUESO</bold></yellow> (<gray>15° / 0.5m</gray>)"
+        } else {
+            "<yellow>Modo actual: <bold>FINO</bold></yellow> (<gray>1° / 0.05m</gray>)"
+        }
+
+        val placeholders = mapOf("%scale_status%" to scaleLore)
+
         val menu = CustomMenu(
-            miniMessage.deserialize("<gold><bold>Editor: ArmorStand</bold></gold>"),
-            27,
+            ColorUtility.parse(guiConfig.main.title),
+            guiConfig.main.size,
             plugin
         )
 
-        // Rellenar bordes decorativos con paneles de vidrio gris
-        val panel = ItemStack(Material.GRAY_STAINED_GLASS_PANE)
-        val pMeta = panel.itemMeta
-        pMeta.displayName(miniMessage.deserialize(" "))
-        panel.itemMeta = pMeta
-        for (i in listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 22, 23, 24, 25)) {
-            menu.setItem(i, panel)
-        }
-
-        // Botones principales
-        menu.setItem(10, createGuiItem(Material.ARMOR_STAND, "<yellow>Ajustar Pose</yellow>", "<gray>Click para rotar extremidades en X/Y/Z</gray>")) { p, _ ->
-            openPoseMenu(plugin, p, stand)
-        }
-
-        menu.setItem(11, createGuiItem(Material.FEATHER, "<yellow>Ajustar Posición y Dirección</yellow>", "<gray>Click para trasladar y rotar Yaw</gray>")) { p, _ ->
-            openPositionMenu(plugin, p, stand)
-        }
-
-        menu.setItem(12, createGuiItem(Material.COMPASS, "<yellow>Modificar Propiedades</yellow>", "<gray>Brazos, Invisibilidad, Tamaño, Gravedad, Invencibilidad</gray>")) { p, _ ->
-            openPropertiesMenu(plugin, p, stand)
-        }
-
-        menu.setItem(13, createGuiItem(Material.CHEST, "<yellow>Inventario de Equipamiento</yellow>", "<gray>Click para colocar cualquier objeto en cabeza o manos</gray>")) { p, _ ->
-            openEquipmentMenu(plugin, p, stand)
-        }
-
-        menu.setItem(14, createGuiItem(Material.PAPER, "<green>Copiar Ajustes</green>", "<gray>Copia poses y propiedades físicas</gray>")) { p, _ ->
+        // Registrar acciones locales
+        menu.registerLocalAction("pose") { p, _ -> openPoseMenu(plugin, p, stand) }
+        menu.registerLocalAction("position") { p, _ -> openPositionMenu(plugin, p, stand) }
+        menu.registerLocalAction("properties") { p, _ -> openPropertiesMenu(plugin, p, stand) }
+        menu.registerLocalAction("equipment") { p, _ -> openEquipmentMenu(plugin, p, stand) }
+        
+        menu.registerLocalAction("copy") { p, _ ->
             val equipMap = mutableMapOf<EquipmentSlot, ItemStack?>()
             for (slot in EquipmentSlot.values()) {
                 equipMap[slot] = stand.equipment.getItem(slot)
@@ -74,14 +94,14 @@ object ArmorStandEditorGui {
                 isInvulnerable = stand.isInvulnerable,
                 equipment = equipMap
             )
-            p.sendMessage(miniMessage.deserialize("<green>¡Propiedades físicas y de pose copiadas al portapapeles!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡Propiedades físicas y de pose copiadas al portapapeles!</green>"))
         }
 
-        menu.setItem(15, createGuiItem(Material.GLOWSTONE_DUST, "<green>Pegar Ajustes</green>", "<gray>Click para aplicar propiedades copiadas</gray>")) { p, _ ->
+        menu.registerLocalAction("paste") { p, _ ->
             val copied = ArmorStandEditorListener.copiedSettings[p.uniqueId]
             if (copied == null) {
-                p.sendMessage(miniMessage.deserialize("<red>No tienes ajustes copiados en el portapapeles.</red>"))
-                return@setItem
+                p.sendMessage(ColorUtility.parse("<red>❌ No tienes ajustes copiados en el portapapeles.</red>"))
+                return@registerLocalAction
             }
             stand.headPose = copied.headPose
             stand.bodyPose = copied.bodyPose
@@ -96,31 +116,30 @@ object ArmorStandEditorGui {
             stand.setGravity(copied.hasGravity)
             stand.isInvulnerable = copied.isInvulnerable
 
-            // Survival-Friendly: Solo duplica o transfiere ítems si el jugador está en modo creativo
             if (p.gameMode == GameMode.CREATIVE && copied.equipment != null) {
                 for ((slot, item) in copied.equipment) {
                     stand.equipment.setItem(slot, item)
                 }
-                p.sendMessage(miniMessage.deserialize("<green>¡Ajustes y equipamiento pegados con éxito!</green>"))
+                p.sendMessage(ColorUtility.parse("<green>✔ ¡Ajustes y equipamiento pegados con éxito!</green>"))
             } else {
-                p.sendMessage(miniMessage.deserialize("<green>¡Ajustes de pose aplicados! (Los objetos no se duplicaron por seguridad en Supervivencia)</green>"))
+                p.sendMessage(ColorUtility.parse("<green>✔ ¡Ajustes de pose aplicados! (Los objetos no se duplicaron por seguridad en Supervivencia)</green>"))
             }
         }
 
-        menu.setItem(16, createGuiItem(Material.NAME_TAG, "<yellow>Cambiar Nombre</yellow>", "<gray>Haz click y escribe en el chat para asignarle nombre</gray>")) { p, _ ->
+        menu.registerLocalAction("rename") { p, _ ->
             p.closeInventory()
             ArmorStandEditorListener.renamingSessions[p.uniqueId] = stand.uniqueId
-            p.sendMessage(miniMessage.deserialize("<gold>Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>"))
+            p.sendMessage(ColorUtility.parse("<gold>✏ Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>"))
         }
 
-        val scaleLore = if (scale == ScaleMode.COARSE) "<yellow>Modo actual: <bold>GRUESO</bold></yellow> (<gray>15° / 0.5m</gray>)" else "<yellow>Modo actual: <bold>FINO</bold></yellow> (<gray>1° / 0.05m</gray>)"
-        menu.setItem(26, createGuiItem(Material.LEVER, "<aqua>Escala de Ajuste</aqua>", "<gray>Click para alternar precisión</gray>\n$scaleLore")) { p, _ ->
+        menu.registerLocalAction("scale") { p, _ ->
             val nextScale = if (scale == ScaleMode.COARSE) ScaleMode.FINE else ScaleMode.COARSE
             ArmorStandEditorListener.playerScale[p.uniqueId] = nextScale
-            p.sendMessage(miniMessage.deserialize("<green>Escala de ajuste cambiada a ${nextScale.name}.</green>"))
-            open(plugin, p, stand) // Recargar el menú para actualizar descripción
+            p.sendMessage(ColorUtility.parse("<green>✔ Escala de ajuste cambiada a ${nextScale.name}.</green>"))
+            open(plugin, p, stand)
         }
 
+        menu.loadFromConfig(guiConfig.main, placeholders)
         menu.open(player)
     }
 
@@ -129,21 +148,20 @@ object ArmorStandEditorGui {
      */
     private fun openPoseMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
         val menu = CustomMenu(
-            miniMessage.deserialize("<gold>Editor: Ajustar Pose</gold>"),
-            27,
+            ColorUtility.parse(guiConfig.pose.title),
+            guiConfig.pose.size,
             plugin
         )
 
-        menu.setItem(10, createGuiItem(Material.PLAYER_HEAD, "<yellow>Cabeza</yellow>", "<gray>Rotar cabeza</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "HEAD") }
-        menu.setItem(11, createGuiItem(Material.CHAINMAIL_CHESTPLATE, "<yellow>Cuerpo</yellow>", "<gray>Rotar torso</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "BODY") }
-        menu.setItem(12, createGuiItem(Material.STICK, "<yellow>Brazo Izquierdo</yellow>", "<gray>Rotar brazo izquierdo</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_ARM") }
-        menu.setItem(13, createGuiItem(Material.STICK, "<yellow>Brazo Derecho</yellow>", "<gray>Rotar brazo derecho</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_ARM") }
-        menu.setItem(14, createGuiItem(Material.LEATHER_BOOTS, "<yellow>Pierna Izquierda</yellow>", "<gray>Rotar pierna izquierda</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_LEG") }
-        menu.setItem(15, createGuiItem(Material.LEATHER_BOOTS, "<yellow>Pierna Derecha</yellow>", "<gray>Rotar pierna derecha</gray>")) { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_LEG") }
+        menu.registerLocalAction("pose_head") { p, _ -> openPartRotationMenu(plugin, p, stand, "HEAD") }
+        menu.registerLocalAction("pose_body") { p, _ -> openPartRotationMenu(plugin, p, stand, "BODY") }
+        menu.registerLocalAction("pose_left_arm") { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_ARM") }
+        menu.registerLocalAction("pose_right_arm") { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_ARM") }
+        menu.registerLocalAction("pose_left_leg") { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_LEG") }
+        menu.registerLocalAction("pose_right_leg") { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_LEG") }
+        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
 
-        menu.setItem(26, createGuiItem(Material.BARRIER, "<red>Volver al Menú Principal</red>", "<gray>Regresa al menú anterior</gray>")) { p, _ ->
-            open(plugin, p, stand)
-        }
+        menu.loadFromConfig(guiConfig.pose)
         menu.open(player)
     }
 
@@ -154,12 +172,6 @@ object ArmorStandEditorGui {
         val scale = ArmorStandEditorListener.playerScale[player.uniqueId] ?: ScaleMode.COARSE
         val angleRad = Math.toRadians(scale.rotationAngle)
 
-        val menu = CustomMenu(
-            miniMessage.deserialize("<gold>Rotar: $part</gold>"),
-            27,
-            plugin
-        )
-
         val partsName = when(part) {
             "HEAD" -> "Cabeza"
             "BODY" -> "Cuerpo"
@@ -169,6 +181,14 @@ object ArmorStandEditorGui {
             "RIGHT_LEG" -> "Pierna Derecha"
             else -> part
         }
+
+        val placeholders = mapOf("%part_name%" to partsName)
+
+        val menu = CustomMenu(
+            ColorUtility.parse(guiConfig.rotation.title.replace("%part_name%", partsName)),
+            guiConfig.rotation.size,
+            plugin
+        )
 
         fun getPose(): EulerAngle = when(part) {
             "HEAD" -> stand.headPose
@@ -190,45 +210,39 @@ object ArmorStandEditorGui {
             else -> {}
         }
 
-        // Eje X
-        menu.setItem(10, createGuiItem(Material.RED_WOOL, "<red>Rotar X +</red>", "<gray>Rotar en eje X adelante</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_x_plus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x + angleRad, pz.y, pz.z))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en X+!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en X+!</green>"))
         }
-        menu.setItem(11, createGuiItem(Material.RED_CONCRETE, "<red>Rotar X -</red>", "<gray>Rotar en eje X atrás</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_x_minus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x - angleRad, pz.y, pz.z))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en X-!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en X-!</green>"))
         }
-
-        // Eje Y
-        menu.setItem(12, createGuiItem(Material.GREEN_WOOL, "<green>Rotar Y +</green>", "<gray>Rotar en eje Y derecha</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_y_plus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x, pz.y + angleRad, pz.z))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en Y+!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Y+!</green>"))
         }
-        menu.setItem(13, createGuiItem(Material.GREEN_CONCRETE, "<green>Rotar Y -</green>", "<gray>Rotar en eje Y izquierda</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_y_minus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x, pz.y - angleRad, pz.z))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en Y-!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Y-!</green>"))
         }
-
-        // Eje Z
-        menu.setItem(14, createGuiItem(Material.BLUE_WOOL, "<blue>Rotar Z +</blue>", "<gray>Rotar en eje Z inclinar derecha</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_z_plus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x, pz.y, pz.z + angleRad))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en Z+!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Z+!</green>"))
         }
-        menu.setItem(15, createGuiItem(Material.BLUE_CONCRETE, "<blue>Rotar Z -</blue>", "<gray>Rotar en eje Z inclinar izquierda</gray>")) { p, _ ->
+        menu.registerLocalAction("rot_z_minus") { p, _ ->
             val pz = getPose()
             setPose(EulerAngle(pz.x, pz.y, pz.z - angleRad))
-            p.sendMessage(miniMessage.deserialize("<green>¡$partsName rotada en Z-!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Z-!</green>"))
         }
+        menu.registerLocalAction("back_to_pose") { p, _ -> openPoseMenu(plugin, p, stand) }
 
-        menu.setItem(26, createGuiItem(Material.BARRIER, "<red>Volver a Selección de Partes</red>", "<gray>Regresa al menú de poses</gray>")) { p, _ ->
-            openPoseMenu(plugin, p, stand)
-        }
+        menu.loadFromConfig(guiConfig.rotation, placeholders)
         menu.open(player)
     }
 
@@ -238,59 +252,56 @@ object ArmorStandEditorGui {
     private fun openPositionMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
         val scale = ArmorStandEditorListener.playerScale[player.uniqueId] ?: ScaleMode.COARSE
         val dist = scale.moveDistance
+        val deg = scale.rotationAngle
+
+        val placeholders = mapOf(
+            "%dist%" to dist.toString(),
+            "%deg%" to deg.toString()
+        )
 
         val menu = CustomMenu(
-            miniMessage.deserialize("<gold>Física: Posición y Rotación</gold>"),
-            27,
+            ColorUtility.parse(guiConfig.position.title),
+            guiConfig.position.size,
             plugin
         )
 
-        // Eje X (Este/Oeste)
-        menu.setItem(10, createGuiItem(Material.COAL, "<yellow>Mover X + (Este)</yellow>", "<gray>Mueve $dist bloques al Este</gray>")) { p, _ ->
+        menu.registerLocalAction("move_x_plus") { _, _ ->
             val loc = stand.location.clone().add(dist, 0.0, 0.0)
             stand.teleport(loc)
         }
-        menu.setItem(11, createGuiItem(Material.COAL_ORE, "<yellow>Mover X - (Oeste)</yellow>", "<gray>Mueve $dist bloques al Oeste</gray>")) { p, _ ->
+        menu.registerLocalAction("move_x_minus") { _, _ ->
             val loc = stand.location.clone().add(-dist, 0.0, 0.0)
             stand.teleport(loc)
         }
-
-        // Eje Y (Arriba/Abajo)
-        menu.setItem(12, createGuiItem(Material.IRON_INGOT, "<yellow>Mover Y + (Arriba)</yellow>", "<gray>Mueve $dist bloques hacia arriba</gray>")) { p, _ ->
+        menu.registerLocalAction("move_y_plus") { _, _ ->
             val loc = stand.location.clone().add(0.0, dist, 0.0)
             stand.teleport(loc)
         }
-        menu.setItem(13, createGuiItem(Material.IRON_ORE, "<yellow>Mover Y - (Abajo)</yellow>", "<gray>Mueve $dist bloques hacia abajo</gray>")) { p, _ ->
+        menu.registerLocalAction("move_y_minus") { _, _ ->
             val loc = stand.location.clone().add(0.0, -dist, 0.0)
             stand.teleport(loc)
         }
-
-        // Eje Z (Sur/Norte)
-        menu.setItem(14, createGuiItem(Material.GOLD_INGOT, "<yellow>Mover Z + (Sur)</yellow>", "<gray>Mueve $dist bloques al Sur</gray>")) { p, _ ->
+        menu.registerLocalAction("move_z_plus") { _, _ ->
             val loc = stand.location.clone().add(0.0, 0.0, dist)
             stand.teleport(loc)
         }
-        menu.setItem(15, createGuiItem(Material.GOLD_ORE, "<yellow>Mover Z - (Norte)</yellow>", "<gray>Mueve $dist bloques al Norte</gray>")) { p, _ ->
+        menu.registerLocalAction("move_z_minus") { _, _ ->
             val loc = stand.location.clone().add(0.0, 0.0, -dist)
             stand.teleport(loc)
         }
-
-        // Rotar Dirección (Yaw)
-        val deg = scale.rotationAngle
-        menu.setItem(16, createGuiItem(Material.OAK_LOG, "<gold>Rotar Dirección + (Derecha)</gold>", "<gray>Rota $deg grados a la derecha</gray>")) { p, _ ->
+        menu.registerLocalAction("yaw_plus") { _, _ ->
             val loc = stand.location.clone()
             loc.yaw = (loc.yaw + deg).toFloat()
             stand.teleport(loc)
         }
-        menu.setItem(17, createGuiItem(Material.STRIPPED_OAK_LOG, "<gold>Rotar Dirección - (Izquierda)</gold>", "<gray>Rota $deg grados a la izquierda</gray>")) { p, _ ->
+        menu.registerLocalAction("yaw_minus") { _, _ ->
             val loc = stand.location.clone()
             loc.yaw = (loc.yaw - deg).toFloat()
             stand.teleport(loc)
         }
+        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
 
-        menu.setItem(26, createGuiItem(Material.BARRIER, "<red>Volver al Menú Principal</red>", "<gray>Regresa al menú anterior</gray>")) { p, _ ->
-            open(plugin, p, stand)
-        }
+        menu.loadFromConfig(guiConfig.position, placeholders)
         menu.open(player)
     }
 
@@ -298,54 +309,65 @@ object ArmorStandEditorGui {
      * Sub-Menú: Toggles de Propiedades Físicas
      */
     private fun openPropertiesMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
+        val yes = "<green>✔ SÍ</green>"
+        val no = "<red>❌ NO</red>"
+
+        val placeholders = mapOf(
+            "%arms_status%" to if (stand.hasArms()) yes else no,
+            "%visibility_status%" to if (stand.isVisible) yes else no,
+            "%baseplate_status%" to if (stand.hasBasePlate()) yes else no,
+            "%small_status%" to if (stand.isSmall) yes else no,
+            "%gravity_status%" to if (stand.hasGravity()) yes else no,
+            "%invulnerable_status%" to if (stand.isInvulnerable) yes else no
+        )
+
         val menu = CustomMenu(
-            miniMessage.deserialize("<gold>Modificar Propiedades Físicas</gold>"),
-            27,
+            ColorUtility.parse(guiConfig.properties.title),
+            guiConfig.properties.size,
             plugin
         )
 
-        menu.setItem(10, createGuiItem(Material.ARMOR_STAND, "<yellow>Alternar Brazos</yellow>", "<gray>Brazos activos: ${stand.hasArms()}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_arms") { p, _ ->
             stand.setArms(!stand.hasArms())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.setItem(11, createGuiItem(Material.GLASS, "<yellow>Alternar Invisibilidad</yellow>", "<gray>Visibilidad activa: ${stand.isVisible}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_visibility") { p, _ ->
             stand.isVisible = !stand.isVisible
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.setItem(12, createGuiItem(Material.STONE_SLAB, "<yellow>Alternar Baseplate</yellow>", "<gray>Plato base activo: ${stand.hasBasePlate()}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_baseplate") { p, _ ->
             stand.setBasePlate(!stand.hasBasePlate())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.setItem(13, createGuiItem(Material.RABBIT_FOOT, "<yellow>Alternar Tamaño</yellow>", "<gray>Tamaño pequeño: ${stand.isSmall}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_small") { p, _ ->
             stand.isSmall = !stand.isSmall
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.setItem(14, createGuiItem(Material.ANVIL, "<yellow>Alternar Gravedad</yellow>", "<gray>Gravedad activa: ${stand.hasGravity()}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_gravity") { p, _ ->
             stand.setGravity(!stand.hasGravity())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.setItem(15, createGuiItem(Material.NETHERITE_INGOT, "<yellow>Alternar Invulnerabilidad</yellow>", "<gray>Invencible: ${stand.isInvulnerable}</gray>")) { p, _ ->
+        menu.registerLocalAction("toggle_invulnerable") { p, _ ->
             stand.isInvulnerable = !stand.isInvulnerable
             openPropertiesMenu(plugin, p, stand)
         }
+        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
 
-        menu.setItem(26, createGuiItem(Material.BARRIER, "<red>Volver al Menú Principal</red>", "<gray>Regresa al menú anterior</gray>")) { p, _ ->
-            open(plugin, p, stand)
-        }
+        menu.loadFromConfig(guiConfig.properties, placeholders)
         menu.open(player)
     }
 
     /**
-     * Sub-Menú: Colocación de Equipamiento Avanzado (Dual Wielding, Pumpkins)
+     * Sub-Menú: Colocación de Equipamiento Avanzado
      */
     private fun openEquipmentMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
         val menu = CustomMenu(
-            miniMessage.deserialize("<gold>Equipamiento Avanzado</gold>"),
-            27,
+            ColorUtility.parse(guiConfig.equipment.title),
+            guiConfig.equipment.size,
             plugin
         )
 
-        // Cargar ítems actuales de la armadura (usando ItemStack(AIR) si son nulos)
+        // Cargar ítems actuales del ArmorStand
         val head = stand.equipment.helmet ?: ItemStack(Material.AIR)
         val chest = stand.equipment.chestplate ?: ItemStack(Material.AIR)
         val legs = stand.equipment.leggings ?: ItemStack(Material.AIR)
@@ -353,39 +375,16 @@ object ArmorStandEditorGui {
         val mainHand = stand.equipment.itemInMainHand ?: ItemStack(Material.AIR)
         val offHand = stand.equipment.itemInOffHand ?: ItemStack(Material.AIR)
 
-        menu.inventory.setItem(10, head)
-        menu.inventory.setItem(11, chest)
-        menu.inventory.setItem(12, legs)
-        menu.inventory.setItem(13, feet)
-        menu.inventory.setItem(14, mainHand)
-        menu.inventory.setItem(15, offHand)
+        menu.setItem(10, head)
+        menu.setItem(11, chest)
+        menu.setItem(12, legs)
+        menu.setItem(13, feet)
+        menu.setItem(14, mainHand)
+        menu.setItem(15, offHand)
 
-        // Marcar slots como interactuables para que el jugador pueda poner/quitar ítems libremente
+        // Marcar slots como interactuables
         menu.interactableSlots.addAll(listOf(10, 11, 12, 13, 14, 15))
 
-        // Rellenar bordes con paneles informativos
-        val panel = ItemStack(Material.GRAY_STAINED_GLASS_PANE)
-        val pMeta = panel.itemMeta
-        pMeta.displayName(miniMessage.deserialize("<gray>Coloca ítems aquí</gray>"))
-        panel.itemMeta = pMeta
-
-        for (i in 0 until 27) {
-            if (i !in 10..15) {
-                // Rótulos informativos específicos para orientar al jugador
-                val label = when(i) {
-                    1 -> createGuiItem(Material.PLAYER_HEAD, "<aqua>Ranura: Cabeza (Cascos, Calabazas, Banners)</aqua>", "<gray>Coloca ítems abajo en el slot #10</gray>")
-                    2 -> createGuiItem(Material.NETHERITE_CHESTPLATE, "<aqua>Ranura: Pecho (Pecheras)</aqua>", "<gray>Coloca ítems abajo en el slot #11</gray>")
-                    3 -> createGuiItem(Material.NETHERITE_LEGGINGS, "<aqua>Ranura: Piernas (Pantalones)</aqua>", "<gray>Coloca ítems abajo en el slot #12</gray>")
-                    4 -> createGuiItem(Material.NETHERITE_BOOTS, "<aqua>Ranura: Pies (Botas)</aqua>", "<gray>Coloca ítems abajo en el slot #13</gray>")
-                    5 -> createGuiItem(Material.DIAMOND_SWORD, "<aqua>Ranura: Mano Principal (Espadas, Herramientas, Bloques)</aqua>", "<gray>Coloca ítems abajo en el slot #14</gray>")
-                    6 -> createGuiItem(Material.SHIELD, "<aqua>Ranura: Mano Secundaria (Escudos, Dual Wielding)</aqua>", "<gray>Coloca ítems abajo en el slot #15</gray>")
-                    else -> panel
-                }
-                menu.setItem(i, label)
-            }
-        }
-
-        // Al cerrar el inventario, aplicar todos los cambios de equipamiento directamente al ArmorStand
         menu.onClose = { p ->
             val newHead = menu.inventory.getItem(10) ?: ItemStack(Material.AIR)
             val newChest = menu.inventory.getItem(11) ?: ItemStack(Material.AIR)
@@ -401,18 +400,96 @@ object ArmorStandEditorGui {
             stand.equipment.setItemInMainHand(newMainHand)
             stand.equipment.setItemInOffHand(newOffHand)
 
-            p.sendMessage(miniMessage.deserialize("<green>¡El equipamiento del ArmorStand se ha sincronizado exitosamente!</green>"))
+            p.sendMessage(ColorUtility.parse("<green>✔ ¡El equipamiento del ArmorStand se ha sincronizado exitosamente!</green>"))
         }
 
+        // Cargar estructura base de la configuración (etiquetas, etc.)
+        menu.loadFromConfig(guiConfig.equipment)
         menu.open(player)
     }
 
-    private fun createGuiItem(material: Material, title: String, loreLine: String): ItemStack {
-        val item = ItemStack(material)
-        val meta = item.itemMeta ?: return item
-        meta.displayName(miniMessage.deserialize(title))
-        meta.lore(listOf(miniMessage.deserialize(loreLine)))
-        item.itemMeta = meta
-        return item
+    private fun createDefaultGuiConfig(): ArmorStandEditorGuiConfig {
+        return ArmorStandEditorGuiConfig(
+            main = MenuConfig(
+                title = "<gold><bold>Editor: ArmorStand</bold></gold>",
+                size = 27,
+                items = mapOf(
+                    "pose" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "ARMOR_STAND", displayName = "<yellow>Ajustar Pose</yellow>", lore = listOf("<gray>Click para rotar extremidades en X/Y/Z</gray>")), action = "pose"),
+                    "position" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "FEATHER", displayName = "<yellow>Ajustar Posición y Dirección</yellow>", lore = listOf("<gray>Click para trasladar y rotar Yaw</gray>")), action = "position"),
+                    "properties" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "COMPASS", displayName = "<yellow>Modificar Propiedades</yellow>", lore = listOf("<gray>Brazos, Invisibilidad, Tamaño, Gravedad, Invencibilidad</gray>")), action = "properties"),
+                    "equipment" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "CHEST", displayName = "<yellow>Inventario de Equipamiento</yellow>", lore = listOf("<gray>Click para colocar cualquier objeto en cabeza o manos</gray>")), action = "equipment"),
+                    "copy" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "PAPER", displayName = "<green>Copiar Ajustes</green>", lore = listOf("<gray>Copia poses y propiedades físicas</gray>")), action = "copy"),
+                    "paste" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "GLOWSTONE_DUST", displayName = "<green>Pegar Ajustes</green>", lore = listOf("<gray>Click para aplicar propiedades copiadas</gray>")), action = "paste"),
+                    "rename" to MenuItemConfig(slots = listOf(16), item = ItemConfig(material = "NAME_TAG", displayName = "<yellow>Cambiar Nombre</yellow>", lore = listOf("<gray>Haz click y escribe en el chat para asignarle nombre</gray>")), action = "rename"),
+                    "scale" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "LEVER", displayName = "<aqua>Escala de Ajuste</aqua>", lore = listOf("<gray>Click para alternar precisión</gray>", "%scale_status%")), action = "scale")
+                )
+            ),
+            pose = MenuConfig(
+                title = "<gold>Editor: Ajustar Pose</gold>",
+                size = 27,
+                items = mapOf(
+                    "head" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "PLAYER_HEAD", displayName = "<yellow>Cabeza</yellow>", lore = listOf("<gray>Rotar cabeza</gray>")), action = "pose_head"),
+                    "body" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "CHAINMAIL_CHESTPLATE", displayName = "<yellow>Cuerpo</yellow>", lore = listOf("<gray>Rotar torso</gray>")), action = "pose_body"),
+                    "left_arm" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "STICK", displayName = "<yellow>Brazo Izquierdo</yellow>", lore = listOf("<gray>Rotar brazo izquierdo</gray>")), action = "pose_left_arm"),
+                    "right_arm" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "STICK", displayName = "<yellow>Brazo Derecho</yellow>", lore = listOf("<gray>Rotar brazo derecho</gray>")), action = "pose_right_arm"),
+                    "left_leg" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "LEATHER_BOOTS", displayName = "<yellow>Pierna Izquierda</yellow>", lore = listOf("<gray>Rotar pierna izquierda</gray>")), action = "pose_left_leg"),
+                    "right_leg" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "LEATHER_BOOTS", displayName = "<yellow>Pierna Derecha</yellow>", lore = listOf("<gray>Rotar pierna derecha</gray>")), action = "pose_right_leg"),
+                    "back" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Menú Principal</red>", lore = listOf("<gray>Regresa al menú anterior</gray>")), action = "back_to_main")
+                )
+            ),
+            rotation = MenuConfig(
+                title = "<gold>Rotar: %part_name%</gold>",
+                size = 27,
+                items = mapOf(
+                    "rot_x_plus" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "RED_WOOL", displayName = "<red>Rotar X +</red>", lore = listOf("<gray>Rotar en eje X adelante</gray>")), action = "rot_x_plus"),
+                    "rot_x_minus" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "RED_CONCRETE", displayName = "<red>Rotar X -</red>", lore = listOf("<gray>Rotar en eje X atrás</gray>")), action = "rot_x_minus"),
+                    "rot_y_plus" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "GREEN_WOOL", displayName = "<green>Rotar Y +</green>", lore = listOf("<gray>Rotar en eje Y derecha</gray>")), action = "rot_y_plus"),
+                    "rot_y_minus" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green>Rotar Y -</green>", lore = listOf("<gray>Rotar en eje Y izquierda</gray>")), action = "rot_y_minus"),
+                    "rot_z_plus" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "BLUE_WOOL", displayName = "<blue>Rotar Z +</blue>", lore = listOf("<gray>Rotar en eje Z inclinar derecha</gray>")), action = "rot_z_plus"),
+                    "rot_z_minus" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "BLUE_CONCRETE", displayName = "<blue>Rotar Z -</blue>", lore = listOf("<gray>Rotar en eje Z inclinar izquierda</gray>")), action = "rot_z_minus"),
+                    "back" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "BARRIER", displayName = "<red>Volver a Selección de Partes</red>", lore = listOf("<gray>Regresa al menú de poses</gray>")), action = "back_to_pose")
+                )
+            ),
+            position = MenuConfig(
+                title = "<gold>Física: Posición y Rotación</gold>",
+                size = 27,
+                items = mapOf(
+                    "move_x_plus" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "COAL", displayName = "<yellow>Mover X + (Este)</yellow>", lore = listOf("<gray>Mueve %dist% bloques al Este</gray>")), action = "move_x_plus"),
+                    "move_x_minus" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "COAL_ORE", displayName = "<yellow>Mover X - (Oeste)</yellow>", lore = listOf("<gray>Mueve %dist% bloques al Oeste</gray>")), action = "move_x_minus"),
+                    "move_y_plus" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "IRON_INGOT", displayName = "<yellow>Mover Y + (Arriba)</yellow>", lore = listOf("<gray>Mueve %dist% bloques hacia arriba</gray>")), action = "move_y_plus"),
+                    "move_y_minus" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "IRON_ORE", displayName = "<yellow>Mover Y - (Abajo)</yellow>", lore = listOf("<gray>Mueve %dist% bloques hacia abajo</gray>")), action = "move_y_minus"),
+                    "move_z_plus" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "GOLD_INGOT", displayName = "<yellow>Mover Z + (Sur)</yellow>", lore = listOf("<gray>Mueve %dist% bloques al Sur</gray>")), action = "move_z_plus"),
+                    "move_z_minus" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "GOLD_ORE", displayName = "<yellow>Mover Z - (Norte)</yellow>", lore = listOf("<gray>Mueve %dist% bloques al Norte</gray>")), action = "move_z_minus"),
+                    "yaw_plus" to MenuItemConfig(slots = listOf(16), item = ItemConfig(material = "OAK_LOG", displayName = "<gold>Rotar Dirección + (Derecha)</gold>", lore = listOf("<gray>Rota %deg% grados a la derecha</gray>")), action = "yaw_plus"),
+                    "yaw_minus" to MenuItemConfig(slots = listOf(17), item = ItemConfig(material = "STRIPPED_OAK_LOG", displayName = "<gold>Rotar Dirección - (Izquierda)</gold>", lore = listOf("<gray>Rota %deg% grados a la izquierda</gray>")), action = "yaw_minus"),
+                    "back" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Menú Principal</red>", lore = listOf("<gray>Regresa al menú anterior</gray>")), action = "back_to_main")
+                )
+            ),
+            properties = MenuConfig(
+                title = "<gold>Modificar Propiedades Físicas</gold>",
+                size = 27,
+                items = mapOf(
+                    "toggle_arms" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "ARMOR_STAND", displayName = "<yellow>Alternar Brazos</yellow>", lore = listOf("<gray>Brazos activos: %arms_status%</gray>")), action = "toggle_arms"),
+                    "toggle_visibility" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "GLASS", displayName = "<yellow>Alternar Invisibilidad</yellow>", lore = listOf("<gray>Visibilidad activa: %visibility_status%</gray>")), action = "toggle_visibility"),
+                    "toggle_baseplate" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "STONE_SLAB", displayName = "<yellow>Alternar Baseplate</yellow>", lore = listOf("<gray>Plato base activo: %baseplate_status%</gray>")), action = "toggle_baseplate"),
+                    "toggle_small" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "RABBIT_FOOT", displayName = "<yellow>Alternar Tamaño</yellow>", lore = listOf("<gray>Tamaño pequeño: %small_status%</gray>")), action = "toggle_small"),
+                    "toggle_gravity" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "ANVIL", displayName = "<yellow>Alternar Gravedad</yellow>", lore = listOf("<gray>Gravedad activa: %gravity_status%</gray>")), action = "toggle_gravity"),
+                    "toggle_invulnerable" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "NETHERITE_INGOT", displayName = "<yellow>Alternar Invulnerabilidad</yellow>", lore = listOf("<gray>Invencible: %invulnerable_status%</gray>")), action = "toggle_invulnerable"),
+                    "back" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Menú Principal</red>", lore = listOf("<gray>Regresa al menú anterior</gray>")), action = "back_to_main")
+                )
+            ),
+            equipment = MenuConfig(
+                title = "<gold>Equipamiento Avanzado</gold>",
+                size = 27,
+                items = mapOf(
+                    "label_head" to MenuItemConfig(slots = listOf(1), item = ItemConfig(material = "PLAYER_HEAD", displayName = "<aqua>Ranura: Cabeza (Cascos, Calabazas, Banners)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #10</gray>"))),
+                    "label_chest" to MenuItemConfig(slots = listOf(2), item = ItemConfig(material = "NETHERITE_CHESTPLATE", displayName = "<aqua>Ranura: Pecho (Pecheras)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #11</gray>"))),
+                    "label_legs" to MenuItemConfig(slots = listOf(3), item = ItemConfig(material = "NETHERITE_LEGGINGS", displayName = "<aqua>Ranura: Piernas (Pantalones)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #12</gray>"))),
+                    "label_feet" to MenuItemConfig(slots = listOf(4), item = ItemConfig(material = "NETHERITE_BOOTS", displayName = "<aqua>Ranura: Pies (Botas)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #13</gray>"))),
+                    "label_mainhand" to MenuItemConfig(slots = listOf(5), item = ItemConfig(material = "DIAMOND_SWORD", displayName = "<aqua>Ranura: Mano Principal (Espadas, Herramientas, Bloques)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #14</gray>"))),
+                    "label_offhand" to MenuItemConfig(slots = listOf(6), item = ItemConfig(material = "SHIELD", displayName = "<aqua>Ranura: Mano Secundaria (Escudos, Dual Wielding)</aqua>", lore = listOf("<gray>Coloca ítems abajo en el slot #15</gray>")))
+                )
+            )
+        )
     }
 }

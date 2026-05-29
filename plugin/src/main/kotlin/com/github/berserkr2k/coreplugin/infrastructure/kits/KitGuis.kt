@@ -1,7 +1,13 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
 import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
+import com.github.berserkr2k.coreplugin.common.gui.MenuConfig
+import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
+import com.github.berserkr2k.coreplugin.common.gui.ItemConfig
+import com.github.berserkr2k.coreplugin.common.gui.FillerConfig
+import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -11,22 +17,64 @@ import org.bukkit.event.inventory.ClickType
 
 class KitGuis(
     private val plugin: Plugin,
+    private val configManager: ModularConfigManager,
     private val kitService: KitService
 ) {
+    private val selectorConfig: MenuConfig by lazy {
+        configManager.loadModuleConfig("menus/kits-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig()).join()
+    }
+    
+    private val showcaseConfig: MenuConfig by lazy {
+        configManager.loadModuleConfig("menus/kits-showcase.conf", MenuConfig::class.java, createDefaultShowcaseConfig()).join()
+    }
+
+    private fun createDefaultSelectorConfig(): MenuConfig {
+        return MenuConfig(
+            title = "<gold><bold>Kits Disponibles</bold></gold>",
+            size = 27,
+            filler = FillerConfig(
+                enabled = true,
+                item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
+            )
+        )
+    }
+
+    private fun createDefaultShowcaseConfig(): MenuConfig {
+        return MenuConfig(
+            title = "<gold>Previsualizar: %kit_name%</gold>",
+            size = 27,
+            filler = FillerConfig(
+                enabled = true,
+                item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
+            ),
+            items = mapOf(
+                "back" to MenuItemConfig(
+                    slots = listOf(18),
+                    item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Selector</red>", lore = listOf("<gray>Regresa al selector de kits principal.</gray>")),
+                    action = "back"
+                ),
+                "claim" to MenuItemConfig(
+                    slots = listOf(22),
+                    item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green><bold>✔ ¡Reclamar Kit!</bold></green>", lore = listOf("%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>")),
+                    action = "claim"
+                )
+            )
+        )
+    }
 
     fun openKitSelector(player: Player) {
         val menu = CustomMenu(
-            ColorUtility.parse("<gold><bold>Kits Disponibles</bold></gold>"),
-            27,
+            ColorUtility.parse(selectorConfig.title),
+            selectorConfig.size,
             plugin
         )
 
-        val panel = ItemStack(Material.GRAY_STAINED_GLASS_PANE)
-        val pMeta = panel.itemMeta
-        pMeta.displayName(ColorUtility.parse(" "))
-        panel.itemMeta = pMeta
-        for (i in listOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 17, 18, 19, 20, 21, 22, 23, 24, 25)) {
-            menu.setItem(i, panel)
+        // Rellenar con paneles decorativos
+        if (selectorConfig.filler.enabled) {
+            val fillerItem = selectorConfig.filler.item.toItemStack()
+            for (i in 0 until selectorConfig.size) {
+                menu.setItem(i, fillerItem.clone())
+            }
         }
 
         var slot = 10
@@ -40,46 +88,43 @@ class KitGuis(
             val isCooldownActive = remaining > 0 && !hasBypass
             
             val displayMat = Material.matchMaterial(config.guiIcon) ?: Material.CHEST
-            val kitItem = ItemStack(displayMat)
-            val meta = kitItem.itemMeta ?: return@forEach
-
-            meta.displayName(ColorUtility.parse(config.displayName))
-
-            val loreLines = mutableListOf<net.kyori.adventure.text.Component>()
-            config.guiLore.forEach { line ->
-                loreLines.add(ColorUtility.parse(line))
-            }
             
-            loreLines.add(ColorUtility.parse(" "))
+            val loreLines = mutableListOf<String>()
+            config.guiLore.forEach { line ->
+                loreLines.add(line)
+            }
+            loreLines.add(" ")
 
             when {
                 !hasPerm -> {
-                    loreLines.add(ColorUtility.parse("<red>❌ Bloqueado (Requiere Rango)</red>"))
+                    loreLines.add("<red>❌ Bloqueado (Requiere Rango)</red>")
                 }
                 isCooldownActive -> {
                     val timeStr = kitService.formatTime(remaining)
-                    loreLines.add(ColorUtility.parse("<red>⏳ En Cooldown (Espera: $timeStr)</red>"))
+                    loreLines.add("<red>⏳ En Cooldown (Espera: $timeStr)</red>")
                 }
                 else -> {
                     if (config.cost > 0.0) {
-                        loreLines.add(ColorUtility.parse("<gold>⚖ Costo: ${config.cost} ${config.currency.uppercase()}</gold>"))
+                        loreLines.add("<gold>⚖ Costo: ${config.cost} ${config.currency.uppercase()}</gold>")
                     }
                     if (remaining > 0 && hasBypass) {
-                        loreLines.add(ColorUtility.parse("<green>✔ ¡Disponible! (<yellow>Bypass de Cooldown Activo</yellow>)</green>"))
+                        loreLines.add("<green>✔ ¡Disponible! (<yellow>Bypass de Cooldown Activo</yellow>)</green>")
                     } else {
-                        loreLines.add(ColorUtility.parse("<green>✔ ¡Disponible para Reclamar!</green>"))
+                        loreLines.add("<green>✔ ¡Disponible para Reclamar!</green>")
                     }
                 }
             }
 
-            loreLines.add(ColorUtility.parse(" "))
-            loreLines.add(ColorUtility.parse("<yellow>⚡ Click Izquierdo para Reclamar</yellow>"))
-            loreLines.add(ColorUtility.parse("<aqua>⚡ Click Derecho para Previsualizar</aqua>"))
+            loreLines.add(" ")
+            loreLines.add("<yellow>⚡ Click Izquierdo para Reclamar</yellow>")
+            loreLines.add("<aqua>⚡ Click Derecho para Previsualizar</aqua>")
 
-            meta.lore(loreLines)
-            kitItem.itemMeta = meta
+            val kitIcon = ItemBuilder(displayMat)
+                .displayName(config.displayName)
+                .lore(loreLines)
+                .build()
 
-            menu.setItem(slot, kitItem) { p, event ->
+            menu.setItem(slot, kitIcon) { p, event ->
                 if (event.click == ClickType.RIGHT) {
                     openKitShowcase(p, kitId)
                 } else {
@@ -111,19 +156,19 @@ class KitGuis(
             else -> 54
         }
 
+        val titleText = showcaseConfig.title.replace("%kit_name%", config.displayName)
         val menu = CustomMenu(
-            ColorUtility.parse("<gold>Previsualizar: ${config.displayName}</gold>"),
+            ColorUtility.parse(titleText),
             slots,
             plugin
         )
 
-        val panel = ItemStack(Material.GRAY_STAINED_GLASS_PANE)
-        val pMeta = panel.itemMeta
-        pMeta.displayName(ColorUtility.parse(" "))
-        panel.itemMeta = pMeta
-
-        for (i in 0 until slots) {
-            menu.setItem(i, panel)
+        // Rellenar con paneles decorativos
+        if (showcaseConfig.filler.enabled) {
+            val fillerItem = showcaseConfig.filler.item.toItemStack()
+            for (i in 0 until slots) {
+                menu.setItem(i, fillerItem.clone())
+            }
         }
 
         val activeSlots = mutableListOf<Int>()
@@ -152,22 +197,59 @@ class KitGuis(
                         player.hasPermission("core.kits.bypass.cooldown.${kitId.lowercase()}")
         val isCooldownActive = remaining > 0 && !hasBypass
 
-        val actionItem = when {
+        // Cargar botones desde la configuración HOCON
+        val backBtnConfig = showcaseConfig.items["back"] ?: MenuItemConfig(
+            item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Selector</red>", lore = listOf("<gray>Regresa al selector de kits principal.</gray>"))
+        )
+        val claimBtnConfig = showcaseConfig.items["claim"] ?: MenuItemConfig(
+            item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green><bold>✔ ¡Reclamar Kit!</bold></green>", lore = listOf("%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>"))
+        )
+
+        // Botón de Volver
+        val backItem = ItemBuilder.fromConfig(backBtnConfig.item).build()
+        menu.setItem(slots - 9, backItem) { p, _ ->
+            if (backBtnConfig.sound != null) {
+                try {
+                    p.playSound(p.location, Sound.valueOf(backBtnConfig.sound.uppercase()), 1.0f, 1.0f)
+                } catch (e: Exception) {}
+            }
+            openKitSelector(p)
+        }
+
+        // Botón de Reclamar
+        val claimItemConfig = claimBtnConfig.item
+        val actionItem: ItemStack = when {
             !hasPerm -> {
-                createGuiItem(Material.RED_CONCRETE, "<red><bold>❌ Kit Bloqueado</bold></red>", "<gray>Requiere el rango de permiso:</gray>\n<red>${config.permission}</red>")
+                ItemBuilder(Material.RED_CONCRETE)
+                    .displayName("<red><bold>❌ Kit Bloqueado</bold></red>")
+                    .lore(listOf("<gray>Requiere el rango de permiso:</gray>", "<red>${config.permission}</red>"))
+                    .build()
             }
             isCooldownActive -> {
                 val timeStr = kitService.formatTime(remaining)
-                createGuiItem(Material.YELLOW_CONCRETE, "<yellow><bold>⏳ En Cooldown</bold></yellow>", "<gray>Debes esperar:</gray>\n<yellow>$timeStr</yellow>\n<gray>para reclamar nuevamente.</gray>")
+                ItemBuilder(Material.YELLOW_CONCRETE)
+                    .displayName("<yellow><bold>⏳ En Cooldown</bold></yellow>")
+                    .lore(listOf("<gray>Debes esperar:</gray>", "<yellow>$timeStr</yellow>", "<gray>para reclamar nuevamente.</gray>"))
+                    .build()
             }
             else -> {
                 val priceLore = if (config.cost > 0.0) "<gray>Costo: </gray><gold>${config.cost} ${config.currency.uppercase()}</gold>\n" else ""
                 val bypassLore = if (remaining > 0 && hasBypass) "<yellow>¡Bypass de Cooldown Activo!</yellow>\n" else ""
-                createGuiItem(Material.GREEN_CONCRETE, "<green><bold>✔ ¡Reclamar Kit!</bold></green>", "$priceLore$bypassLore<gray>Haz click aquí para recibir los items.</gray>")
+                
+                val processedLore = claimItemConfig.lore.map { line ->
+                    line.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore)
+                }
+                
+                ItemBuilder.fromConfig(claimItemConfig.copy(lore = processedLore)).build()
             }
         }
 
         menu.setItem(actionSlot, actionItem) { p, _ ->
+            if (claimBtnConfig.sound != null) {
+                try {
+                    p.playSound(p.location, Sound.valueOf(claimBtnConfig.sound.uppercase()), 1.0f, 1.0f)
+                } catch (e: Exception) {}
+            }
             p.closeInventory()
             kitService.claimKit(p, kitId, false).thenAccept { result ->
                 when (result) {
@@ -180,20 +262,6 @@ class KitGuis(
             }
         }
 
-        val returnSlot = slots - 9
-        menu.setItem(returnSlot, createGuiItem(Material.BARRIER, "<red>Volver al Selector</red>", "<gray>Regresa al selector de kits principal.</gray>")) { p, _ ->
-            openKitSelector(p)
-        }
-
         menu.open(player)
-    }
-
-    private fun createGuiItem(material: Material, title: String, loreText: String): ItemStack {
-        val item = ItemStack(material)
-        val meta = item.itemMeta ?: return item
-        meta.displayName(ColorUtility.parse(title))
-        meta.lore(loreText.split("\n").map { ColorUtility.parse(it) })
-        item.itemMeta = meta
-        return item
     }
 }

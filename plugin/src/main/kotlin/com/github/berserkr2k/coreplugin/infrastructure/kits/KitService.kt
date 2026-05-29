@@ -166,38 +166,28 @@ class KitService(
 
     fun buildItemStack(config: KitConfig.KitItem): ItemStack? {
         val mat = Material.matchMaterial(config.material.uppercase()) ?: return null
-        val item = ItemStack(mat, config.amount)
-        val meta = item.itemMeta ?: return item
-
+        
+        val builder = com.github.berserkr2k.coreplugin.common.gui.ItemBuilder(mat, config.amount)
         if (config.displayName != null && config.displayName.isNotEmpty()) {
-            meta.displayName(com.github.berserkr2k.coreplugin.common.ColorUtility.parse(config.displayName))
+            builder.displayName(config.displayName)
         }
-
         if (config.lore.isNotEmpty()) {
-            meta.lore(config.lore.map { com.github.berserkr2k.coreplugin.common.ColorUtility.parse(it) })
+            builder.lore(config.lore)
         }
-
         config.enchantments.forEach { (enchantName, level) ->
-            val key = NamespacedKey.minecraft(enchantName.lowercase())
-            var enchant = Enchantment.getByKey(key)
-            if (enchant == null) {
-                enchant = Enchantment.getByName(enchantName.uppercase())
-            }
+            @Suppress("DEPRECATION")
+            val enchant = Enchantment.getByName(enchantName.uppercase()) 
+                ?: Enchantment.getByKey(NamespacedKey.minecraft(enchantName.lowercase()))
             if (enchant != null) {
-                meta.addEnchant(enchant, level, true)
+                builder.enchant(enchant, level)
             }
         }
-
-        if (config.unbreakable) {
-            meta.isUnbreakable = true
-        }
-
+        builder.unbreakable(config.unbreakable)
         if (config.customModelData != null) {
-            meta.setCustomModelData(config.customModelData)
+            builder.customModelData(config.customModelData)
         }
-
-        item.itemMeta = meta
-        return item
+        
+        return builder.build()
     }
 
     private fun calculateRequiredSlots(player: Player, items: List<ItemStack>): Int {
