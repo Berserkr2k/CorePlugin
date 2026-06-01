@@ -38,7 +38,13 @@ data class MenuConfig(
     val title: String = "<gold>Menú</gold>",
     val size: Int = 27,
     val filler: FillerConfig = FillerConfig(),
-    val items: Map<String, MenuItemConfig> = emptyMap()
+    val items: Map<String, MenuItemConfig> = emptyMap(),
+    val paginated: Boolean = false,
+    val dynamicSlots: List<Int> = emptyList(),
+    val previousPageSlot: Int? = null,
+    val nextPageSlot: Int? = null,
+    val previousPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Página Anterior</yellow>"),
+    val nextPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página</yellow>")
 )
 
 object MenuActionRegistry {
@@ -68,6 +74,28 @@ class CustomMenu(
     var onClose: ((Player) -> Unit)? = null
     
     private val localActions = ConcurrentHashMap<String, (Player, InventoryClickEvent) -> Unit>()
+
+    var currentPage: Int = 0
+    var totalPages: Int = 1
+    private var pageRedrawer: (() -> Unit)? = null
+
+    fun setPageRedrawer(redrawer: () -> Unit) {
+        this.pageRedrawer = redrawer
+    }
+
+    fun nextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++
+            pageRedrawer?.invoke()
+        }
+    }
+
+    fun previousPage() {
+        if (currentPage > 0) {
+            currentPage--
+            pageRedrawer?.invoke()
+        }
+    }
 
     fun registerLocalAction(actionName: String, handler: (Player, InventoryClickEvent) -> Unit) {
         localActions[actionName.lowercase()] = handler
@@ -216,6 +244,76 @@ class CustomMenu(
             placedSlots.add(targetSlot)
             render(item, targetSlot)
         }
+    }
+
+    /**
+     * Posiciona dinámicamente una lista de elementos aplicando paginación automática y
+     * gestionando los botones de Siguiente/Anterior según la configuración y el estado.
+     */
+    fun <T> placePaginatedItems(
+        config: MenuConfig,
+        items: List<T>,
+        previousPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Página Anterior</yellow>"),
+        nextPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página</yellow>"),
+        render: (T, Int) -> Unit
+    ) {
+        val dynamicSlots = config.dynamicSlots.ifEmpty {
+            val occupied = mutableSetOf<Int>()
+            config.items.values.forEach { occupied.addAll(it.slots) }
+            (0 until slots).filter { 
+                it !in occupied && 
+                it != config.previousPageSlot && 
+                it != config.nextPageSlot
+            }
+        }
+
+        val pageSize = dynamicSlots.size
+        if (pageSize <= 0) return
+
+        totalPages = maxOf(1, java.lang.Math.ceil(items.size.toDouble() / pageSize).toInt())
+
+        val redraw = {
+            // 1. Limpiar slots dinámicos
+            val emptyItem = ItemStack(org.bukkit.Material.AIR)
+            dynamicSlots.forEach { setItem(it, emptyItem.clone(), null) }
+            config.previousPageSlot?.let { if (it in 0 until slots) setItem(it, emptyItem.clone(), null) }
+            config.nextPageSlot?.let { if (it in 0 until slots) setItem(it, emptyItem.clone(), null) }
+
+            // 2. Obtener elementos de la página actual
+            val start = currentPage * pageSize
+            val end = minOf(start + pageSize, items.size)
+            val pageItems = if (start < items.size) items.subList(start, end) else emptyList()
+
+            // 3. Renderizar elementos
+            pageItems.forEachIndexed { idx, item ->
+                val slot = dynamicSlots[idx]
+                render(item, slot)
+            }
+
+            // 4. Botón de Página Anterior
+            config.previousPageSlot?.let { prevSlot ->
+                if (prevSlot in 0 until slots && currentPage > 0) {
+                    val prevBtn = ItemBuilder.fromConfig(previousPageItem).build()
+                    setItem(prevSlot, prevBtn) { p, _ ->
+                        previousPage()
+                    }
+                }
+            }
+
+            // 5. Botón de Siguiente Página
+            config.nextPageSlot?.let { nextSlot ->
+                if (nextSlot in 0 until slots && currentPage < totalPages - 1) {
+                    val nextBtn = ItemBuilder.fromConfig(nextPageItem).build()
+                    setItem(nextSlot, nextBtn) { p, _ ->
+                        nextPage()
+                    }
+                }
+            }
+            Unit
+        }
+
+        setPageRedrawer(redraw)
+        redraw() // Renderizado inicial
     }
 }
 

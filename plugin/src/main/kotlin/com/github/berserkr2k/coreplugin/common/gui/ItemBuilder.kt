@@ -208,17 +208,44 @@ class ItemBuilder(private var itemStack: ItemStack) {
     }
 
     fun pdc(key: String, value: String): ItemBuilder {
-        meta?.let {
-            val namespacedKey = NamespacedKey("coreplugin", key.lowercase())
-            it.persistentDataContainer.set(namespacedKey, PersistentDataType.STRING, value)
+        meta?.let { itemMeta ->
+            val namespacedKey = if (key.contains(":")) {
+                val parts = key.split(":", limit = 2)
+                NamespacedKey(parts[0].lowercase(), parts[1].lowercase())
+            } else {
+                NamespacedKey("coreplugin", key.lowercase())
+            }
+
+            when {
+                value.equals("true", ignoreCase = true) -> {
+                    itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.BOOLEAN, true)
+                }
+                value.equals("false", ignoreCase = true) -> {
+                    itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.BOOLEAN, false)
+                }
+                value.toIntOrNull() != null -> {
+                    itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.INTEGER, value.toInt())
+                }
+                value.toDoubleOrNull() != null -> {
+                    itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.DOUBLE, value.toDouble())
+                }
+                else -> {
+                    itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.STRING, value)
+                }
+            }
         }
         return this
     }
 
     fun pdc(key: String, value: Boolean): ItemBuilder {
-        meta?.let {
-            val namespacedKey = NamespacedKey("coreplugin", key.lowercase())
-            it.persistentDataContainer.set(namespacedKey, PersistentDataType.BOOLEAN, value)
+        meta?.let { itemMeta ->
+            val namespacedKey = if (key.contains(":")) {
+                val parts = key.split(":", limit = 2)
+                NamespacedKey(parts[0].lowercase(), parts[1].lowercase())
+            } else {
+                NamespacedKey("coreplugin", key.lowercase())
+            }
+            itemMeta.persistentDataContainer.set(namespacedKey, PersistentDataType.BOOLEAN, value)
         }
         return this
     }

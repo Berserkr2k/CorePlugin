@@ -27,5 +27,11 @@ data class ShopConfig(
     val backItemMaterial: String? = null,
     val backItemName: String? = null,
     val backItemLore: List<String> = emptyList(),
-    val items: List<ShopItemConfig> = emptyList()
+    val items: List<ShopItemConfig> = emptyList(),
+    val paginated: Boolean = false,
+    val dynamicSlots: List<Int> = emptyList(),
+    val previousPageSlot: Int? = null,
+    val nextPageSlot: Int? = null,
+    val previousPageItem: com.github.berserkr2k.coreplugin.common.gui.ItemConfig = com.github.berserkr2k.coreplugin.common.gui.ItemConfig(material = "ARROW", displayName = "<yellow>Página Anterior</yellow>"),
+    val nextPageItem: com.github.berserkr2k.coreplugin.common.gui.ItemConfig = com.github.berserkr2k.coreplugin.common.gui.ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página</yellow>")
 )

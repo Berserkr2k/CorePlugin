@@ -44,12 +44,7 @@ class TrailGuis(
 
         val sortedTrails = trailManager.trails.values.sortedBy { it.id }
 
-        menu.placeDynamicItems(
-            selectorConfig,
-            sortedTrails,
-            { it.guiSlot },
-            startSlot = 10
-        ) { config, slot ->
+        val drawTrail = { config: TrailConfig, slot: Int ->
             val trailId = config.id
             val hasPerm = player.hasPermission(config.permission)
             val isActive = activeTrail == trailId
@@ -101,6 +96,26 @@ class TrailGuis(
                     p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
                     p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
                 }
+            }
+        }
+
+        if (selectorConfig.paginated) {
+            menu.placePaginatedItems(
+                selectorConfig,
+                sortedTrails,
+                selectorConfig.previousPageItem,
+                selectorConfig.nextPageItem
+            ) { trailConfig, slot ->
+                drawTrail(trailConfig, slot)
+            }
+        } else {
+            menu.placeDynamicItems(
+                selectorConfig,
+                sortedTrails,
+                { it.guiSlot },
+                startSlot = 10
+            ) { trailConfig, slot ->
+                drawTrail(trailConfig, slot)
             }
         }
 

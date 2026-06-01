@@ -16,6 +16,7 @@ data class MarketConfig(
     val defaultPriceFloorPercent: Double = 10.0, // 10% de P_base
     val defaultPriceCeilingPercent: Double = 500.0, // 500% de P_base
     val defaultSpread: Double = 0.15, // 15% spread para venta
+    val blockedSellPdcKeys: List<String> = listOf("core:kit_item"),
     val categoriesMenu: MenuConfig = MenuConfig(
         title = "<gold><bold>Mercado Dinámico</bold></gold>",
         size = 27,

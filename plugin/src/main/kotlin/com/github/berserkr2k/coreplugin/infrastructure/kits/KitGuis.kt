@@ -79,11 +79,7 @@ class KitGuis(
 
         val sortedKits = kitService.kits.toList().sortedBy { it.first }
 
-        menu.placeDynamicItems(
-            selectorConfig,
-            sortedKits,
-            { it.second.guiSlot }
-        ) { (kitId, config), slot ->
+        val drawKit = { (kitId, config): Pair<String, KitConfig>, slot: Int ->
             val remaining = kitService.getRemainingCooldown(player.uniqueId, kitId)
             val hasPerm = player.hasPermission(config.permission)
             val hasBypass = player.hasPermission("core.kits.bypass.cooldown") || 
@@ -142,6 +138,25 @@ class KitGuis(
                         }
                     }
                 }
+            }
+        }
+
+        if (selectorConfig.paginated) {
+            menu.placePaginatedItems(
+                selectorConfig,
+                sortedKits,
+                selectorConfig.previousPageItem,
+                selectorConfig.nextPageItem
+            ) { kitEntry, slot ->
+                drawKit(kitEntry, slot)
+            }
+        } else {
+            menu.placeDynamicItems(
+                selectorConfig,
+                sortedKits,
+                { it.second.guiSlot }
+            ) { kitEntry, slot ->
+                drawKit(kitEntry, slot)
             }
         }
 

@@ -9,6 +9,8 @@ import com.github.berserkr2k.coreplugin.infrastructure.economy.TransactionLockMa
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound
+import org.bukkit.NamespacedKey
+import org.bukkit.persistence.PersistentDataType
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.inventory.meta.Damageable
@@ -85,37 +87,71 @@ class ShopGuis(
             lore = backLoreStr
         ).toItemStack()
 
-        menu.setItem(size - 5, backItem) { p, _ ->
+        val backSlot = size - 5
+        menu.setItem(backSlot, backItem) { p, _ ->
             openCategoriesMenu(p)
         }
 
-        // Cargar ítems de la categoría
-        categoryConfig.items.forEach { itemConfig ->
-            val baseItem = ItemConfig(
-                material = itemConfig.material,
-                customModelData = itemConfig.customModelData,
-                enchantments = itemConfig.enchantments
-            ).toItemStack()
+        if (categoryConfig.paginated) {
+            // Utilizar el sistema de paginación de CustomMenu mapeando los parámetros de ShopConfig
+            val dummyMenuConfig = MenuConfig(
+                title = categoryConfig.displayName,
+                size = categoryConfig.guiSize,
+                paginated = true,
+                dynamicSlots = categoryConfig.dynamicSlots,
+                previousPageSlot = categoryConfig.previousPageSlot,
+                nextPageSlot = categoryConfig.nextPageSlot,
+                previousPageItem = categoryConfig.previousPageItem,
+                nextPageItem = categoryConfig.nextPageItem,
+                items = mapOf("back" to MenuItemConfig(slots = listOf(backSlot))) // Proteger el slot de volver
+            )
 
-            val enrichedItem = enrichItemLore(itemConfig, baseItem)
-            val suggestedSlot = itemConfig.guiSlot
+            menu.placePaginatedItems(
+                dummyMenuConfig,
+                categoryConfig.items,
+                categoryConfig.previousPageItem,
+                categoryConfig.nextPageItem
+            ) { itemConfig, slot ->
+                val baseItem = ItemConfig(
+                    material = itemConfig.material,
+                    customModelData = itemConfig.customModelData,
+                    enchantments = itemConfig.enchantments
+                ).toItemStack()
 
-            val targetSlot = if (suggestedSlot in 0 until size && suggestedSlot != size - 5) suggestedSlot else {
-                var foundSlot = -1
-                for (s in 10 until size - 9) {
-                    if (s == size - 5) continue
-                    val item = menu.inventory.getItem(s)
-                    if (item == null || item.type == Material.GRAY_STAINED_GLASS_PANE) {
-                        foundSlot = s
-                        break
-                    }
-                }
-                foundSlot
-            }
-
-            if (targetSlot != -1) {
-                menu.setItem(targetSlot, enrichedItem) { p, _ ->
+                val enrichedItem = enrichItemLore(itemConfig, baseItem)
+                menu.setItem(slot, enrichedItem) { p, _ ->
                     openQuantitySubGui(p, shopId, itemConfig)
+                }
+            }
+        } else {
+            // Cargar ítems de la categoría de forma clásica
+            categoryConfig.items.forEach { itemConfig ->
+                val baseItem = ItemConfig(
+                    material = itemConfig.material,
+                    customModelData = itemConfig.customModelData,
+                    enchantments = itemConfig.enchantments
+                ).toItemStack()
+
+                val enrichedItem = enrichItemLore(itemConfig, baseItem)
+                val suggestedSlot = itemConfig.guiSlot
+
+                val targetSlot = if (suggestedSlot in 0 until size && suggestedSlot != backSlot) suggestedSlot else {
+                    var foundSlot = -1
+                    for (s in 10 until size - 9) {
+                        if (s == backSlot) continue
+                        val item = menu.inventory.getItem(s)
+                        if (item == null || item.type == Material.GRAY_STAINED_GLASS_PANE) {
+                            foundSlot = s
+                            break
+                        }
+                    }
+                    foundSlot
+                }
+
+                if (targetSlot != -1) {
+                    menu.setItem(targetSlot, enrichedItem) { p, _ ->
+                        openQuantitySubGui(p, shopId, itemConfig)
+                    }
                 }
             }
         }
@@ -447,7 +483,7 @@ class ShopGuis(
         val inv = player.inventory
         for (i in 0 until 36) {
             val item = inv.getItem(i)
-            if (item != null && isMatch(item, baseItem)) {
+            if (item != null && isMatch(item, baseItem) && !isBlockedByPdc(item)) {
                 ownedItems.add(Pair(item, getDurabilityFactor(item)))
             }
         }
@@ -481,7 +517,7 @@ class ShopGuis(
         for (i in 0 until 36) {
             if (remainingToSell <= 0) break
             val item = inv.getItem(i)
-            if (item != null && isMatch(item, baseItem)) {
+            if (item != null && isMatch(item, baseItem) && !isBlockedByPdc(item)) {
                 val toTake = minOf(item.amount, remainingToSell)
                 removePlan.add(Pair(i, toTake))
                 
@@ -567,7 +603,7 @@ class ShopGuis(
         val inv = player.inventory
         for (i in 0 until 36) {
             val current = inv.getItem(i)
-            if (current != null && isMatch(current, item)) {
+            if (current != null && isMatch(current, item) && !isBlockedByPdc(current)) {
                 count += current.amount
             }
         }
@@ -644,5 +680,30 @@ class ShopGuis(
             currentBuys++
         }
         return Pair(count, totalPrice)
+    }
+
+    private fun isBlockedByPdc(itemStack: ItemStack): Boolean {
+        val meta = itemStack.itemMeta ?: return false
+        val pdc = meta.persistentDataContainer
+        for (blockedKeyStr in shopManager.marketConfig.blockedSellPdcKeys) {
+            val namespacedKey = if (blockedKeyStr.contains(":")) {
+                val parts = blockedKeyStr.split(":", limit = 2)
+                NamespacedKey(parts[0].lowercase(), parts[1].lowercase())
+            } else {
+                NamespacedKey("coreplugin", blockedKeyStr.lowercase())
+            }
+            if (pdc.has(namespacedKey, PersistentDataType.BOOLEAN)) {
+                if (pdc.get(namespacedKey, PersistentDataType.BOOLEAN) == true) {
+                    return true
+                }
+            }
+            if (pdc.has(namespacedKey, PersistentDataType.STRING)) {
+                val valStr = pdc.get(namespacedKey, PersistentDataType.STRING)
+                if (valStr.equals("true", ignoreCase = true)) {
+                    return true
+                }
+            }
+        }
+        return false
     }
 }
