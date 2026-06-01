@@ -77,10 +77,13 @@ class KitGuis(
             }
         }
 
-        var slot = 10
-        kitService.kits.forEach { (kitId, config) ->
-            if (slot > 16) return@forEach 
+        val sortedKits = kitService.kits.toList().sortedBy { it.first }
 
+        menu.placeDynamicItems(
+            selectorConfig,
+            sortedKits,
+            { it.second.guiSlot }
+        ) { (kitId, config), slot ->
             val remaining = kitService.getRemainingCooldown(player.uniqueId, kitId)
             val hasPerm = player.hasPermission(config.permission)
             val hasBypass = player.hasPermission("core.kits.bypass.cooldown") || 
@@ -140,7 +143,6 @@ class KitGuis(
                     }
                 }
             }
-            slot++
         }
 
         menu.open(player)

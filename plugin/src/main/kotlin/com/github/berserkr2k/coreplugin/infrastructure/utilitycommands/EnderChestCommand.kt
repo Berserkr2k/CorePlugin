@@ -6,16 +6,13 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class EnderChestCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         val ecBuilder = manager.commandBuilder("enderchest")
@@ -25,7 +22,7 @@ class EnderChestCommand(
                 val sender = context.sender()
                 if (sender !is Player) {
                     val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                     return@handler
                 }
 
@@ -34,7 +31,7 @@ class EnderChestCommand(
                     // Abrir cofre de otro jugador
                     if (!sender.hasPermission("core.utility.enderchest.others")) {
                         val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                        sender.sendMessage(miniMessage.deserialize(msg))
+                        sender.sendMessage(ColorUtility.parse(msg))
                         return@handler
                     }
                     val target = targetOpt.get()
@@ -43,7 +40,7 @@ class EnderChestCommand(
                     val key = "enderchest-opened-other"
                     val defaultMsg = "<green>Abriendo cofre de ender de <player>...</green>"
                     val msg = (messagesConfig.utility[key] ?: defaultMsg).replace("<player>", target.name)
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                 } else {
                     // Abrir propio cofre
                     sender.openInventory(sender.enderChest)
@@ -51,7 +48,7 @@ class EnderChestCommand(
                     val key = "enderchest-opened"
                     val defaultMsg = "<green>Abriendo tu cofre de ender...</green>"
                     val msg = messagesConfig.utility[key] ?: defaultMsg
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                 }
             }
 

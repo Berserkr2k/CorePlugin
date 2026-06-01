@@ -33,6 +33,7 @@ data class KitConfig(
     ),
     val effects: KitEffects = KitEffects(),
     val guiIcon: String = "IRON_SWORD",
+    val guiSlot: Int = -1,
     val guiLore: List<String> = listOf(
         "<gray>Un kit excelente para comenzar tu</gray>",
         "<gray>aventura en el servidor.</gray>",

@@ -94,12 +94,14 @@ class CustomMenu(
     /**
      * Carga el layout y comportamiento desde una MenuConfig, soportando placeholders locales opcionales.
      */
-    fun loadFromConfig(config: MenuConfig, placeholders: Map<String, String> = emptyMap()) {
+    fun loadFromConfig(config: MenuConfig, placeholders: Map<String, String> = emptyMap(), ignoreSlots: List<Int> = emptyList()) {
         // 1. Relleno de fondo si está activo
         if (config.filler.enabled) {
             val fillerItem = config.filler.item.toItemStack()
             for (i in 0 until slots) {
-                setItem(i, fillerItem.clone())
+                if (i !in ignoreSlots) {
+                    setItem(i, fillerItem.clone())
+                }
             }
         }
 
@@ -177,6 +179,42 @@ class CustomMenu(
         val handler = clickHandlers[slot]
         if (handler != null) {
             handler(player, event)
+        }
+    }
+
+    /**
+     * Posiciona dinámicamente una lista de elementos en el inventario basándose en el guiSlot
+     * configurado por cada elemento, y cayendo en slots libres de forma secuencial.
+     * Omitirá y protegerá los slots reservados para ítems estáticos cargados desde HOCON.
+     */
+    fun <T> placeDynamicItems(
+        config: MenuConfig,
+        items: List<T>,
+        getGuiSlot: (T) -> Int,
+        startSlot: Int = 10,
+        render: (T, Int) -> Unit
+    ) {
+        val occupiedSlots = mutableSetOf<Int>()
+        config.items.values.forEach { occupiedSlots.addAll(it.slots) }
+
+        val placedSlots = mutableSetOf<Int>()
+        var nextFreeSlot = startSlot
+
+        items.forEach { item ->
+            val suggestedSlot = getGuiSlot(item)
+            val targetSlot = if (suggestedSlot in 0 until slots && !occupiedSlots.contains(suggestedSlot)) {
+                suggestedSlot
+            } else {
+                while (nextFreeSlot in occupiedSlots || placedSlots.contains(nextFreeSlot)) {
+                    nextFreeSlot++
+                }
+                if (nextFreeSlot >= slots) {
+                    return@forEach // No hay más espacio libre
+                }
+                nextFreeSlot
+            }
+            placedSlots.add(targetSlot)
+            render(item, targetSlot)
         }
     }
 }

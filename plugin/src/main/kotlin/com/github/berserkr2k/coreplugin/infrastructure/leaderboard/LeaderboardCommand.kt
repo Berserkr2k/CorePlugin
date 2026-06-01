@@ -45,17 +45,10 @@ class LeaderboardCommand(
                             target.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, id)
                             target.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
                             
-                            val display = target.passengers.filterIsInstance<TextDisplay>().firstOrNull()
-                                ?: (target.world.spawnEntity(target.location.clone().add(0.0, 2.1, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
-                                    it.setGravity(false)
-                                    it.billboard = Display.Billboard.CENTER
-                                    target.addPassenger(it)
-                                }
-                            
-                            display.text(miniMessage.deserialize("<gold>Cargando podio...</gold>"))
+                            // Limpiar antiguos pasajeros displays si los tuviese
+                            target.passengers.forEach { it.remove() }
                             
                             leaderboardService.registerLeaderboard(id, rank, target.location).thenRun {
-                                leaderboardService.activeArmorStands["${id}_$rank"] = target.uniqueId
                                 player.sendMessage(miniMessage.deserialize("<green>¡ArmorStand registrado con éxito como podio para '$id' (Top $rank)!</green>"))
                                 leaderboardService.refreshAllLeaderboards()
                             }
@@ -71,19 +64,45 @@ class LeaderboardCommand(
                             stand.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, id)
                             stand.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
                             
-                            val display = loc.world.spawnEntity(loc.clone().add(0.0, 2.1, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay
-                            display.setGravity(false)
-                            display.billboard = Display.Billboard.CENTER
-                            display.text(miniMessage.deserialize("<gold>Cargando podio...</gold>"))
-                            
-                            stand.addPassenger(display)
-                            
                             leaderboardService.registerLeaderboard(id, rank, loc).thenRun {
-                                leaderboardService.activeArmorStands["${id}_$rank"] = stand.uniqueId
                                 player.sendMessage(miniMessage.deserialize("<green>¡Nuevo ArmorStand de podio creado para '$id' (Top $rank)!</green>"))
                                 leaderboardService.refreshAllLeaderboards()
                             }
                         }
+                    }
+                }
+        )
+
+        manager.command(
+            manager.commandBuilder("core")
+                .literal("leaderboard")
+                .literal("remove")
+                .required("id", stringParser())
+                .required("rank", integerParser())
+                .permission("core.leaderboard.setup")
+                .handler { context ->
+                    val player = context.sender() as? Player ?: return@handler
+                    val id = context.get<String>("id")
+                    val rank = context.get<Int>("rank")
+
+                    leaderboardService.unregisterLeaderboard(id, rank).thenAccept { success ->
+                        if (success) {
+                            player.sendMessage(miniMessage.deserialize("<green>¡Podio para '$id' (Top $rank) eliminado con éxito!</green>"))
+                        } else {
+                            player.sendMessage(miniMessage.deserialize("<red>No se encontró ningún podio para la clasificación '$id' con Rank $rank.</red>"))
+                        }
+                    }
+                }
+        )
+
+        manager.command(
+            manager.commandBuilder("core")
+                .literal("leaderboard")
+                .literal("reload")
+                .permission("core.leaderboard.setup")
+                .handler { context ->
+                    leaderboardService.reloadLeaderboards().thenRun {
+                        context.sender().sendMessage(miniMessage.deserialize("<green>✔ ¡Configuraciones de clasificaciones recargadas y actualizadas con éxito!</green>"))
                     }
                 }
         )

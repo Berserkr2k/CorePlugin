@@ -17,8 +17,12 @@ object ColorUtility {
     fun parse(text: String?): Component {
         if (text == null || text.isEmpty()) return Component.empty()
 
+        // Traducir <purple> y </purple> no soportados nativamente por MiniMessage a <dark_purple> y </dark_purple>
+        var processed = text.replace(Regex("(?i)<purple>"), "<dark_purple>")
+        processed = processed.replace(Regex("(?i)</purple>"), "</dark_purple>")
+
         // 1. Traducir códigos hex legacy &#rrggbb a &x&r&r&g&g&b&b
-        val processedHex = translateHexColorCodes(text)
+        val processedHex = translateHexColorCodes(processed)
 
         // 2. Deserializar con MiniMessage para resolver etiquetas modernas (<red>, etc.)
         val mmComp = miniMessage.deserialize(processedHex)

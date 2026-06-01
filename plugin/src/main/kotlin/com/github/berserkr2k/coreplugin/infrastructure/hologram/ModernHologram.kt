@@ -37,10 +37,6 @@ class ModernHologram(
         private set
     var interactionUuid: UUID? = null
         private set
-        
-    private val miniMessage = MiniMessage.miniMessage()
-    private val legacySerializer = net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer.legacyAmpersand()
-    
     // Parámetros dinámicos y configurables
     var lineSpacing: Double = 0.28
     var backgroundColor: Int = 1073741824
@@ -52,12 +48,7 @@ class ModernHologram(
     }
 
     private fun parseText(text: String, player: Player): net.kyori.adventure.text.Component {
-        val resolved = placeholderBridge.parsePlaceholder(player, text)
-        return if (resolved.contains("<") && resolved.contains(">")) {
-            miniMessage.deserialize(resolved)
-        } else {
-            legacySerializer.deserialize(resolved)
-        }
+        return placeholderBridge.parseLegacyStringSecurely(player, text)
     }
 
     /**

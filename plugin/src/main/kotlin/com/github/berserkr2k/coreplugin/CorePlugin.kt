@@ -62,6 +62,7 @@ class CorePlugin(
     private var interfaceService: InterfaceService? = null
     private var economyService: EconomyService? = null
     private var utilityService: UtilityService? = null
+    private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
 
     override fun onEnable() {
         threadCoordinator = ThreadCoordinator(this)
@@ -194,9 +195,21 @@ class CorePlugin(
         SendTitleCommand(this, commandManager, messagesConfig)
         
         // 10. Inicializar Módulo Premium de Kits
-        val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, databaseService!!, ecoService, messagesConfig)
+        val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, ecoService, messagesConfig)
         val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, configManager, kService)
         com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis)
+
+        // 11. Inicializar Módulo Premium de Estelas de Partículas (Projectile Trails)
+        val trailManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager(this, databaseService!!, configManager)
+        val trailGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailGuis(this, configManager, trailManager)
+        server.pluginManager.registerEvents(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailListener(this, trailManager), this)
+        com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailCommand(this, commandManager, trailManager, trailGuis)
+
+        // 12. Inicializar Módulo Premium de Tiendas de Mercado Dinámico
+        val sManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager(this, configManager, databaseService!!)
+        shopManager = sManager
+        val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, ecoService, messagesConfig)
+        com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopCommand(this, commandManager, sManager, sGuis)
 
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
         threadCoordinator.runTimerAsync(72000, 1728000) {
@@ -231,6 +244,8 @@ $logo
  <gray>⚡ <gold>Economía</gold>           : <green>[ ACTIVO ]</green> (Multi-Divisa & Vault)</gray>
  <gray>⚡ <gold>Utilidades</gold>         : <green>[ ACTIVO ]</green> (Modular Commands)</gray>
  <gray>⚡ <gold>Kits Premium</gold>       : <green>[ ACTIVO ]</green> (HOCON & GUIs)</gray>
+ <gray>⚡ <gold>Estelas Proyectil</gold>  : <green>[ ACTIVO ]</green> (Async & 3D Math)</gray>
+  <gray>⚡ <gold>Tiendas Mercado</gold>   : <green>[ ACTIVO ]</green> (Dynamic & Symmetric)</gray>
 <dark_gray>======================================================</dark_gray>
 <green>¡Todos los módulos del plugin Core cargados de forma síncrona!</green>
         """.trimIndent()

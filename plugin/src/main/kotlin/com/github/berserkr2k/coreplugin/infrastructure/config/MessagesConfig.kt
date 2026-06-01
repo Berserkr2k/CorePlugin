@@ -6,8 +6,7 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 data class MessagesConfig(
     val leaderboards: Map<String, String> = mapOf(
         "loading" to "<gold>Cargando datos del podio...</gold>",
-        "header" to "<gold><bold>★ CLASIFICACIÓN DE <top_id> ★</bold></gold>\n",
-        "row-format" to "<yellow>#<pos></yellow> <gray><player></gray> » <green>$<balance></green>"
+        "vacant" to "<gray>#<pos> - Vacante</gray>"
     ),
     val economy: Map<String, String> = mapOf(
         "no-permission-other" to "<red>No tienes permiso para ver la billetera de otros jugadores.</red>",
@@ -89,5 +88,54 @@ data class MessagesConfig(
         "broadcast-usage" to "<red>Uso: /broadcast <chat/title/actionbar/bossbar> <mensaje></red>",
         "broadcast-invalid-type" to "<red>Tipo de broadcast inválido. Tipos válidos: chat, title, actionbar, bossbar</red>",
         "sendtitle-usage" to "<red>Uso: /sendtitle <player> <titulo>[|subtitulo]</red>"
+    ),
+    val shops: Map<String, String> = mapOf(
+        "locked" to "<red>⚠️ Por favor espera a que se complete tu transacción anterior.</red>",
+        "no-space" to "<red>❌ No tienes espacio libre en tu inventario.</red>",
+        "no-space-qty" to "<red>❌ No tienes suficiente espacio para esta compra (<qty>).</red>",
+        "no-funds" to "<red>❌ No tienes suficientes fondos.</red>",
+        "no-items" to "<red>❌ No tienes este ítem en tu inventario.</red>",
+        "no-items-qty" to "<red>❌ No tienes suficientes unidades para vender (<qty>).</red>",
+        "buy-success" to "<green>✔ ¡Compra exitosa! Comprado x<qty> por <price>.</green>",
+        "sell-success" to "<green>✔ ¡Venta exitosa! Vendido x<qty> por <payout>.</green>",
+        "error-db" to "<red>❌ Ocurrió un error al procesar tu transacción. Revertido.</red>",
+        "market-regulating" to "<red>❌ El mercado se está regulando, por favor espera unos segundos...</red>",
+        "category-not-found" to "<red>❌ La categoría de tienda '<category>' no existe.</red>",
+        "back-item-material" to "BARRIER",
+        "back-item-name" to "<red>Volver</red>",
+        "back-item-lore" to "<gray>Haz clic para regresar</gray>",
+        "buy-price-format" to "<gray>Precio Compra: <green><price></green>",
+        "buy-tax-format" to "<dark_gray>  (IVA incl.: <tax>)</dark_gray>",
+        "buy-disabled" to "<red>No se puede comprar</red>",
+        "sell-price-format" to "<gray>Precio Venta:  <red><price></red>",
+        "sell-tax-format" to "<dark_gray>  (IVA incl.: <tax>)</dark_gray>",
+        "sell-disabled" to "<red>No se puede vender</red>",
+        "lore-separator" to "<gray>──────────────────────────────</gray>",
+        "lore-volume" to "<gray>Volumen (24h): <gold><volume> uds.</gold>",
+        "lore-trend" to "<gray>Tendencia:     <trend>",
+        "lore-click" to "<yellow>▶ Haz clic para transaccionar</yellow>"
     )
 )
+
+/**
+ * Obtiene y formatea un mensaje del mapa de economía reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getEconomy(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.economy[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de tiendas reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getShops(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.shops[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+

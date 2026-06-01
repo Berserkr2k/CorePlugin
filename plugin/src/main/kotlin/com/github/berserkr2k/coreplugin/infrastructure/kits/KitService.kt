@@ -1,11 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
+import com.github.berserkr2k.coreplugin.infrastructure.database.*
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -32,6 +31,7 @@ sealed class ClaimResult {
 
 class KitService(
     private val plugin: Plugin,
+    private val configManager: ModularConfigManager,
     private val databaseService: DatabaseService,
     private val economyService: EconomyService,
     private val messagesConfig: MessagesConfig
@@ -40,9 +40,6 @@ class KitService(
     val cooldownCache = ConcurrentHashMap<UUID, ConcurrentHashMap<String, Long>>()
     
     private val kitsFolder = plugin.dataFolder.resolve("kits")
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
 
     init {
         createTables()
@@ -52,19 +49,15 @@ class KitService(
 
     private fun createTables() {
         databaseService.initFuture.thenAccept {
-            databaseService.getConnection().use { conn ->
-                val sql = """
-                    CREATE TABLE IF NOT EXISTS player_kit_cooldowns (
-                        uuid VARCHAR(36) NOT NULL,
-                        kit_name VARCHAR(64) NOT NULL,
-                        claimed_at BIGINT NOT NULL,
-                        PRIMARY KEY (uuid, kit_name)
-                    );
-                """.trimIndent()
-                conn.createStatement().use { stmt ->
-                    stmt.execute(sql)
-                }
-            }
+            val sql = """
+                CREATE TABLE IF NOT EXISTS player_kit_cooldowns (
+                    uuid VARCHAR(36) NOT NULL,
+                    kit_name VARCHAR(64) NOT NULL,
+                    claimed_at BIGINT NOT NULL,
+                    PRIMARY KEY (uuid, kit_name)
+                );
+            """.trimIndent()
+            databaseService.execute(sql)
         }.exceptionally { e ->
             plugin.logger.severe("Fallo al crear la tabla de cooldowns de kits: ${e.message}")
             null
@@ -77,22 +70,18 @@ class KitService(
             kitsFolder.mkdirs()
         }
 
-        val defaultKitFile = kitsFolder.resolve("starter.conf")
-        if (!defaultKitFile.exists()) {
-            saveDefaultKit(defaultKitFile)
+        val starterFile = kitsFolder.resolve("starter.conf")
+        if (!starterFile.exists()) {
+            configManager.loadModuleConfig("kits/starter.conf", KitConfig::class.java, KitConfig()).join()
         }
 
         val confFiles = kitsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
-        val mapper = mapperFactory.get(KitConfig::class.java)
 
         for (file in confFiles) {
             val kitId = file.nameWithoutExtension.lowercase()
-            val loader = HoconConfigurationLoader.builder().path(file.toPath()).build()
             try {
-                val root = loader.load()
-                val kitConfig = mapper.load(root) ?: KitConfig()
-                mapper.save(kitConfig, root)
-                loader.save(root)
+                // Delegar al ModularConfigManager centralizado
+                val kitConfig = configManager.loadModuleConfig("kits/${file.name}", KitConfig::class.java, KitConfig()).join()
                 kits[kitId] = kitConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar el kit desde ${file.name}: ${e.message}")
@@ -101,33 +90,19 @@ class KitService(
         plugin.logger.info("¡Se han cargado ${kits.size} kits con éxito!")
     }
 
-    private fun saveDefaultKit(file: File) {
-        val loader = HoconConfigurationLoader.builder().path(file.toPath()).build()
-        val mapper = mapperFactory.get(KitConfig::class.java)
-        try {
-            val root = loader.load()
-            mapper.save(KitConfig(), root)
-            loader.save(root)
-        } catch (e: Exception) {
-            plugin.logger.severe("Fallo al guardar el kit predeterminado: ${e.message}")
-        }
-    }
-
     fun loadPlayerCooldowns(uuid: UUID): CompletableFuture<Void> {
-        return CompletableFuture.runAsync({
+        val sql = "SELECT kit_name, claimed_at FROM player_kit_cooldowns WHERE uuid = ?"
+        return databaseService.queryAsync(
+            sql,
+            preparer = { stmt -> stmt.setString(1, uuid.toString()) },
+            mapper = { rs -> rs.getString(1).lowercase() to rs.getLong(2) }
+        ).thenAccept { results ->
             val playerCooldowns = ConcurrentHashMap<String, Long>()
-            databaseService.getConnection().use { conn ->
-                val ps = conn.prepareStatement("SELECT kit_name, claimed_at FROM player_kit_cooldowns WHERE uuid = ?")
-                ps.setString(1, uuid.toString())
-                val rs = ps.executeQuery()
-                while (rs.next()) {
-                    val kitName = rs.getString(1).lowercase()
-                    val claimedAt = rs.getLong(2)
-                    playerCooldowns[kitName] = claimedAt
-                }
+            results.forEach { (kitName, claimedAt) ->
+                playerCooldowns[kitName] = claimedAt
             }
             cooldownCache[uuid] = playerCooldowns
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }
     }
 
     fun unloadPlayerCooldowns(uuid: UUID) {
@@ -258,12 +233,10 @@ class KitService(
 
             val now = System.currentTimeMillis()
             try {
-                databaseService.getConnection().use { conn ->
-                    val ps = conn.prepareStatement("REPLACE INTO player_kit_cooldowns (uuid, kit_name, claimed_at) VALUES (?, ?, ?)")
+                databaseService.execute("REPLACE INTO player_kit_cooldowns (uuid, kit_name, claimed_at) VALUES (?, ?, ?)") { ps ->
                     ps.setString(1, player.uniqueId.toString())
                     ps.setString(2, kitId.lowercase())
                     ps.setLong(3, now)
-                    ps.executeUpdate()
                 }
                 cooldownCache.computeIfAbsent(player.uniqueId) { ConcurrentHashMap() }[kitId.lowercase()] = now
             } catch (e: Exception) {

@@ -16,6 +16,7 @@ import org.bukkit.inventory.meta.Damageable
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.potion.PotionType
 import java.util.UUID
+import com.destroystokyo.paper.profile.PlayerProfile
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 import net.kyori.adventure.text.Component
 
@@ -148,6 +149,14 @@ class ItemBuilder(private var itemStack: ItemStack) {
         return this
     }
 
+    fun skullProfile(profile: PlayerProfile?): ItemBuilder {
+        if (profile != null && meta is SkullMeta) {
+            val skullMeta = meta as SkullMeta
+            skullMeta.playerProfile = profile
+        }
+        return this
+    }
+
     fun skullUuid(uuid: UUID?): ItemBuilder {
         if (uuid != null && meta is SkullMeta) {
             val skullMeta = meta as SkullMeta
@@ -202,6 +211,14 @@ class ItemBuilder(private var itemStack: ItemStack) {
         meta?.let {
             val namespacedKey = NamespacedKey("coreplugin", key.lowercase())
             it.persistentDataContainer.set(namespacedKey, PersistentDataType.STRING, value)
+        }
+        return this
+    }
+
+    fun pdc(key: String, value: Boolean): ItemBuilder {
+        meta?.let {
+            val namespacedKey = NamespacedKey("coreplugin", key.lowercase())
+            it.persistentDataContainer.set(namespacedKey, PersistentDataType.BOOLEAN, value)
         }
         return this
     }

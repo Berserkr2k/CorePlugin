@@ -169,9 +169,6 @@ object ArmorStandEditorGui {
      * Sub-Menú: Rotación de una parte específica en X/Y/Z
      */
     private fun openPartRotationMenu(plugin: Plugin, player: Player, stand: ArmorStand, part: String) {
-        val scale = ArmorStandEditorListener.playerScale[player.uniqueId] ?: ScaleMode.COARSE
-        val angleRad = Math.toRadians(scale.rotationAngle)
-
         val partsName = when(part) {
             "HEAD" -> "Cabeza"
             "BODY" -> "Cuerpo"
@@ -190,60 +187,57 @@ object ArmorStandEditorGui {
             plugin
         )
 
-        fun getPose(): EulerAngle = when(part) {
-            "HEAD" -> stand.headPose
-            "BODY" -> stand.bodyPose
-            "LEFT_ARM" -> stand.leftArmPose
-            "RIGHT_ARM" -> stand.rightArmPose
-            "LEFT_LEG" -> stand.leftLegPose
-            "RIGHT_LEG" -> stand.rightLegPose
-            else -> EulerAngle.ZERO
-        }
-
-        fun setPose(pose: EulerAngle) = when(part) {
-            "HEAD" -> stand.headPose = pose
-            "BODY" -> stand.bodyPose = pose
-            "LEFT_ARM" -> stand.leftArmPose = pose
-            "RIGHT_ARM" -> stand.rightArmPose = pose
-            "LEFT_LEG" -> stand.leftLegPose = pose
-            "RIGHT_LEG" -> stand.rightLegPose = pose
-            else -> {}
-        }
-
-        menu.registerLocalAction("rot_x_plus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x + angleRad, pz.y, pz.z))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en X+!</green>"))
-        }
-        menu.registerLocalAction("rot_x_minus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x - angleRad, pz.y, pz.z))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en X-!</green>"))
-        }
-        menu.registerLocalAction("rot_y_plus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x, pz.y + angleRad, pz.z))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Y+!</green>"))
-        }
-        menu.registerLocalAction("rot_y_minus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x, pz.y - angleRad, pz.z))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Y-!</green>"))
-        }
-        menu.registerLocalAction("rot_z_plus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x, pz.y, pz.z + angleRad))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Z+!</green>"))
-        }
-        menu.registerLocalAction("rot_z_minus") { p, _ ->
-            val pz = getPose()
-            setPose(EulerAngle(pz.x, pz.y, pz.z - angleRad))
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡$partsName rotada en Z-!</green>"))
-        }
+        menu.registerLocalAction("adjust_x") { p, _ -> givePoseTool(p, stand, part, "X") }
+        menu.registerLocalAction("adjust_y") { p, _ -> givePoseTool(p, stand, part, "Y") }
+        menu.registerLocalAction("adjust_z") { p, _ -> givePoseTool(p, stand, part, "Z") }
         menu.registerLocalAction("back_to_pose") { p, _ -> openPoseMenu(plugin, p, stand) }
 
         menu.loadFromConfig(guiConfig.rotation, placeholders)
         menu.open(player)
+    }
+
+    private fun givePoseTool(player: Player, stand: ArmorStand, part: String, axis: String) {
+        player.closeInventory()
+
+        // 1. Guardar backup de la mano actual del jugador
+        val currentItem = player.inventory.itemInMainHand
+        ArmorStandEditorListener.originalHands[player.uniqueId] = currentItem.clone()
+
+        // 2. Crear la herramienta de pose (Palanca)
+        val tool = ItemStack(Material.LEVER)
+        val meta = tool.itemMeta ?: return
+        
+        val partsName = when(part.uppercase()) {
+            "HEAD" -> "Cabeza"
+            "BODY" -> "Cuerpo"
+            "LEFT_ARM" -> "Brazo Izquierdo"
+            "RIGHT_ARM" -> "Brazo Derecho"
+            "LEFT_LEG" -> "Pierna Izquierda"
+            "RIGHT_LEG" -> "Pierna Derecha"
+            else -> part
+        }
+
+        meta.displayName(ColorUtility.parse("<gold><bold>Herramienta de Pose: $partsName ($axis)</bold></gold>"))
+        meta.lore(listOf(
+            ColorUtility.parse("<yellow>Parte: <white>$partsName</white></yellow>"),
+            ColorUtility.parse("<yellow>Eje: <white>$axis</white></yellow>"),
+            ColorUtility.parse(""),
+            ColorUtility.parse("<green>◀ Click Izquierdo: Aumentar ángulo</green>"),
+            ColorUtility.parse("<red>▶ Click Derecho: Disminuir ángulo</red>"),
+            ColorUtility.parse("<gray>Sneak + Click Derecho: Volver al menú</gray>")
+        ))
+
+        // Guardar estado en PDC
+        meta.persistentDataContainer.set(
+            ArmorStandEditorListener.poseToolKey,
+            org.bukkit.persistence.PersistentDataType.STRING,
+            "${stand.uniqueId}:$part:$axis"
+        )
+        tool.itemMeta = meta
+
+        // 3. Colocar en la mano del jugador
+        player.inventory.setItemInMainHand(tool)
+        player.sendMessage(ColorUtility.parse("<green>✔ ¡Recibiste la <gold>Herramienta de Pose</gold>! Ajusta libremente. Sneak + Click Derecho para volver.</green>"))
     }
 
     /**
@@ -404,7 +398,7 @@ object ArmorStandEditorGui {
         }
 
         // Cargar estructura base de la configuración (etiquetas, etc.)
-        menu.loadFromConfig(guiConfig.equipment)
+        menu.loadFromConfig(guiConfig.equipment, ignoreSlots = listOf(10, 11, 12, 13, 14, 15))
         menu.open(player)
     }
 
@@ -441,12 +435,9 @@ object ArmorStandEditorGui {
                 title = "<gold>Rotar: %part_name%</gold>",
                 size = 27,
                 items = mapOf(
-                    "rot_x_plus" to MenuItemConfig(slots = listOf(10), item = ItemConfig(material = "RED_WOOL", displayName = "<red>Rotar X +</red>", lore = listOf("<gray>Rotar en eje X adelante</gray>")), action = "rot_x_plus"),
-                    "rot_x_minus" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "RED_CONCRETE", displayName = "<red>Rotar X -</red>", lore = listOf("<gray>Rotar en eje X atrás</gray>")), action = "rot_x_minus"),
-                    "rot_y_plus" to MenuItemConfig(slots = listOf(12), item = ItemConfig(material = "GREEN_WOOL", displayName = "<green>Rotar Y +</green>", lore = listOf("<gray>Rotar en eje Y derecha</gray>")), action = "rot_y_plus"),
-                    "rot_y_minus" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green>Rotar Y -</green>", lore = listOf("<gray>Rotar en eje Y izquierda</gray>")), action = "rot_y_minus"),
-                    "rot_z_plus" to MenuItemConfig(slots = listOf(14), item = ItemConfig(material = "BLUE_WOOL", displayName = "<blue>Rotar Z +</blue>", lore = listOf("<gray>Rotar en eje Z inclinar derecha</gray>")), action = "rot_z_plus"),
-                    "rot_z_minus" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "BLUE_CONCRETE", displayName = "<blue>Rotar Z -</blue>", lore = listOf("<gray>Rotar en eje Z inclinar izquierda</gray>")), action = "rot_z_minus"),
+                    "adjust_x" to MenuItemConfig(slots = listOf(11), item = ItemConfig(material = "RED_WOOL", displayName = "<red>Ajustar X</red>", lore = listOf("<gray>Click para recibir la herramienta</gray>", "<gray>y ajustar rotación en el eje X.</gray>")), action = "adjust_x"),
+                    "adjust_y" to MenuItemConfig(slots = listOf(13), item = ItemConfig(material = "GREEN_WOOL", displayName = "<green>Ajustar Y</green>", lore = listOf("<gray>Click para recibir la herramienta</gray>", "<gray>y ajustar rotación en el eje Y.</gray>")), action = "adjust_y"),
+                    "adjust_z" to MenuItemConfig(slots = listOf(15), item = ItemConfig(material = "BLUE_WOOL", displayName = "<blue>Ajustar Z</blue>", lore = listOf("<gray>Click para recibir la herramienta</gray>", "<gray>y ajustar rotación en el eje Z.</gray>")), action = "adjust_z"),
                     "back" to MenuItemConfig(slots = listOf(26), item = ItemConfig(material = "BARRIER", displayName = "<red>Volver a Selección de Partes</red>", lore = listOf("<gray>Regresa al menú de poses</gray>")), action = "back_to_pose")
                 )
             ),

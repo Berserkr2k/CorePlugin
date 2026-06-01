@@ -7,16 +7,13 @@ import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class ExpCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         val expBuilder = manager.commandBuilder("exp")
@@ -33,14 +30,14 @@ class ExpCommand(
                     val target = if (targetOpt.isPresent) {
                         if (!sender.hasPermission("core.utility.exp.others")) {
                             val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                            sender.sendMessage(miniMessage.deserialize(msg))
+                            sender.sendMessage(ColorUtility.parse(msg))
                             return@handler
                         }
                         targetOpt.get()
                     } else {
                         if (sender !is Player) {
                             val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                            sender.sendMessage(miniMessage.deserialize(msg))
+                            sender.sendMessage(ColorUtility.parse(msg))
                             return@handler
                         }
                         sender
@@ -53,7 +50,7 @@ class ExpCommand(
                         .replace("<player>", target.name)
                         .replace("<level>", target.level.toString())
                         .replace("<xp>", totalXp.toString())
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                 }
         )
 
@@ -76,7 +73,7 @@ class ExpCommand(
                     val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
                         .replace("<player>", target.name)
                         .replace("<amount>", amount.toString())
-                    sender.sendMessage(miniMessage.deserialize(msgSender))
+                    sender.sendMessage(ColorUtility.parse(msgSender))
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
@@ -84,7 +81,7 @@ class ExpCommand(
                         val defaultReceiver = "<green>Tu experiencia ha sido establecida en <amount> XP.</green>"
                         val msgReceiver = (messagesConfig.utility[keyReceiver] ?: defaultReceiver)
                             .replace("<amount>", amount.toString())
-                        target.sendMessage(miniMessage.deserialize(msgReceiver))
+                        target.sendMessage(ColorUtility.parse(msgReceiver))
                     }
                 }
         )
@@ -110,7 +107,7 @@ class ExpCommand(
                     val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
                         .replace("<player>", target.name)
                         .replace("<amount>", amount.toString())
-                    sender.sendMessage(miniMessage.deserialize(msgSender))
+                    sender.sendMessage(ColorUtility.parse(msgSender))
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
@@ -118,7 +115,7 @@ class ExpCommand(
                         val defaultReceiver = "<green>Has recibido <amount> XP.</green>"
                         val msgReceiver = (messagesConfig.utility[keyReceiver] ?: defaultReceiver)
                             .replace("<amount>", amount.toString())
-                        target.sendMessage(miniMessage.deserialize(msgReceiver))
+                        target.sendMessage(ColorUtility.parse(msgReceiver))
                     }
                 }
         )
@@ -139,14 +136,14 @@ class ExpCommand(
                     val defaultSender = "<green>Has restablecido la experiencia de <player> a 0.</green>"
                     val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
                         .replace("<player>", target.name)
-                    sender.sendMessage(miniMessage.deserialize(msgSender))
+                    sender.sendMessage(ColorUtility.parse(msgSender))
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
                         val keyReceiver = "exp-reset-by-admin"
                         val defaultReceiver = "<red>Tu experiencia ha sido restablecida a 0.</red>"
                         val msgReceiver = messagesConfig.utility[keyReceiver] ?: defaultReceiver
-                        target.sendMessage(miniMessage.deserialize(msgReceiver))
+                        target.sendMessage(ColorUtility.parse(msgReceiver))
                     }
                 }
         )

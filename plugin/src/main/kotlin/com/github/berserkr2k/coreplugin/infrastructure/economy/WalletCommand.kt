@@ -8,6 +8,8 @@ import org.incendo.cloud.CommandManager
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.infrastructure.config.getEconomy
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.common.FancyLogger
 import java.math.BigDecimal
 import java.util.UUID
@@ -18,9 +20,6 @@ class WalletCommand(
     private val economyService: EconomyService,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         registerWalletCommands()
@@ -29,12 +28,8 @@ class WalletCommand(
         registerDynamicCurrencyCommands()
     }
 
-    private fun getMsg(key: String, vararg placeholders: Pair<String, String>): String {
-        var msg = messagesConfig.economy[key] ?: ""
-        for (placeholder in placeholders) {
-            msg = msg.replace("<${placeholder.first}>", placeholder.second)
-        }
-        return msg
+    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
+        return messagesConfig.getEconomy(key, *placeholders)
     }
 
     private fun registerWalletCommands() {
@@ -49,7 +44,7 @@ class WalletCommand(
                 if (targetName != null) {
                     // Consultar balance de otro jugador
                     if (!sender.hasPermission("core.economy.wallet.other")) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("no-permission-other")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("no-permission-other")))
                         return@handler
                     }
                     val targetPlayer = Bukkit.getPlayer(targetName)
@@ -61,7 +56,7 @@ class WalletCommand(
                 } else {
                     // Consultar balance propio
                     if (sender !is Player) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("usage-wallet")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("usage-wallet")))
                         return@handler
                     }
                     showWallet(sender, sender.uniqueId, sender.name)
@@ -99,9 +94,9 @@ class WalletCommand(
             }
 
             if (!hasAny) {
-                sender.sendMessage(miniMessage.deserialize(getMsg("no-permission-view")))
+                sender.sendMessage(ColorUtility.parse(getMsg("no-permission-view")))
             } else {
-                sender.sendMessage(miniMessage.deserialize(builder.toString().trimEnd()))
+                sender.sendMessage(ColorUtility.parse(builder.toString().trimEnd()))
             }
         }
     }
@@ -116,7 +111,7 @@ class WalletCommand(
                 .permission("core.economy.pay")
                 .handler { context ->
                     val sender = context.sender() as? Player ?: run {
-                        context.sender().sendMessage(miniMessage.deserialize(getMsg("only-players-pay")))
+                        context.sender().sendMessage(ColorUtility.parse(getMsg("only-players-pay")))
                         return@handler
                     }
 
@@ -126,18 +121,18 @@ class WalletCommand(
 
                     val currency = economyService.currencies[currencyId]
                     if (currency == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("currency-not-found", "currency" to currencyId)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("currency-not-found", "currency" to currencyId)))
                         return@handler
                     }
 
                     if (!currency.p2pEnabled) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("p2p-disabled")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("p2p-disabled")))
                         return@handler
                     }
 
                     val rawAmount = economyService.parseShorthand(amountStr)
                     if (rawAmount == null || rawAmount <= BigDecimal.ZERO) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("invalid-amount")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("invalid-amount")))
                         return@handler
                     }
 
@@ -152,29 +147,29 @@ class WalletCommand(
                     val minTransfer = BigDecimal(currency.minTransfer)
                     if (amount < minTransfer) {
                         val formattedMin = economyService.formatBalance(currency.id, minTransfer)
-                        sender.sendMessage(miniMessage.deserialize(getMsg("min-transfer", "min_transfer" to formattedMin)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("min-transfer", "min_transfer" to formattedMin)))
                         return@handler
                     }
 
                     val targetPlayer = Bukkit.getPlayer(targetName)
                     if (targetPlayer == null || !targetPlayer.isOnline) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("target-offline")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("target-offline")))
                         return@handler
                     }
 
                     if (targetPlayer.uniqueId == sender.uniqueId) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("cannot-pay-self")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("cannot-pay-self")))
                         return@handler
                     }
 
                     // Adquirir Bloqueos en Hilo Principal de forma atómica para prevenir Doble Gasto concurrente
                     if (!TransactionLockManager.acquire(sender.uniqueId)) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("transaction-in-progress-self")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("transaction-in-progress-self")))
                         return@handler
                     }
                     if (!TransactionLockManager.acquire(targetPlayer.uniqueId)) {
                         TransactionLockManager.release(sender.uniqueId)
-                        sender.sendMessage(miniMessage.deserialize(getMsg("transaction-in-progress-target")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("transaction-in-progress-target")))
                         return@handler
                     }
 
@@ -182,10 +177,10 @@ class WalletCommand(
                     economyService.transferP2P(sender.uniqueId, targetPlayer.uniqueId, currency.id, amount).thenAccept { success ->
                         if (success) {
                             val formatted = economyService.formatBalance(currency.id, amount)
-                            sender.sendMessage(miniMessage.deserialize(getMsg("pay-success-sender", "amount" to formatted, "target" to targetPlayer.name)))
-                            targetPlayer.sendMessage(miniMessage.deserialize(getMsg("pay-success-receiver", "amount" to formatted, "sender" to sender.name)))
+                            sender.sendMessage(ColorUtility.parse(getMsg("pay-success-sender", "amount" to formatted, "target" to targetPlayer.name)))
+                            targetPlayer.sendMessage(ColorUtility.parse(getMsg("pay-success-receiver", "amount" to formatted, "sender" to sender.name)))
                         } else {
-                            sender.sendMessage(miniMessage.deserialize(getMsg("pay-failed")))
+                            sender.sendMessage(ColorUtility.parse(getMsg("pay-failed")))
                             // Liberar en caso de fallo
                             TransactionLockManager.release(sender.uniqueId)
                             TransactionLockManager.release(targetPlayer.uniqueId)
@@ -214,13 +209,13 @@ class WalletCommand(
 
                     val currency = economyService.currencies[currencyId]
                     if (currency == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("currency-not-found", "currency" to currencyId)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("currency-not-found", "currency" to currencyId)))
                         return@handler
                     }
 
                     val amount = economyService.parseShorthand(amountStr)
                     if (amount == null || amount <= BigDecimal.ZERO) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("invalid-admin-amount")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("invalid-admin-amount")))
                         return@handler
                     }
 
@@ -229,18 +224,18 @@ class WalletCommand(
                     val uuid = targetPlayer?.uniqueId ?: targetOffline?.uniqueId
 
                     if (uuid == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("player-not-found")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("player-not-found")))
                         return@handler
                     }
 
                     economyService.modifyBalance(uuid, currency.id, amount, "ADMIN_GIVE").thenAccept { success ->
                         if (success) {
                             val formatted = economyService.formatBalance(currency.id, amount)
-                            sender.sendMessage(miniMessage.deserialize(getMsg("eco-give-sender", "amount" to formatted, "target" to targetName)))
-                            targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-give-receiver", "amount" to formatted)))
+                            sender.sendMessage(ColorUtility.parse(getMsg("eco-give-sender", "amount" to formatted, "target" to targetName)))
+                            targetPlayer?.sendMessage(ColorUtility.parse(getMsg("eco-give-receiver", "amount" to formatted)))
                             FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha dado $formatted a ${targetName}.")
                         } else {
-                            sender.sendMessage(miniMessage.deserialize(getMsg("eco-give-failed")))
+                            sender.sendMessage(ColorUtility.parse(getMsg("eco-give-failed")))
                         }
                     }
                 }
@@ -260,13 +255,13 @@ class WalletCommand(
 
                     val currency = economyService.currencies[currencyId]
                     if (currency == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("currency-not-found", "currency" to currencyId)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("currency-not-found", "currency" to currencyId)))
                         return@handler
                     }
 
                     val amount = economyService.parseShorthand(amountStr)
                     if (amount == null || amount <= BigDecimal.ZERO) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("invalid-admin-amount")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("invalid-admin-amount")))
                         return@handler
                     }
 
@@ -275,18 +270,18 @@ class WalletCommand(
                     val uuid = targetPlayer?.uniqueId ?: targetOffline?.uniqueId
 
                     if (uuid == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("player-not-found")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("player-not-found")))
                         return@handler
                     }
 
                     economyService.modifyBalance(uuid, currency.id, amount.negate(), "ADMIN_TAKE").thenAccept { success ->
                         if (success) {
                             val formatted = economyService.formatBalance(currency.id, amount)
-                            sender.sendMessage(miniMessage.deserialize(getMsg("eco-take-sender", "amount" to formatted, "target" to targetName)))
-                            targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-take-receiver", "amount" to formatted)))
+                            sender.sendMessage(ColorUtility.parse(getMsg("eco-take-sender", "amount" to formatted, "target" to targetName)))
+                            targetPlayer?.sendMessage(ColorUtility.parse(getMsg("eco-take-receiver", "amount" to formatted)))
                             FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha retirado $formatted a ${targetName}.")
                         } else {
-                            sender.sendMessage(miniMessage.deserialize(getMsg("eco-take-failed")))
+                            sender.sendMessage(ColorUtility.parse(getMsg("eco-take-failed")))
                         }
                     }
                 }
@@ -306,13 +301,13 @@ class WalletCommand(
 
                     val currency = economyService.currencies[currencyId]
                     if (currency == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("currency-not-found", "currency" to currencyId)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("currency-not-found", "currency" to currencyId)))
                         return@handler
                     }
 
                     val amount = economyService.parseShorthand(amountStr)
                     if (amount == null || amount < BigDecimal.ZERO) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("invalid-admin-amount")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("invalid-admin-amount")))
                         return@handler
                     }
 
@@ -321,7 +316,7 @@ class WalletCommand(
                     val uuid = targetPlayer?.uniqueId ?: targetOffline?.uniqueId
 
                     if (uuid == null) {
-                        sender.sendMessage(miniMessage.deserialize(getMsg("player-not-found")))
+                        sender.sendMessage(ColorUtility.parse(getMsg("player-not-found")))
                         return@handler
                     }
 
@@ -332,11 +327,11 @@ class WalletCommand(
                         economyService.modifyBalance(uuid, currency.id, diff, "ADMIN_SET").thenAccept { success ->
                             if (success) {
                                 val formatted = economyService.formatBalance(currency.id, amount)
-                                sender.sendMessage(miniMessage.deserialize(getMsg("eco-set-sender", "amount" to formatted, "target" to targetName)))
-                                targetPlayer?.sendMessage(miniMessage.deserialize(getMsg("eco-set-receiver", "amount" to formatted)))
+                                sender.sendMessage(ColorUtility.parse(getMsg("eco-set-sender", "amount" to formatted, "target" to targetName)))
+                                targetPlayer?.sendMessage(ColorUtility.parse(getMsg("eco-set-receiver", "amount" to formatted)))
                                 FancyLogger.logAdminAction("ECONOMY", "El administrador ${sender.name} ha establecido el saldo de ${targetName} en $formatted.")
                             } else {
-                                sender.sendMessage(miniMessage.deserialize(getMsg("eco-set-failed")))
+                                sender.sendMessage(ColorUtility.parse(getMsg("eco-set-failed")))
                             }
                         }
                     }
@@ -358,7 +353,7 @@ class WalletCommand(
 
                             if (targetName != null) {
                                 if (!sender.hasPermission("core.economy.wallet.other")) {
-                                    sender.sendMessage(miniMessage.deserialize(getMsg("alias-no-permission-other")))
+                                    sender.sendMessage(ColorUtility.parse(getMsg("alias-no-permission-other")))
                                     return@handler
                                 }
                                 val targetPlayer = Bukkit.getPlayer(targetName)
@@ -369,7 +364,7 @@ class WalletCommand(
                                 showSingleBalance(sender, uuid, name, currency)
                             } else {
                                 if (sender !is Player) {
-                                    sender.sendMessage(miniMessage.deserialize(getMsg("alias-usage", "alias" to alias)))
+                                    sender.sendMessage(ColorUtility.parse(getMsg("alias-usage", "alias" to alias)))
                                     return@handler
                                 }
                                 showSingleBalance(sender, sender.uniqueId, sender.name, currency)
@@ -382,13 +377,13 @@ class WalletCommand(
 
     private fun showSingleBalance(sender: CommandSender, uuid: UUID, targetName: String, currency: CurrencyConfig) {
         if (currency.permissionRequired != null && !sender.hasPermission(currency.permissionRequired)) {
-            sender.sendMessage(miniMessage.deserialize(getMsg("no-permission-currency")))
+            sender.sendMessage(ColorUtility.parse(getMsg("no-permission-currency")))
             return
         }
         Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
             val bal = economyService.getBalance(uuid, currency.id)
             val formatted = economyService.formatBalance(currency.id, bal)
-            sender.sendMessage(miniMessage.deserialize(getMsg("balance-display", "player" to targetName, "currency" to currency.displayName, "amount" to formatted)))
+            sender.sendMessage(ColorUtility.parse(getMsg("balance-display", "player" to targetName, "currency" to currency.displayName, "amount" to formatted)))
         }
     }
 }

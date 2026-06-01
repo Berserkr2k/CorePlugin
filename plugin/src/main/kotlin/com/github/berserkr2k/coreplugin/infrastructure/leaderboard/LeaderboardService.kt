@@ -2,7 +2,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
+import com.github.berserkr2k.coreplugin.infrastructure.database.*
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -23,9 +25,12 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import net.kyori.adventure.text.minimessage.MiniMessage
+import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
+
+data class ActivePodium(val uuid: UUID, val location: Location)
 
 class LeaderboardService(
     private val plugin: Plugin,
@@ -38,68 +43,98 @@ class LeaderboardService(
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
     private val miniMessage = MiniMessage.miniMessage()
     
-    val activeArmorStands = ConcurrentHashMap<String, UUID>()
-    var leaderboardConfig = LeaderboardConfig()
-        private set
+    val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
+    val activePodiums = ConcurrentHashMap<String, ActivePodium>()
+    
+    private val leaderboardsFolder = plugin.dataFolder.resolve("leaderboards")
 
     init {
-        // Carga la configuración modular asíncrona de podios
-        configManager.loadModuleConfig("leaderboards.conf", LeaderboardConfig::class.java, LeaderboardConfig())
-            .thenAccept { config ->
-                this.leaderboardConfig = config
-                
-                // Esperar a que la base de datos se inicialice completamente
-                databaseService.initFuture.thenAccept {
-                    // Configura e inicializa la tabla SQL de puntuaciones
-                    setupDatabaseTable()
-
-                    // Spawn/Find de todos los podios registrados
-                    Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
-                        spawnAllPersistedLeaderboards()
-                    }
-
-                    // Inicia la tarea repetitiva de actualización y refresco de podios (cada 60 segundos)
-                    Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
-                        for (player in Bukkit.getOnlinePlayers()) {
-                            updatePlayerStats(player)
-                        }
-                        refreshAllLeaderboards()
-                    }, 5, 60, java.util.concurrent.TimeUnit.SECONDS)
-                }
+        // Inicializar directorio e cargar clasificacións
+        setupLeaderboardsFolder()
+        loadAllLeaderboards()
+        
+        databaseService.initFuture.thenAccept {
+            setupDatabaseTable()
+            
+            // Spawn de podios persistidos
+            Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+                spawnAllPersistedLeaderboards()
             }
+
+            // Tarea de actualización y refresco de podios (cada 60s)
+            Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+                for (player in Bukkit.getOnlinePlayers()) {
+                    updatePlayerStats(player)
+                }
+                refreshAllLeaderboards()
+            }, 5, 60, java.util.concurrent.TimeUnit.SECONDS)
+        }
+
+        Bukkit.getPluginManager().registerEvents(this, plugin)
     }
 
-    /**
-     * Crea la tabla de caché de puntuaciones en base de datos si no existe.
-     */
+    private fun setupLeaderboardsFolder() {
+        if (!leaderboardsFolder.exists()) {
+            leaderboardsFolder.mkdirs()
+        }
+
+        // Crear clasificaciones por defecto si está vacía
+        val defaultCreditsFile = leaderboardsFolder.resolve("credits.conf")
+        if (!defaultCreditsFile.exists()) {
+            configManager.loadModuleConfig("leaderboards/credits.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
+                id = "credits",
+                placeholder = "%coreplugin_balance_credits%",
+                displayName = "<gold><bold>TOP CRÉDITOS</bold></gold>"
+            )).join()
+        }
+
+        val defaultKillsFile = leaderboardsFolder.resolve("kills.conf")
+        if (!defaultKillsFile.exists()) {
+            configManager.loadModuleConfig("leaderboards/kills.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
+                id = "kills",
+                placeholder = "%statistic_player_kills%",
+                displayName = "<red><bold>TOP KILLS</bold></gold>"
+            )).join()
+        }
+    }
+
+    fun loadAllLeaderboards() {
+        leaderboards.clear()
+        val files = leaderboardsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
+
+        for (file in files) {
+            val id = file.nameWithoutExtension.lowercase()
+            try {
+                val config = configManager.loadModuleConfig("leaderboards/${file.name}", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id)).join()
+                leaderboards[id] = config
+            } catch (e: Exception) {
+                plugin.logger.severe("Error al cargar la clasificación desde ${file.name}: ${e.message}")
+            }
+        }
+    }
+
     private fun setupDatabaseTable() {
         try {
-            databaseService.getConnection().use { conn ->
-                conn.createStatement().use { stmt ->
-                    stmt.execute("CREATE TABLE IF NOT EXISTS player_scores (uuid VARCHAR(36), username VARCHAR(16), leaderboard_id VARCHAR(32), score DOUBLE, PRIMARY KEY (uuid, leaderboard_id))")
-                }
-            }
+            databaseService.execute("CREATE TABLE IF NOT EXISTS player_scores (uuid VARCHAR(36), username VARCHAR(16), leaderboard_id VARCHAR(32), score DOUBLE, PRIMARY KEY (uuid, leaderboard_id))")
         } catch (e: Exception) {
             plugin.logger.severe("Fallo al inicializar la tabla player_scores: ${e.message}")
         }
     }
 
-    /**
-     * Escanea y spawnea todos los podios configurados de forma Folia-safe.
-     */
     fun spawnAllPersistedLeaderboards() {
-        leaderboardConfig.positions.forEach { (key, persisted) ->
-            val world = Bukkit.getWorld(persisted.world) ?: return@forEach
-            val loc = Location(world, persisted.x, persisted.y, persisted.z, persisted.yaw, persisted.pitch)
-            spawnOrFindLeaderboard(loc, persisted.leaderboardId, persisted.rank)
+        leaderboards.forEach { (id, config) ->
+            config.podiums.forEach { (rankStr, persisted) ->
+                val rank = rankStr.toIntOrNull() ?: 1
+                val world = Bukkit.getWorld(persisted.world) ?: return@forEach
+                val loc = Location(world, persisted.x, persisted.y, persisted.z, persisted.yaw, persisted.pitch)
+                spawnOrFindLeaderboard(loc, id, rank)
+            }
         }
     }
 
-    /**
-     * Hace aparecer o localiza un ArmorStand de clasificación en una coordenada específica.
-     * Escanea espacialmente para evitar duplicados en reinicios del servidor.
-     */
     fun spawnOrFindLeaderboard(location: Location, leaderboardId: String, rank: Int) {
+        val key = "${leaderboardId}_$rank"
+        
         Bukkit.getRegionScheduler().execute(plugin, location) {
             val existingStand = location.world.getNearbyEntities(location, 1.5, 1.5, 1.5) { entity ->
                 entity is ArmorStand &&
@@ -125,45 +160,149 @@ class LeaderboardService(
                 s
             }
 
-            val display = stand.passengers.filterIsInstance<TextDisplay>().firstOrNull()
-                ?: (location.world.spawnEntity(location.clone().add(0.0, 2.1, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
+            // Migrar / Limpiar antiguos pasajeros displays si existen
+            stand.passengers.forEach { passenger ->
+                passenger.remove()
+            }
+
+            val displayTypeKey = NamespacedKey(plugin, "leaderboard_display_type")
+
+            // Buscar TODOS los displays flotantes del leaderboard dentro de la caja del podio
+            val nearbyDisplays = location.world.getNearbyEntities(location, 0.8, 3.5, 0.8) { entity ->
+                entity is TextDisplay &&
+                entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == leaderboardId
+            }.filterIsInstance<TextDisplay>()
+
+            // Eliminar displays con rank incorrecto (auto-limpieza de podios antiguos / cambiados)
+            nearbyDisplays.filter { 
+                (it.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) != rank 
+            }.forEach { it.remove() }
+
+            val correctDisplays = nearbyDisplays.filter { 
+                (it.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) == rank 
+            }
+
+            val entryDisplays = correctDisplays.filter { 
+                it.persistentDataContainer.get(displayTypeKey, PersistentDataType.STRING) == "entry" 
+            }
+            val headerDisplays = correctDisplays.filter { 
+                it.persistentDataContainer.get(displayTypeKey, PersistentDataType.STRING) == "header" 
+            }
+
+            // 1. Holograma del Registro (Puesto y Puntos) - Siempre presente
+            val entryDisplay = if (entryDisplays.isNotEmpty()) {
+                val kept = entryDisplays.first()
+                entryDisplays.drop(1).forEach { it.remove() }
+                kept
+            } else {
+                (location.world.spawnEntity(location.clone().add(0.0, 2.1, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
                     it.setGravity(false)
                     it.billboard = Display.Billboard.CENTER
-                    stand.addPassenger(it)
+                    it.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, leaderboardId)
+                    it.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
+                    it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "entry")
                 }
-            display.text(miniMessage.deserialize(messagesConfig.leaderboards["loading"] ?: "<gold>Cargando...</gold>"))
+            }
+            entryDisplay.text(miniMessage.deserialize(messagesConfig.leaderboards["loading"] ?: "<gold>Cargando...</gold>"))
 
-            activeArmorStands["${leaderboardId}_$rank"] = stand.uniqueId
+            // 2. Holograma del Encabezado - Solo para Ranks <= headerAboveRank (e.g. Rank 1)
+            val config = leaderboards[leaderboardId.lowercase()] ?: CustomLeaderboardConfig(id = leaderboardId)
+            val headerAboveRank = config.headerAboveRank
+
+            if (rank <= headerAboveRank) {
+                val headerDisplay = if (headerDisplays.isNotEmpty()) {
+                    val kept = headerDisplays.first()
+                    headerDisplays.drop(1).forEach { it.remove() }
+                    kept
+                } else {
+                    (location.world.spawnEntity(location.clone().add(0.0, 2.45, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
+                        it.setGravity(false)
+                        it.billboard = Display.Billboard.CENTER
+                        it.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, leaderboardId)
+                        it.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
+                        it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "header")
+                    }
+                }
+                headerDisplay.text(miniMessage.deserialize(messagesConfig.leaderboards["loading"] ?: "<gold>Cargando...</gold>"))
+            } else {
+                headerDisplays.forEach { it.remove() }
+            }
+
+            activePodiums[key] = ActivePodium(stand.uniqueId, location.clone())
         }
     }
 
-    /**
-     * Registra un nuevo podio persistente en la configuración de leaderboards.
-     */
     fun registerLeaderboard(id: String, rank: Int, loc: Location): CompletableFuture<Void> {
-        val key = "${id}_$rank"
-        val newPositions = leaderboardConfig.positions.toMutableMap()
-        newPositions[key] = LeaderboardConfig.PersistedLeaderboard(
-            leaderboardId = id,
-            rank = rank,
-            world = loc.world.name,
-            x = loc.x,
-            y = loc.y,
-            z = loc.z,
-            yaw = loc.yaw,
-            pitch = loc.pitch
-        )
-        leaderboardConfig = LeaderboardConfig(newPositions, leaderboardConfig.settings)
-        return configManager.saveModuleConfig("leaderboards.conf", LeaderboardConfig::class.java, leaderboardConfig)
+        val leaderboardId = id.lowercase()
+        return CompletableFuture.runAsync({
+            val config = leaderboards[leaderboardId] ?: CustomLeaderboardConfig(id = leaderboardId)
+            val updatedPodiums = config.podiums.toMutableMap()
+            updatedPodiums[rank.toString()] = PersistedPodium(
+                world = loc.world.name,
+                x = loc.x,
+                y = loc.y,
+                z = loc.z,
+                yaw = loc.yaw,
+                pitch = loc.pitch
+            )
+            val updatedConfig = config.copy(podiums = updatedPodiums)
+            leaderboards[leaderboardId] = updatedConfig
+
+            try {
+                configManager.saveModuleConfig("leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+            } catch (e: Exception) {
+                plugin.logger.severe("Fallo al guardar clasificación $leaderboardId: ${e.message}")
+            }
+
+            spawnOrFindLeaderboard(loc, leaderboardId, rank)
+        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
     }
 
-    /**
-     * Resuelve las puntuaciones del jugador y las persiste en la base de datos asíncronamente.
-     */
+    fun unregisterLeaderboard(id: String, rank: Int): CompletableFuture<Boolean> {
+        val leaderboardId = id.lowercase()
+        val key = "${leaderboardId}_$rank"
+        val activePodium = activePodiums.remove(key)
+
+        return CompletableFuture.supplyAsync({
+            val config = leaderboards[leaderboardId] ?: return@supplyAsync false
+            val updatedPodiums = config.podiums.toMutableMap()
+            if (updatedPodiums.remove(rank.toString()) == null) {
+                return@supplyAsync false
+            }
+            
+            val updatedConfig = config.copy(podiums = updatedPodiums)
+            leaderboards[leaderboardId] = updatedConfig
+
+            try {
+                configManager.saveModuleConfig("leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+            } catch (e: Exception) {
+                plugin.logger.severe("Fallo al guardar clasificación $leaderboardId tras remover podio: ${e.message}")
+            }
+
+            if (activePodium != null) {
+                Bukkit.getRegionScheduler().execute(plugin, activePodium.location) {
+                    val stand = Bukkit.getEntity(activePodium.uuid) as? ArmorStand
+                    if (stand != null) {
+                        stand.passengers.forEach { it.remove() }
+                        stand.remove()
+                    }
+                    
+                    // Buscar y eliminar los displays flotantes a su alrededor
+                    activePodium.location.world.getNearbyEntities(activePodium.location, 2.0, 3.0, 2.0) { entity ->
+                        entity is TextDisplay &&
+                        entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == leaderboardId &&
+                        (entity.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) == rank
+                    }.forEach { it.remove() }
+                }
+            }
+            true
+        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+    }
+
     fun updatePlayerStats(player: Player) {
-        leaderboardConfig.settings.forEach { (id, setting) ->
-            if (setting.placeholder.isNotEmpty()) {
-                val raw = placeholderBridge.parsePlaceholder(player, setting.placeholder)
+        leaderboards.forEach { (id, config) ->
+            if (config.placeholder.isNotEmpty()) {
+                val raw = placeholderBridge.parsePlaceholder(player, config.placeholder)
                 val score = raw.replace(",", "").toDoubleOrNull() ?: 0.0
                 saveScore(player.uniqueId, player.name, id, score)
             }
@@ -171,102 +310,57 @@ class LeaderboardService(
     }
 
     private fun saveScore(uuid: UUID, username: String, leaderboardId: String, score: Double) {
-        Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
-            try {
-                databaseService.getConnection().use { conn ->
-                    val selectSql = "SELECT score FROM player_scores WHERE uuid = ? AND leaderboard_id = ?"
-                    var exists = false
-                    conn.prepareStatement(selectSql).use { selectStmt ->
-                        selectStmt.setString(1, uuid.toString())
-                        selectStmt.setString(2, leaderboardId)
-                        selectStmt.executeQuery().use { rs ->
-                            if (rs.next()) exists = true
-                        }
-                    }
-                    if (exists) {
-                        val updateSql = "UPDATE player_scores SET score = ?, username = ? WHERE uuid = ? AND leaderboard_id = ?"
-                        conn.prepareStatement(updateSql).use { updateStmt ->
-                            updateStmt.setDouble(1, score)
-                            updateStmt.setString(2, username)
-                            updateStmt.setString(3, uuid.toString())
-                            updateStmt.setString(4, leaderboardId)
-                            updateStmt.executeUpdate()
-                        }
-                    } else {
-                        val insertSql = "INSERT INTO player_scores (uuid, username, leaderboard_id, score) VALUES (?, ?, ?, ?)"
-                        conn.prepareStatement(insertSql).use { insertStmt ->
-                            insertStmt.setString(1, uuid.toString())
-                            insertStmt.setString(2, username)
-                            insertStmt.setString(3, leaderboardId)
-                            insertStmt.setDouble(4, score)
-                            insertStmt.executeUpdate()
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                plugin.logger.severe("Error al guardar puntuación en la base de datos: ${e.message}")
-            }
+        databaseService.executeAsync(
+            "REPLACE INTO player_scores (uuid, username, leaderboard_id, score) VALUES (?, ?, ?, ?)"
+        ) { ps ->
+            ps.setString(1, uuid.toString())
+            ps.setString(2, username)
+            ps.setString(3, leaderboardId)
+            ps.setDouble(4, score)
+        }.exceptionally { e ->
+            plugin.logger.severe("Error al guardar puntuación en la base de datos: ${e.message}")
+            null
         }
     }
 
-    /**
-     * Consulta asíncronamente el top 10 para una clasificación.
-     */
     fun getTop10(leaderboardId: String): CompletableFuture<List<Map.Entry<String, Double>>> {
-        val future = CompletableFuture<List<Map.Entry<String, Double>>>()
-        Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
-            val list = mutableListOf<Map.Entry<String, Double>>()
-            try {
-                databaseService.getConnection().use { conn ->
-                    val sql = "SELECT username, score FROM player_scores WHERE leaderboard_id = ? ORDER BY score DESC LIMIT 10"
-                    conn.prepareStatement(sql).use { stmt ->
-                        stmt.setString(1, leaderboardId)
-                        stmt.executeQuery().use { rs ->
-                            while (rs.next()) {
-                                val username = rs.getString("username")
-                                val score = rs.getDouble("score")
-                                list.add(java.util.AbstractMap.SimpleEntry(username, score))
-                            }
-                        }
-                    }
-                }
-                future.complete(list)
-            } catch (e: Exception) {
-                plugin.logger.severe("Error al consultar el top 10 en la base de datos: ${e.message}")
-                future.complete(emptyList())
+        val sql = "SELECT username, score FROM player_scores WHERE leaderboard_id = ? ORDER BY score DESC LIMIT 10"
+        return databaseService.queryAsync(
+            sql,
+            preparer = { stmt -> stmt.setString(1, leaderboardId) },
+            mapper = { rs ->
+                val username = rs.getString("username")
+                val score = rs.getDouble("score")
+                java.util.AbstractMap.SimpleEntry(username, score) as Map.Entry<String, Double>
             }
+        ).exceptionally { e ->
+            plugin.logger.severe("Error al consultar el top 10 en la base de datos: ${e.message}")
+            emptyList()
         }
-        return future
     }
 
-    /**
-     * Refresca todos los podios configurados.
-     */
     fun refreshAllLeaderboards() {
-        leaderboardConfig.settings.keys.forEach { id ->
+        leaderboards.keys.forEach { id ->
             getTop10(id).thenAccept { topData ->
                 refreshLeaderboard(id, topData)
             }
         }
     }
 
-    /**
-     * Actualiza físicamente los stands de un ID basándose en el top de base de datos.
-     */
     fun refreshLeaderboard(leaderboardId: String, topData: List<Map.Entry<String, Double>>): CompletableFuture<Void> {
         val futures = mutableListOf<CompletableFuture<Void>>()
+        val config = leaderboards[leaderboardId.lowercase()] ?: CustomLeaderboardConfig(id = leaderboardId)
+        val headerAboveRank = config.headerAboveRank
         
-        activeArmorStands.forEach { (key, uuid) ->
+        activePodiums.forEach { (key, activePodium) ->
             if (!key.startsWith("${leaderboardId}_")) return@forEach
             val rankString = key.substringAfter("${leaderboardId}_")
             val rank = rankString.toIntOrNull() ?: return@forEach
 
-            val stand = Bukkit.getEntity(uuid) as? ArmorStand ?: return@forEach
-            
-            val future = CompletableFuture.runAsync({
-                val entry = if (rank <= topData.size) topData[rank - 1] else null
-                val playerName = entry?.key
+            val entry = if (rank <= topData.size) topData[rank - 1] else null
+            val playerName = entry?.key
 
+            val future = CompletableFuture.runAsync({
                 val profile = if (playerName != null) {
                     try {
                         val p = Bukkit.createProfile(playerName)
@@ -277,40 +371,98 @@ class LeaderboardService(
                     }
                 } else null
 
-                Bukkit.getRegionScheduler().execute(plugin, stand.location) {
-                    // Actualizar cabeza
+                // Actualizar la entidad con seguridad asíncrona Folia-ready en el hilo de su región
+                Bukkit.getRegionScheduler().execute(plugin, activePodium.location) {
+                    val stand = Bukkit.getEntity(activePodium.uuid) as? ArmorStand ?: return@execute
+                    
+                    // Actualizar cabeza usando ItemBuilder
                     if (profile != null) {
-                        val skull = ItemStack(Material.PLAYER_HEAD)
-                        val skullMeta = skull.itemMeta as SkullMeta
-                        skullMeta.playerProfile = profile
-                        skull.itemMeta = skullMeta
+                        val skull = ItemBuilder(Material.PLAYER_HEAD)
+                            .skullProfile(profile)
+                            .build()
                         stand.setItem(EquipmentSlot.HEAD, skull)
                     } else {
                         stand.setItem(EquipmentSlot.HEAD, ItemStack(Material.AIR))
                     }
 
-                    // Actualizar holograma pasajero
-                    val display = stand.passengers.filterIsInstance<TextDisplay>().firstOrNull()
-                    if (display != null) {
-                        val text = if (entry != null) {
-                            val header = (messagesConfig.leaderboards["header"] ?: "<gold><bold>TOP <rank_id></bold></gold>")
-                                .replace("<rank_id>", rank.toString())
-                                .replace("<top_id>", leaderboardId.uppercase())
-                            val row = (messagesConfig.leaderboards["row-format"] ?: "#<pos> <player> - <balance>")
-                                .replace("<pos>", rank.toString())
-                                .replace("<player>", entry.key)
-                                .replace("<balance>", String.format("%.2f", entry.value))
-                            "$header\n$row"
-                        } else {
-                            val header = (messagesConfig.leaderboards["header"] ?: "<gold><bold>TOP <rank_id></bold></gold>")
-                                .replace("<rank_id>", rank.toString())
-                                .replace("<top_id>", leaderboardId.uppercase())
-                            "$header\n<gray>Vacante</gray>"
+                    // Limpiar antiguos pasajeros displays si existen
+                    stand.passengers.forEach { it.remove() }
+
+                    val displayTypeKey = NamespacedKey(plugin, "leaderboard_display_type")
+
+                    // Buscar TODOS los displays flotantes del leaderboard dentro de la caja del podio
+                    val nearbyDisplays = stand.location.world.getNearbyEntities(stand.location, 0.8, 3.5, 0.8) { entity ->
+                        entity is TextDisplay &&
+                        entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == leaderboardId
+                    }.filterIsInstance<TextDisplay>()
+
+                    // Eliminar displays con rank incorrecto
+                    nearbyDisplays.filter { 
+                        (it.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) != rank 
+                    }.forEach { it.remove() }
+
+                    val correctDisplays = nearbyDisplays.filter { 
+                        (it.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) == rank 
+                    }
+
+                    val entryDisplays = correctDisplays.filter { 
+                        it.persistentDataContainer.get(displayTypeKey, PersistentDataType.STRING) == "entry" 
+                    }
+                    val headerDisplays = correctDisplays.filter { 
+                        it.persistentDataContainer.get(displayTypeKey, PersistentDataType.STRING) == "header" 
+                    }
+
+                    // 1. Actualizar holograma del Registro (Puesto y Puntos)
+                    val entryDisplay = if (entryDisplays.isNotEmpty()) {
+                        val kept = entryDisplays.first()
+                        entryDisplays.drop(1).forEach { it.remove() }
+                        kept
+                    } else {
+                        (stand.world.spawnEntity(stand.location.clone().add(0.0, 2.1, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
+                            it.setGravity(false)
+                            it.billboard = Display.Billboard.CENTER
+                            it.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, leaderboardId)
+                            it.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
+                            it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "entry")
                         }
-                        display.text(miniMessage.deserialize(text))
+                    }
+                    
+                    val text = if (entry != null) {
+                        val format = config.formats[rank.toString()] ?: config.formats["default"] ?: "<yellow>#<pos></yellow> <gray><player></gray> » <green>$<balance></green>"
+                        format.replace("<pos>", rank.toString())
+                            .replace("<player>", entry.key)
+                            .replace("<balance>", String.format("%.2f", entry.value))
+                    } else {
+                        (messagesConfig.leaderboards["vacant"] ?: "<gray>#<pos> - Vacante</gray>")
+                            .replace("<pos>", rank.toString())
+                    }
+                    entryDisplay.text(miniMessage.deserialize(text))
+
+                    // 2. Actualizar holograma del Encabezado (solo si rank <= headerAboveRank)
+                    val showHeader = rank <= headerAboveRank
+                    if (showHeader) {
+                        val headerDisplay = if (headerDisplays.isNotEmpty()) {
+                            val kept = headerDisplays.first()
+                            headerDisplays.drop(1).forEach { it.remove() }
+                            kept
+                        } else {
+                            (stand.world.spawnEntity(stand.location.clone().add(0.0, 2.45, 0.0), EntityType.TEXT_DISPLAY) as TextDisplay).also {
+                                it.setGravity(false)
+                                it.billboard = Display.Billboard.CENTER
+                                it.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, leaderboardId)
+                                it.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
+                                it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "header")
+                            }
+                        }
+                        val headerText = config.header.replace("%top_id%", config.displayName)
+                        headerDisplay.text(miniMessage.deserialize(headerText))
+                    } else {
+                        // Remover el holograma de cabecera si existe pero no corresponde
+                        headerDisplays.forEach { it.remove() }
                     }
                 }
-            })
+            }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+            
             futures.add(future)
         }
         return CompletableFuture.allOf(*futures.toTypedArray())
@@ -326,7 +478,122 @@ class LeaderboardService(
         updatePlayerStats(event.player)
     }
 
+    fun reloadLeaderboards(): CompletableFuture<Void> {
+        return CompletableFuture.runAsync({
+            loadAllLeaderboards()
+            
+            val configuredKeys = mutableSetOf<String>()
+            leaderboards.forEach { (id, config) ->
+                config.podiums.forEach { (rankStr, _) ->
+                    val rank = rankStr.toIntOrNull() ?: 1
+                    configuredKeys.add("${id}_$rank")
+                }
+            }
+
+            val futures = mutableListOf<CompletableFuture<Void>>()
+
+            // 1. Eliminar podios activos en memoria que ya no estén presentes en las configuraciones
+            activePodiums.forEach { (key, active) ->
+                if (!configuredKeys.contains(key)) {
+                    val id = key.substringBefore("_")
+                    val rank = key.substringAfter("_").toIntOrNull() ?: 1
+                    activePodiums.remove(key)
+                    
+                    val future = CompletableFuture.runAsync({
+                        val p = CompletableFuture<Void>()
+                        Bukkit.getRegionScheduler().execute(plugin, active.location) {
+                            val stand = Bukkit.getEntity(active.uuid) as? ArmorStand
+                            if (stand != null) {
+                                stand.passengers.forEach { it.remove() }
+                                stand.remove()
+                            }
+                            
+                            // Eliminar displays flotantes en su área
+                            active.location.world.getNearbyEntities(active.location, 0.8, 3.5, 0.8) { entity ->
+                                entity is TextDisplay &&
+                                entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == id &&
+                                (entity.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) == rank
+                            }.forEach { it.remove() }
+                            p.complete(null)
+                        }
+                        p.join()
+                    }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+                    futures.add(future)
+                }
+            }
+
+            // 2. Procesar podios configurados (agregar nuevos, mover existentes, refrescar inalterados)
+            leaderboards.forEach { (id, config) ->
+                config.podiums.forEach { (rankStr, persisted) ->
+                    val rank = rankStr.toIntOrNull() ?: 1
+                    val world = Bukkit.getWorld(persisted.world) ?: return@forEach
+                    val newLoc = Location(world, persisted.x, persisted.y, persisted.z, persisted.yaw, persisted.pitch)
+                    
+                    val key = "${id}_$rank"
+                    val active = activePodiums[key]
+                    
+                    val future = CompletableFuture.runAsync({
+                        if (active != null) {
+                            // Si ya existe activo, comprobamos si cambió de localización/mundo
+                            val oldLoc = active.location
+                            val locationChanged = oldLoc.world.name != newLoc.world.name || oldLoc.distanceSquared(newLoc) > 0.01
+                            
+                            if (locationChanged) {
+                                val p1 = CompletableFuture<Void>()
+                                // Regional en la vieja localización para teleportar stand y limpiar displays viejos
+                                Bukkit.getRegionScheduler().execute(plugin, oldLoc) {
+                                    val stand = Bukkit.getEntity(active.uuid) as? ArmorStand
+                                    if (stand != null) {
+                                        stand.teleport(newLoc)
+                                    }
+                                    
+                                    // Limpiar displays en el viejo sitio
+                                    oldLoc.world.getNearbyEntities(oldLoc, 0.8, 3.5, 0.8) { entity ->
+                                        entity is TextDisplay &&
+                                        entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == id &&
+                                        (entity.persistentDataContainer.get(rankKey, PersistentDataType.INTEGER) ?: 1) == rank
+                                    }.forEach { it.remove() }
+                                    p1.complete(null)
+                                }
+                                
+                                p1.thenRun {
+                                    // Regional en la NUEVA localización para configurar displays y registrar en memoria
+                                    Bukkit.getRegionScheduler().execute(plugin, newLoc) {
+                                        spawnOrFindLeaderboard(newLoc, id, rank)
+                                    }
+                                }.join()
+                            } else {
+                                // No cambió localización, refrescar displays y configuración regionalmente
+                                val p2 = CompletableFuture<Void>()
+                                Bukkit.getRegionScheduler().execute(plugin, newLoc) {
+                                    spawnOrFindLeaderboard(newLoc, id, rank)
+                                    p2.complete(null)
+                                }
+                                p2.join()
+                            }
+                        } else {
+                            // Nuevo podio añadido a mano, spawnear directamente regionalmente
+                            val p3 = CompletableFuture<Void>()
+                            Bukkit.getRegionScheduler().execute(plugin, newLoc) {
+                                spawnOrFindLeaderboard(newLoc, id, rank)
+                                p3.complete(null)
+                            }
+                            p3.join()
+                        }
+                    }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+                    
+                    futures.add(future)
+                }
+            }
+
+            // 3. Esperar a que se procesen todas las tareas regionales y refrescar stats
+            CompletableFuture.allOf(*futures.toTypedArray()).thenRun {
+                refreshAllLeaderboards()
+            }.join()
+        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+    }
+
     fun shutdown() {
-        activeArmorStands.clear()
+        activePodiums.clear()
     }
 }

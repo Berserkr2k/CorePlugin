@@ -6,16 +6,13 @@ import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class HatCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         manager.command(
@@ -25,7 +22,7 @@ class HatCommand(
                     val sender = context.sender()
                     if (sender !is Player) {
                         val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                        sender.sendMessage(miniMessage.deserialize(msg))
+                        sender.sendMessage(ColorUtility.parse(msg))
                         return@handler
                     }
 
@@ -35,7 +32,7 @@ class HatCommand(
                     // Comprobar que el item en la mano no sea nulo o aire
                     if (handItem.type == Material.AIR) {
                         val msg = messagesConfig.utility["hat-empty"] ?: "<red>Debes tener un ítem en la mano para usarlo de sombrero.</red>"
-                        sender.sendMessage(miniMessage.deserialize(msg))
+                        sender.sendMessage(ColorUtility.parse(msg))
                         return@handler
                     }
 
@@ -50,7 +47,7 @@ class HatCommand(
                     }
 
                     val msg = messagesConfig.utility["hat-equipped"] ?: "<green>¡Te has puesto el ítem en la cabeza!</green>"
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                 }
         )
     }

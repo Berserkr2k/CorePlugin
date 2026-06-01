@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.economy
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
+import com.github.berserkr2k.coreplugin.infrastructure.database.*
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -206,57 +207,54 @@ class EconomyService(
     }
 
     private fun getBalanceFromDB(uuid: UUID, currency: CurrencyConfig): BigDecimal {
-        databaseService.getConnection().use { conn ->
-            val ps = conn.prepareStatement("SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?")
-            ps.setString(1, uuid.toString())
-            val rs = ps.executeQuery()
-            if (rs.next()) {
-                return rs.getBigDecimal(1) ?: BigDecimal(currency.initialBalance)
-            }
-        }
-        return BigDecimal(currency.initialBalance)
+        val sql = "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
+        return databaseService.querySingle(
+            sql,
+            preparer = { stmt -> stmt.setString(1, uuid.toString()) },
+            mapper = { rs -> rs.getBigDecimal(1) ?: BigDecimal(currency.initialBalance) }
+        ) ?: BigDecimal(currency.initialBalance)
     }
 
     /**
      * Carga el perfil del jugador en el caché al entrar al servidor.
      */
     fun loadPlayerCache(uuid: UUID): CompletableFuture<Void> {
-        return CompletableFuture.runAsync({
-            val map = ConcurrentHashMap<String, BigDecimal>()
-            databaseService.getConnection().use { conn ->
-                // Registrar/Actualizar el jugador en player_economy
-                val checkPs = conn.prepareStatement("SELECT last_seen FROM player_economy WHERE uuid = ?")
-                checkPs.setString(1, uuid.toString())
-                val exists = checkPs.executeQuery().next()
-                
-                val now = System.currentTimeMillis()
-                if (!exists) {
-                    // Crear registro inicial
-                    val insertPs = conn.prepareStatement("INSERT INTO player_economy (uuid, last_seen) VALUES (?, ?)")
-                    insertPs.setString(1, uuid.toString())
-                    insertPs.setLong(2, now)
-                    insertPs.executeUpdate()
-                } else {
-                    // Actualizar actividad
-                    val updatePs = conn.prepareStatement("UPDATE player_economy SET last_seen = ? WHERE uuid = ?")
-                    updatePs.setLong(1, now)
-                    updatePs.setString(2, uuid.toString())
-                    updatePs.executeUpdate()
-                }
+        val map = ConcurrentHashMap<String, BigDecimal>()
+        return databaseService.transactionAsync { conn ->
+            val checkPs = conn.prepareStatement("SELECT last_seen FROM player_economy WHERE uuid = ?")
+            checkPs.setString(1, uuid.toString())
+            val exists = checkPs.executeQuery().next()
+            checkPs.close()
+            
+            val now = System.currentTimeMillis()
+            if (!exists) {
+                val insertPs = conn.prepareStatement("INSERT INTO player_economy (uuid, last_seen) VALUES (?, ?)")
+                insertPs.setString(1, uuid.toString())
+                insertPs.setLong(2, now)
+                insertPs.executeUpdate()
+                insertPs.close()
+            } else {
+                val updatePs = conn.prepareStatement("UPDATE player_economy SET last_seen = ? WHERE uuid = ?")
+                updatePs.setLong(1, now)
+                updatePs.setString(2, uuid.toString())
+                updatePs.executeUpdate()
+                updatePs.close()
+            }
 
-                // Cargar balances de todas las divisas activas
-                val ps = conn.prepareStatement("SELECT * FROM player_economy WHERE uuid = ?")
-                ps.setString(1, uuid.toString())
-                val rs = ps.executeQuery()
-                if (rs.next()) {
-                    for (currency in currencies.values) {
-                        val bal = rs.getBigDecimal(currency.dbColumn) ?: BigDecimal(currency.initialBalance)
-                        map[currency.id] = bal
-                    }
+            val ps = conn.prepareStatement("SELECT * FROM player_economy WHERE uuid = ?")
+            ps.setString(1, uuid.toString())
+            val rs = ps.executeQuery()
+            if (rs.next()) {
+                for (currency in currencies.values) {
+                    val bal = rs.getBigDecimal(currency.dbColumn) ?: BigDecimal(currency.initialBalance)
+                    map[currency.id] = bal
                 }
             }
+            rs.close()
+            ps.close()
+        }.thenAccept {
             balanceCache[uuid] = map
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }
     }
 
     /**
@@ -265,9 +263,8 @@ class EconomyService(
     fun saveAndUnloadPlayer(uuid: UUID) {
         val playerCache = balanceCache.remove(uuid) ?: return
         
-        databaseService.getConnection().use { conn ->
-            conn.autoCommit = false
-            try {
+        try {
+            databaseService.transaction { conn ->
                 val sb = StringBuilder("UPDATE player_economy SET last_seen = ?")
                 val params = mutableListOf<Any>()
                 params.add(System.currentTimeMillis())
@@ -280,19 +277,18 @@ class EconomyService(
                 sb.append(" WHERE uuid = ?")
                 params.add(uuid.toString())
 
-                val ps = conn.prepareStatement(sb.toString())
-                for (i in params.indices) {
-                    val p = params[i]
-                    if (p is Long) ps.setLong(i + 1, p)
-                    else if (p is BigDecimal) ps.setBigDecimal(i + 1, p)
-                    else ps.setString(i + 1, p.toString())
+                conn.prepareStatement(sb.toString()).use { ps ->
+                    for (i in params.indices) {
+                        val p = params[i]
+                        if (p is Long) ps.setLong(i + 1, p)
+                        else if (p is BigDecimal) ps.setBigDecimal(i + 1, p)
+                        else ps.setString(i + 1, p.toString())
+                    }
+                    ps.executeUpdate()
                 }
-                ps.executeUpdate()
-                conn.commit()
-            } catch (e: Exception) {
-                conn.rollback()
-                plugin.logger.severe("Fallo al guardar balances de salida para $uuid: ${e.message}")
             }
+        } catch (e: Exception) {
+            plugin.logger.severe("Fallo al guardar balances de salida para $uuid: ${e.message}")
         }
     }
 
@@ -321,67 +317,63 @@ class EconomyService(
      * Modifica el balance de una divisa en caché de forma asíncrona y lo impacta en la base de datos de manera segura.
      */
     fun modifyBalance(uuid: UUID, currencyId: String, amount: BigDecimal, type: String): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync({
-            val currency = currencies[currencyId] ?: return@supplyAsync false
-            val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
-            
-            databaseService.getConnection().use { conn ->
-                conn.autoCommit = false
-                try {
-                    // Garantizar la existencia de la fila
-                    ensurePlayerRowExists(conn, uuid)
+        val currency = currencies[currencyId] ?: return CompletableFuture.completedFuture(false)
+        val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
+        
+        return databaseService.transactionAsync { conn ->
+            // Garantizar la existencia de la fila
+            ensurePlayerRowExists(conn, uuid)
 
-                    // 1. Obtener balance con row-locking
-                    val query = if (isSQLite) {
-                        "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
-                    } else {
-                        "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
-                    }
-                    
-                    val ps = conn.prepareStatement(query)
-                    ps.setString(1, uuid.toString())
-                    val rs = ps.executeQuery()
-                    
-                    val currentBal = if (rs.next()) {
+            // 1. Obtener balance con row-locking
+            val query = if (isSQLite) {
+                "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
+            } else {
+                "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
+            }
+            
+            val currentBal = conn.prepareStatement(query).use { ps ->
+                ps.setString(1, uuid.toString())
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) {
                         rs.getBigDecimal(1) ?: BigDecimal(currency.initialBalance)
                     } else {
                         BigDecimal(currency.initialBalance)
                     }
-
-                    val finalBal = currentBal.add(amount)
-                    val maxBal = BigDecimal(currency.maxBalance)
-                    
-                    // Validaciones de seguridad
-                    if (finalBal < BigDecimal.ZERO || finalBal > maxBal) {
-                        conn.rollback()
-                        return@supplyAsync false
-                    }
-
-                    // 2. Actualizar balance
-                    val updatePs = conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?")
-                    updatePs.setBigDecimal(1, finalBal)
-                    updatePs.setString(2, uuid.toString())
-                    updatePs.executeUpdate()
-
-                    // 3. Registrar Log inmutable
-                    writeTransaction(conn, null, uuid, currency.id, amount.abs(), type, currentBal, finalBal)
-
-                    conn.commit()
-
-                    // Actualizar caché en memoria si el jugador está online
-                    val playerCache = balanceCache[uuid]
-                    if (playerCache != null) {
-                        playerCache[currencyId] = finalBal
-                    }
-                    true
-                } catch (e: Exception) {
-                    conn.rollback()
-                    plugin.logger.severe("Fallo en modifyBalance para $uuid ($currencyId): ${e.message}")
-                    e.printStackTrace()
-                    false
                 }
             }
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+
+            val finalBal = currentBal.add(amount)
+            val maxBal = BigDecimal(currency.maxBalance)
+            
+            // Validaciones de seguridad
+            if (finalBal < BigDecimal.ZERO || finalBal > maxBal) {
+                throw IllegalStateException("Límite de balance excedido en modifyBalance.")
+            }
+
+            // 2. Actualizar balance
+            conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?").use { updatePs ->
+                updatePs.setBigDecimal(1, finalBal)
+                updatePs.setString(2, uuid.toString())
+                updatePs.executeUpdate()
+            }
+
+            // 3. Registrar Log inmutable
+            writeTransaction(conn, null, uuid, currency.id, amount.abs(), type, currentBal, finalBal)
+
+            // Actualizar caché en memoria si el jugador está online
+            val playerCache = balanceCache[uuid]
+            if (playerCache != null) {
+                playerCache[currencyId] = finalBal
+            }
+            true
+        }.exceptionally { e ->
+            val cause = e.cause
+            if (cause !is IllegalStateException) {
+                plugin.logger.severe("Fallo en modifyBalance para $uuid ($currencyId): ${e.message}")
+                e.printStackTrace()
+            }
+            false
+        }
     }
 
     /**
@@ -404,51 +396,54 @@ class EconomyService(
             }
 
             // Delegar la persistencia a un hilo asíncrono seguro
-            return CompletableFuture.supplyAsync({
-                val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
-                databaseService.getConnection().use { conn ->
-                    conn.autoCommit = false
-                    try {
-                        // Garantizar la existencia de la fila
-                        ensurePlayerRowExists(conn, uuid)
+            val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
+            return databaseService.transactionAsync { conn ->
+                // Garantizar la existencia de la fila
+                ensurePlayerRowExists(conn, uuid)
 
-                        val query = if (isSQLite) {
-                            "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
-                        } else {
-                            "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
-                        }
-                        val ps = conn.prepareStatement(query)
-                        ps.setString(1, uuid.toString())
-                        val rs = ps.executeQuery()
-
-                        val dbCurrent = if (rs.next()) {
+                val query = if (isSQLite) {
+                    "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
+                } else {
+                    "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
+                }
+                
+                val dbCurrent = conn.prepareStatement(query).use { ps ->
+                    ps.setString(1, uuid.toString())
+                    ps.executeQuery().use { rs ->
+                        if (rs.next()) {
                             rs.getBigDecimal(1) ?: BigDecimal(currency.initialBalance)
                         } else {
                             BigDecimal(currency.initialBalance)
                         }
-
-                        if (dbCurrent < amount) {
-                            conn.rollback()
-                            return@supplyAsync false
-                        }
-
-                        val dbFinal = dbCurrent.subtract(amount)
-                        val updatePs = conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?")
-                        updatePs.setBigDecimal(1, dbFinal)
-                        updatePs.setString(2, uuid.toString())
-                        updatePs.executeUpdate()
-
-                        writeTransaction(conn, null, uuid, currency.id, amount, type, dbCurrent, dbFinal)
-                        conn.commit()
-                        true
-                    } catch (e: Exception) {
-                        conn.rollback()
-                        plugin.logger.severe("Fallo al persistir retiro asíncrono para $uuid ($currencyId): ${e.message}")
-                        e.printStackTrace()
-                        false
                     }
                 }
-            }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+
+                if (dbCurrent < amount) {
+                    throw IllegalStateException("Fondos insuficientes en base de datos.")
+                }
+
+                val dbFinal = dbCurrent.subtract(amount)
+                conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?").use { updatePs ->
+                    updatePs.setBigDecimal(1, dbFinal)
+                    updatePs.setString(2, uuid.toString())
+                    updatePs.executeUpdate()
+                }
+
+                writeTransaction(conn, null, uuid, currency.id, amount, type, dbCurrent, dbFinal)
+                true
+            }.exceptionally { e ->
+                // REVERTER EN CACHÉ LOCAL
+                synchronized(playerCache) {
+                    val current = playerCache[currencyId] ?: BigDecimal(currency.initialBalance)
+                    playerCache[currencyId] = current.add(amount)
+                }
+                val cause = e.cause
+                if (cause !is IllegalStateException) {
+                    plugin.logger.severe("Fallo al persistir retiro asíncrono para $uuid ($currencyId): ${e.message}")
+                    e.printStackTrace()
+                }
+                false
+            }
         } else {
             // JUGADOR OFFLINE -> Transacción directa en base de datos
             return modifyBalance(uuid, currencyId, amount.negate(), type)
@@ -475,52 +470,55 @@ class EconomyService(
             }
 
             // Delegar persistencia a un hilo asíncrono
-            return CompletableFuture.supplyAsync({
-                val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
-                databaseService.getConnection().use { conn ->
-                    conn.autoCommit = false
-                    try {
-                        // Garantizar la existencia de la fila
-                        ensurePlayerRowExists(conn, uuid)
+            val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
+            return databaseService.transactionAsync { conn ->
+                // Garantizar la existencia de la fila
+                ensurePlayerRowExists(conn, uuid)
 
-                        val query = if (isSQLite) {
-                            "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
-                        } else {
-                            "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
-                        }
-                        val ps = conn.prepareStatement(query)
-                        ps.setString(1, uuid.toString())
-                        val rs = ps.executeQuery()
-
-                        val dbCurrent = if (rs.next()) {
+                val query = if (isSQLite) {
+                    "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ?"
+                } else {
+                    "SELECT ${currency.dbColumn} FROM player_economy WHERE uuid = ? FOR UPDATE"
+                }
+                
+                val dbCurrent = conn.prepareStatement(query).use { ps ->
+                    ps.setString(1, uuid.toString())
+                    ps.executeQuery().use { rs ->
+                        if (rs.next()) {
                             rs.getBigDecimal(1) ?: BigDecimal(currency.initialBalance)
                         } else {
                             BigDecimal(currency.initialBalance)
                         }
-
-                        val dbFinal = dbCurrent.add(amount)
-                        val maxBalanceVal = BigDecimal(currency.maxBalance)
-                        if (dbFinal > maxBalanceVal) {
-                            conn.rollback()
-                            return@supplyAsync false
-                        }
-
-                        val updatePs = conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?")
-                        updatePs.setBigDecimal(1, dbFinal)
-                        updatePs.setString(2, uuid.toString())
-                        updatePs.executeUpdate()
-
-                        writeTransaction(conn, null, uuid, currency.id, amount, type, dbCurrent, dbFinal)
-                        conn.commit()
-                        true
-                    } catch (e: Exception) {
-                        conn.rollback()
-                        plugin.logger.severe("Fallo al persistir depósito asíncrono para $uuid ($currencyId): ${e.message}")
-                        e.printStackTrace()
-                        false
                     }
                 }
-            }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+
+                val dbFinal = dbCurrent.add(amount)
+                val maxBalanceVal = BigDecimal(currency.maxBalance)
+                if (dbFinal > maxBalanceVal) {
+                    throw IllegalStateException("Límite de balance excedido en base de datos.")
+                }
+
+                conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?").use { updatePs ->
+                    updatePs.setBigDecimal(1, dbFinal)
+                    updatePs.setString(2, uuid.toString())
+                    updatePs.executeUpdate()
+                }
+
+                writeTransaction(conn, null, uuid, currency.id, amount, type, dbCurrent, dbFinal)
+                true
+            }.exceptionally { e ->
+                // REVERTER EN CACHÉ LOCAL
+                synchronized(playerCache) {
+                    val current = playerCache[currencyId] ?: BigDecimal(currency.initialBalance)
+                    playerCache[currencyId] = current.subtract(amount)
+                }
+                val cause = e.cause
+                if (cause !is IllegalStateException) {
+                    plugin.logger.severe("Fallo al persistir depósito asíncrono para $uuid ($currencyId): ${e.message}")
+                    e.printStackTrace()
+                }
+                false
+            }
         } else {
             // JUGADOR OFFLINE -> Transacción directa en base de datos
             return modifyBalance(uuid, currencyId, amount, type)
@@ -531,89 +529,87 @@ class EconomyService(
      * Realiza una transferencia P2P de fondos de forma transaccional ACID asíncrona con Row-Locking.
      */
     fun transferP2P(sender: UUID, receiver: UUID, currencyId: String, amount: BigDecimal): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync({
-            val currency = currencies[currencyId] ?: return@supplyAsync false
-            val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
-            
-            // Ordenar UUIDs para prevenir interbloqueos (deadlocks)
-            val first = if (sender.toString() < receiver.toString()) sender else receiver
-            val second = if (first == sender) receiver else sender
+        val currency = currencies[currencyId] ?: return CompletableFuture.completedFuture(false)
+        val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
+        
+        // Ordenar UUIDs para prevenir interbloqueos (deadlocks)
+        val first = if (sender.toString() < receiver.toString()) sender else receiver
+        val second = if (first == sender) receiver else sender
 
-            databaseService.getConnection().use { conn ->
-                conn.autoCommit = false
-                try {
-                    // Garantizar la existencia de ambas filas para que el row locking y updates funcionen
-                    ensurePlayerRowExists(conn, sender)
-                    ensurePlayerRowExists(conn, receiver)
+        return databaseService.transactionAsync { conn ->
+            try {
+                // Garantizar la existencia de ambas filas para que el row locking y updates funcionen
+                ensurePlayerRowExists(conn, sender)
+                ensurePlayerRowExists(conn, receiver)
 
-                    // 1. Obtener y bloquear saldos
-                    val query = if (isSQLite) {
-                        "SELECT uuid, ${currency.dbColumn} FROM player_economy WHERE uuid IN (?, ?)"
-                    } else {
-                        "SELECT uuid, ${currency.dbColumn} FROM player_economy WHERE uuid IN (?, ?) FOR UPDATE"
-                    }
-                    
-                    val ps = conn.prepareStatement(query)
+                // 1. Obtener y bloquear saldos
+                val query = if (isSQLite) {
+                    "SELECT uuid, ${currency.dbColumn} FROM player_economy WHERE uuid IN (?, ?)"
+                } else {
+                    "SELECT uuid, ${currency.dbColumn} FROM player_economy WHERE uuid IN (?, ?) FOR UPDATE"
+                }
+                
+                var senderBal = BigDecimal(currency.initialBalance)
+                var receiverBal = BigDecimal(currency.initialBalance)
+
+                conn.prepareStatement(query).use { ps ->
                     ps.setString(1, first.toString())
                     ps.setString(2, second.toString())
-                    val rs = ps.executeQuery()
-
-                    var senderBal = BigDecimal(currency.initialBalance)
-                    var receiverBal = BigDecimal(currency.initialBalance)
-
-                    while (rs.next()) {
-                        val rowUuid = UUID.fromString(rs.getString(1))
-                        val bal = rs.getBigDecimal(2) ?: BigDecimal(currency.initialBalance)
-                        if (rowUuid == sender) senderBal = bal
-                        else if (rowUuid == receiver) receiverBal = bal
+                    ps.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val rowUuid = UUID.fromString(rs.getString(1))
+                            val bal = rs.getBigDecimal(2) ?: BigDecimal(currency.initialBalance)
+                            if (rowUuid == sender) senderBal = bal
+                            else if (rowUuid == receiver) receiverBal = bal
+                        }
                     }
+                }
 
-                    // 2. Verificar fondos suficientes en el emisor
-                    if (senderBal < amount) {
-                        conn.rollback()
-                        return@supplyAsync false
-                    }
+                // 2. Verificar fondos suficientes en el emisor
+                if (senderBal < amount) {
+                    throw IllegalStateException("Fondos insuficientes para transferencia P2P.")
+                }
 
-                    val finalSenderBal = senderBal.subtract(amount)
-                    val finalReceiverBal = receiverBal.add(amount)
-                    val maxBal = BigDecimal(currency.maxBalance)
+                val finalSenderBal = senderBal.subtract(amount)
+                val finalReceiverBal = receiverBal.add(amount)
+                val maxBal = BigDecimal(currency.maxBalance)
 
-                    if (finalReceiverBal > maxBal) {
-                        conn.rollback()
-                        return@supplyAsync false // El receptor superaría el saldo máximo
-                    }
+                if (finalReceiverBal > maxBal) {
+                    throw IllegalStateException("El receptor superaría el saldo máximo.")
+                }
 
-                    // 3. Ejecutar actualizaciones
-                    val updateSender = conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?")
+                // 3. Ejecutar actualizaciones
+                conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?").use { updateSender ->
                     updateSender.setBigDecimal(1, finalSenderBal)
                     updateSender.setString(2, sender.toString())
                     updateSender.executeUpdate()
+                }
 
-                    val updateReceiver = conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?")
+                conn.prepareStatement("UPDATE player_economy SET ${currency.dbColumn} = ? WHERE uuid = ?").use { updateReceiver ->
                     updateReceiver.setBigDecimal(1, finalReceiverBal)
                     updateReceiver.setString(2, receiver.toString())
                     updateReceiver.executeUpdate()
-
-                    // 4. Escribir registro inmutable de transacciones
-                    writeTransaction(conn, sender, receiver, currency.id, amount, "P2P", senderBal, finalSenderBal)
-
-                    conn.commit()
-
-                    // Actualizar cachés locales
-                    balanceCache[sender]?.put(currencyId, finalSenderBal)
-                    balanceCache[receiver]?.put(currencyId, finalReceiverBal)
-                    true
-                } catch (e: Exception) {
-                    conn.rollback()
-                    plugin.logger.severe("Fallo crítico en transacción P2P entre $sender y $receiver ($currencyId): ${e.message}")
-                    e.printStackTrace()
-                    false
-                } finally {
-                    TransactionLockManager.release(sender)
-                    TransactionLockManager.release(receiver)
                 }
+
+                // 4. Escribir registro inmutable de transacciones
+                writeTransaction(conn, sender, receiver, currency.id, amount, "P2P", senderBal, finalSenderBal)
+
+                // Actualizar cachés locales
+                balanceCache[sender]?.put(currencyId, finalSenderBal)
+                balanceCache[receiver]?.put(currencyId, finalReceiverBal)
+                true
+            } finally {
+                TransactionLockManager.release(sender)
+                TransactionLockManager.release(receiver)
             }
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }.exceptionally { e ->
+            val cause = e.cause
+            if (cause !is IllegalStateException) {
+                plugin.logger.severe("Fallo crítico en transacción P2P entre $sender y $receiver ($currencyId): ${e.message}")
+                e.printStackTrace()
+            }
+            false
+        }
     }
 
     private fun writeTransaction(
@@ -646,61 +642,41 @@ class EconomyService(
      * Realiza un bloqueo global temporal para evitar duplicación por saltos de servidores.
      */
     fun acquireCrossServerLock(uuid: UUID): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync({
-            databaseService.getConnection().use { conn ->
-                try {
-                    val ps = conn.prepareStatement("REPLACE INTO player_sync_locks (uuid, locked_at) VALUES (?, ?)")
-                    ps.setString(1, uuid.toString())
-                    ps.setLong(2, System.currentTimeMillis())
-                    ps.executeUpdate()
-                    true
-                } catch (e: Exception) {
-                    false
-                }
-            }
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        return databaseService.executeAsync("REPLACE INTO player_sync_locks (uuid, locked_at) VALUES (?, ?)") { ps ->
+            ps.setString(1, uuid.toString())
+            ps.setLong(2, System.currentTimeMillis())
+        }.thenApply { true }.exceptionally { false }
     }
 
     /**
      * Remueve el bloqueo global temporal cross-server.
      */
     fun releaseCrossServerLock(uuid: UUID): CompletableFuture<Void> {
-        return CompletableFuture.runAsync({
-            databaseService.getConnection().use { conn ->
-                val ps = conn.prepareStatement("DELETE FROM player_sync_locks WHERE uuid = ?")
-                ps.setString(1, uuid.toString())
-                ps.executeUpdate()
-            }
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        return databaseService.executeAsync("DELETE FROM player_sync_locks WHERE uuid = ?") { ps ->
+            ps.setString(1, uuid.toString())
+        }.thenAccept { }
     }
 
     /**
      * Consulta si el jugador posee un bloqueo activo en el clúster.
      */
     fun getCrossServerLockTime(uuid: UUID): Long {
-        databaseService.getConnection().use { conn ->
-            val ps = conn.prepareStatement("SELECT locked_at FROM player_sync_locks WHERE uuid = ?")
-            ps.setString(1, uuid.toString())
-            val rs = ps.executeQuery()
-            if (rs.next()) {
-                return rs.getLong(1)
-            }
-        }
-        return 0L
+        val sql = "SELECT locked_at FROM player_sync_locks WHERE uuid = ?"
+        return databaseService.querySingle(
+            sql,
+            preparer = { ps -> ps.setString(1, uuid.toString()) },
+            mapper = { rs -> rs.getLong(1) }
+        ) ?: 0L
     }
 
     /**
      * Purga registros inactivos de la tabla de economía de forma programada.
      */
     fun purgeInactiveRecords(daysThreshold: Int): CompletableFuture<Int> {
-        return CompletableFuture.supplyAsync({
-            val thresholdTime = System.currentTimeMillis() - (daysThreshold.toLong() * 24L * 60L * 60L * 1000L)
-            databaseService.getConnection().use { conn ->
-                val ps = conn.prepareStatement("DELETE FROM player_economy WHERE last_seen < ?")
-                ps.setLong(1, thresholdTime)
-                ps.executeUpdate()
-            }
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        val thresholdTime = System.currentTimeMillis() - (daysThreshold.toLong() * 24L * 60L * 60L * 1000L)
+        return databaseService.executeAsync("DELETE FROM player_economy WHERE last_seen < ?") { ps ->
+            ps.setLong(1, thresholdTime)
+        }
     }
 
     /**

@@ -34,7 +34,7 @@ class ModernChatModuleListener(
         viewer: Audience
     ): Component {
         val format = resolveActiveFormat(source)
-        val prefixComponent = systemParser.deserialize(format.prefix)
+        val prefixComponent = papiBridge.parseLegacyStringSecurely(source, format.prefix)
 
         val rawNameWithPapi = format.nameFormat.replace("<player>", source.name)
         var nameComponent = papiBridge.parseLegacyStringSecurely(source, rawNameWithPapi)

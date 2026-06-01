@@ -7,16 +7,13 @@ import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class SpeedCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         // 1. /speed <1-10> [player]
@@ -86,14 +83,14 @@ class SpeedCommand(
             // Verificar permiso para otros
             if (!sender.hasPermission("core.utility.speed.others")) {
                 val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                sender.sendMessage(miniMessage.deserialize(msg))
+                sender.sendMessage(ColorUtility.parse(msg))
                 return
             }
             target
         } else {
             if (sender !is Player) {
                 val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                sender.sendMessage(miniMessage.deserialize(msg))
+                sender.sendMessage(ColorUtility.parse(msg))
                 return
             }
             sender
@@ -108,12 +105,12 @@ class SpeedCommand(
             val key = "speed-reset"
             val defaultMsg = "<green>Tu velocidad de vuelo y caminata ha sido restablecida a los valores por defecto.</green>"
             val msg = messagesConfig.utility[key] ?: defaultMsg
-            targetPlayer.sendMessage(miniMessage.deserialize(msg))
+            targetPlayer.sendMessage(ColorUtility.parse(msg))
         } else {
             val key = "speed-reset-other"
             val defaultMsg = "<green>Velocidad de vuelo y caminata de <player> restablecida a los valores por defecto.</green>"
             val msg = (messagesConfig.utility[key] ?: defaultMsg).replace("<player>", targetPlayer.name)
-            sender.sendMessage(miniMessage.deserialize(msg))
+            sender.sendMessage(ColorUtility.parse(msg))
         }
     }
 
@@ -121,7 +118,7 @@ class SpeedCommand(
         // Validar rango
         if (speed < 1 || speed > 10) {
             val msg = messagesConfig.utility["speed-invalid"] ?: "<red>Velocidad inválida. Debe ser un número entre 1 y 10.</red>"
-            sender.sendMessage(miniMessage.deserialize(msg))
+            sender.sendMessage(ColorUtility.parse(msg))
             return
         }
 
@@ -129,14 +126,14 @@ class SpeedCommand(
             // Verificar permiso para otros
             if (!sender.hasPermission("core.utility.speed.others")) {
                 val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                sender.sendMessage(miniMessage.deserialize(msg))
+                sender.sendMessage(ColorUtility.parse(msg))
                 return
             }
             target
         } else {
             if (sender !is Player) {
                 val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                sender.sendMessage(miniMessage.deserialize(msg))
+                sender.sendMessage(ColorUtility.parse(msg))
                 return
             }
             sender
@@ -163,14 +160,14 @@ class SpeedCommand(
             val key = if (isFly) "speed-fly-set" else "speed-walk-set"
             val defaultMsg = if (isFly) "<green>Velocidad de vuelo establecida en <speed>.</green>" else "<green>Velocidad de caminata establecida en <speed>.</green>"
             val msg = (messagesConfig.utility[key] ?: defaultMsg).replace("<speed>", speed.toString())
-            target.sendMessage(miniMessage.deserialize(msg))
+            target.sendMessage(ColorUtility.parse(msg))
         } else {
             val key = if (isFly) "speed-fly-set-other" else "speed-walk-set-other"
             val defaultMsg = if (isFly) "<green>Velocidad de vuelo de <player> establecida en <speed>.</green>" else "<green>Velocidad de caminata de <player> establecida en <speed>.</green>"
             val msg = (messagesConfig.utility[key] ?: defaultMsg)
                 .replace("<speed>", speed.toString())
                 .replace("<player>", target.name)
-            sender.sendMessage(miniMessage.deserialize(msg))
+            sender.sendMessage(ColorUtility.parse(msg))
         }
     }
 }

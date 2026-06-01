@@ -6,7 +6,7 @@ import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class AnvilCommand(
     private val plugin: Plugin,
@@ -14,9 +14,6 @@ class AnvilCommand(
     private val utilityService: UtilityService,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         manager.command(
@@ -26,7 +23,7 @@ class AnvilCommand(
                     val sender = context.sender()
                     if (sender !is Player) {
                         val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                        sender.sendMessage(miniMessage.deserialize(msg))
+                        sender.sendMessage(ColorUtility.parse(msg))
                         return@handler
                     }
 
@@ -44,7 +41,7 @@ class AnvilCommand(
                     }
 
                     val msg = messagesConfig.utility["anvil-opened"] ?: "<green>Abriendo yunque virtual...</green>"
-                    sender.sendMessage(miniMessage.deserialize(msg))
+                    sender.sendMessage(ColorUtility.parse(msg))
                 }
         )
     }

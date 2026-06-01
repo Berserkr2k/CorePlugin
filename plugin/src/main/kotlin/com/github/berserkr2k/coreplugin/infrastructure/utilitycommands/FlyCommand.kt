@@ -6,7 +6,7 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class FlyCommand(
     private val plugin: Plugin,
@@ -14,9 +14,6 @@ class FlyCommand(
     private val utilityService: UtilityService,
     private val messagesConfig: MessagesConfig
 ) {
-    private val miniMessage = object {
-        fun deserialize(text: String) = com.github.berserkr2k.coreplugin.common.ColorUtility.parse(text)
-    }
 
     init {
         manager.command(
@@ -31,7 +28,7 @@ class FlyCommand(
                         // Cambiar vuelo de otro jugador
                         if (!sender.hasPermission("core.utility.fly.others")) {
                             val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                            sender.sendMessage(miniMessage.deserialize(msg))
+                            sender.sendMessage(ColorUtility.parse(msg))
                             return@handler
                         }
                         val target = targetOpt.get()
@@ -40,7 +37,7 @@ class FlyCommand(
                         // Cambiar propio vuelo
                         if (sender !is Player) {
                             val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                            sender.sendMessage(miniMessage.deserialize(msg))
+                            sender.sendMessage(ColorUtility.parse(msg))
                             return@handler
                         }
                         toggleFlight(sender, sender, false)
@@ -54,7 +51,7 @@ class FlyCommand(
         if (newState) {
             // Verificar si el mundo actual permite vuelo
             if (!utilityService.isFlyAllowed(target)) {
-                sender.sendMessage(miniMessage.deserialize(
+                sender.sendMessage(ColorUtility.parse(
                     messagesConfig.utility["fly-world-not-allowed"] ?: "<red>El vuelo no está permitido en este mundo.</red>"
                 ))
                 return
@@ -71,12 +68,12 @@ class FlyCommand(
             val key = if (newState) "fly-enabled-other" else "fly-disabled-other"
             val defaultMsg = if (newState) "<green>Modo de vuelo habilitado para <player>.</green>" else "<red>Modo de vuelo deshabilitado para <player>.</red>"
             val msg = (messagesConfig.utility[key] ?: defaultMsg).replace("<player>", target.name)
-            sender.sendMessage(miniMessage.deserialize(msg))
+            sender.sendMessage(ColorUtility.parse(msg))
         } else {
             val key = if (newState) "fly-enabled" else "fly-disabled"
             val defaultMsg = if (newState) "<green>Modo de vuelo habilitado.</green>" else "<red>Modo de vuelo deshabilitado.</red>"
             val msg = messagesConfig.utility[key] ?: defaultMsg
-            target.sendMessage(miniMessage.deserialize(msg))
+            target.sendMessage(ColorUtility.parse(msg))
         }
     }
 }
