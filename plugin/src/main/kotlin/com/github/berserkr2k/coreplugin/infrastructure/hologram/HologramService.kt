@@ -53,24 +53,6 @@ class HologramService(
         if (!hologramsFolder.exists()) {
             hologramsFolder.mkdirs()
         }
-        val defaultFile = hologramsFolder.resolve("lobby.conf")
-        if (!defaultFile.exists()) {
-            val defaultConfig = HologramConfig(
-                id = "lobby",
-                world = "world",
-                x = 0.0,
-                y = 80.0,
-                z = 0.0,
-                lines = listOf(
-                    "<gold><bold>¡BIENVENIDO AL SERVIDOR!</bold></gold>",
-                    "<gray>Usa /help para comenzar</gray>",
-                    "<yellow>Jugadores online: %server_online%</yellow>"
-                ),
-                updatable = true,
-                updateInterval = 1
-            )
-            configManager.saveModuleConfig("holograms/lobby.conf", HologramConfig::class.java, defaultConfig).join()
-        }
     }
 
     fun loadAllHolograms() {
