@@ -14,6 +14,9 @@ import com.comphenix.protocol.PacketType
 import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.events.ListenerPriority
+import org.spongepowered.configurate.objectmapping.ConfigSerializable
+import java.io.File
+
 
 class HologramService(
     private val plugin: Plugin,
@@ -22,62 +25,100 @@ class HologramService(
 ) {
     private val activeHolograms = ConcurrentHashMap<String, ModernHologram>()
     private val refreshTasks = ConcurrentHashMap<String, io.papermc.paper.threadedregions.scheduler.ScheduledTask>()
-    lateinit var config: HologramConfig
-        private set
+    private val configs = ConcurrentHashMap<String, HologramConfig>()
+    private val hologramsFolder = plugin.dataFolder.resolve("holograms")
 
     init {
-        configManager.loadModuleConfig("holograms.conf", HologramConfig::class.java, HologramConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                
-                // 1. Limpieza de entidades físicas remanentes de versiones anteriores
-                loadedConfig.holograms.forEach { (id, ph) ->
-                    val world = Bukkit.getWorld(ph.world)
+        // 1. Crear carpeta de hologramas si no existe, y poblar con default si está vacía
+        setupDefaultHolograms()
+
+        // 3. Cargar todos los hologramas de forma síncrona/unificada en bootstrap
+        loadAllHolograms()
+
+        // 4. Tarea repetitiva asíncrona de seguimiento de rango de visión (cada 1 segundo)
+        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+            updateTracking()
+        }, 1, 1, java.util.concurrent.TimeUnit.SECONDS)
+
+        // 5. Registro del receptor de clics en la hitbox del cliente usando ProtocolLib
+        registerPacketListener()
+
+        // 6. Registro del listener de desconexión del jugador en el programador global
+        Bukkit.getGlobalRegionScheduler().execute(plugin) {
+            plugin.server.pluginManager.registerEvents(HologramListener(plugin, this), plugin)
+        }
+    }
+
+    private fun setupDefaultHolograms() {
+        if (!hologramsFolder.exists()) {
+            hologramsFolder.mkdirs()
+        }
+        val defaultFile = hologramsFolder.resolve("lobby.conf")
+        if (!defaultFile.exists()) {
+            val defaultConfig = HologramConfig(
+                id = "lobby",
+                world = "world",
+                x = 0.0,
+                y = 80.0,
+                z = 0.0,
+                lines = listOf(
+                    "<gold><bold>¡BIENVENIDO AL SERVIDOR!</bold></gold>",
+                    "<gray>Usa /help para comenzar</gray>",
+                    "<yellow>Jugadores online: %server_online%</yellow>"
+                ),
+                updatable = true,
+                updateInterval = 1
+            )
+            configManager.saveModuleConfig("holograms/lobby.conf", HologramConfig::class.java, defaultConfig).join()
+        }
+    }
+
+    fun loadAllHolograms() {
+        shutdown()
+        configs.clear()
+
+        if (!hologramsFolder.exists()) {
+            hologramsFolder.mkdirs()
+        }
+
+        val files = hologramsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
+
+        val futures = files.map { file ->
+            val id = file.nameWithoutExtension.lowercase()
+            configManager.loadModuleConfig("holograms/${file.name}", HologramConfig::class.java, HologramConfig(id = id))
+                .thenAccept { loadedConfig ->
+                    configs[id] = loadedConfig
+
+                    val world = Bukkit.getWorld(loadedConfig.world)
                     if (world != null) {
-                        val loc = Location(world, ph.x, ph.y, ph.z)
+                        val loc = Location(world, loadedConfig.x, loadedConfig.y, loadedConfig.z)
+
+                        // Limpieza de entidades físicas remanentes de versiones anteriores
                         Bukkit.getRegionScheduler().execute(plugin, loc) {
                             world.getNearbyEntities(loc, 3.0, 5.0, 3.0) { entity ->
                                 entity is TextDisplay || entity is Interaction
                             }.forEach { it.remove() }
                         }
-                    }
-                }
 
-                // 2. Inicialización de los hologramas virtuales basados en paquetes
-                loadedConfig.holograms.forEach { (id, ph) ->
-                    val world = Bukkit.getWorld(ph.world)
-                    if (world != null) {
-                        val loc = Location(world, ph.x, ph.y, ph.z)
+                        // Inicialización de los hologramas virtuales basados en paquetes
                         val holo = ModernHologram(id, loc, plugin, placeholderBridge)
-                        holo.clickCommand = ph.clickCommand
-                        holo.lineSpacing = ph.lineSpacing
-                        holo.backgroundColor = ph.backgroundColor
-                        holo.renderDistance = ph.renderDistance
-                        holo.setup(ph.lines)
+                        holo.clickCommand = loadedConfig.clickCommand
+                        holo.lineSpacing = loadedConfig.lineSpacing
+                        holo.backgroundColor = loadedConfig.backgroundColor
+                        holo.renderDistance = loadedConfig.renderDistance
+                        holo.setup(loadedConfig.lines)
                         activeHolograms[id] = holo
 
                         // Si es actualizable, programar su propia tarea de actualización
-                        if (ph.updatable) {
-                            scheduleHologramUpdate(holo, ph.updateInterval)
+                        if (loadedConfig.updatable) {
+                            scheduleHologramUpdate(holo, loadedConfig.updateInterval)
                         }
                     }
                 }
-                
-                // 3. Tarea repetitiva asíncrona de seguimiento de rango de visión (cada 1 segundo)
-                Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
-                    updateTracking()
-                }, 1, 1, java.util.concurrent.TimeUnit.SECONDS)
+        }
 
-                // 4. Registro del receptor de clics en la hitbox del cliente usando ProtocolLib
-                registerPacketListener()
-
-                // 5. Registro del listener de desconexión del jugador en el programador global
-                Bukkit.getGlobalRegionScheduler().execute(plugin) {
-                    plugin.server.pluginManager.registerEvents(HologramListener(plugin, this), plugin)
-                }
-            }
+        java.util.concurrent.CompletableFuture.allOf(*futures.toTypedArray()).join()
     }
-
 
     private fun updateTracking() {
         val players = Bukkit.getOnlinePlayers()
@@ -102,9 +143,9 @@ class HologramService(
                 val player = event.player
                 val packet = event.packet
                 val targetId = packet.getIntegers().read(0)
-                
+
                 val holo = getHologramByInteractionId(targetId) ?: return
-                
+
                 // Ejecución segura en el programador de la región del jugador
                 Bukkit.getRegionScheduler().execute(plugin, player.location) {
                     holo.clickCommand?.let { cmd ->
@@ -158,9 +199,9 @@ class HologramService(
             scheduleHologramUpdate(holo, updateInterval)
         }
 
-        // Actualizar y persistir la configuración modular en HOCON
-        val newHolograms = config.holograms.toMutableMap()
-        newHolograms[id] = HologramConfig.PersistedHologram(
+        // Guardar la configuración modular en HOCON por holograma
+        val newConfig = HologramConfig(
+            id = id,
             world = location.world.name,
             x = location.x,
             y = location.y,
@@ -173,8 +214,8 @@ class HologramService(
             updateInterval = updateInterval,
             renderDistance = renderDistance ?: 48
         )
-        config = HologramConfig(newHolograms)
-        configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
+        configs[id] = newConfig
+        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
 
         return holo
     }
@@ -186,13 +227,10 @@ class HologramService(
         val holo = activeHolograms[id] ?: return false
         holo.updateText(lines)
 
-        val newHolograms = config.holograms.toMutableMap()
-        val ph = newHolograms[id]
-        if (ph != null) {
-            newHolograms[id] = ph.copy(lines = lines)
-            config = HologramConfig(newHolograms)
-            configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
-        }
+        val oldConfig = configs[id] ?: return false
+        val newConfig = oldConfig.copy(lines = lines)
+        configs[id] = newConfig
+        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
         return true
     }
 
@@ -201,7 +239,7 @@ class HologramService(
      */
     fun moveHologram(id: String, newLocation: Location): Boolean {
         val holo = activeHolograms[id] ?: return false
-        
+
         // Ocultar a los espectadores actuales
         val activeViewers = holo.viewers.mapNotNull { Bukkit.getPlayer(it) }
         activeViewers.forEach { holo.hideFrom(it) }
@@ -214,18 +252,15 @@ class HologramService(
         activeViewers.forEach { holo.showTo(it) }
 
         // Persistir cambio en disco
-        val newHolograms = config.holograms.toMutableMap()
-        val ph = newHolograms[id]
-        if (ph != null) {
-            newHolograms[id] = ph.copy(
-                x = newLocation.x,
-                y = newLocation.y,
-                z = newLocation.z,
-                world = newLocation.world.name
-            )
-            config = HologramConfig(newHolograms)
-            configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
-        }
+        val oldConfig = configs[id] ?: return false
+        val newConfig = oldConfig.copy(
+            x = newLocation.x,
+            y = newLocation.y,
+            z = newLocation.z,
+            world = newLocation.world.name
+        )
+        configs[id] = newConfig
+        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
         return true
     }
 
@@ -237,11 +272,11 @@ class HologramService(
         val holo = activeHolograms.remove(id) ?: return false
         holo.delete()
 
-        val newHolograms = config.holograms.toMutableMap()
-        newHolograms.remove(id)
-        config = HologramConfig(newHolograms)
-        configManager.saveModuleConfig("holograms.conf", HologramConfig::class.java, config)
-
+        configs.remove(id)
+        val file = hologramsFolder.resolve("$id.conf")
+        if (file.exists()) {
+            file.delete()
+        }
         return true
     }
 
@@ -254,32 +289,13 @@ class HologramService(
     fun getActiveHolograms(): Map<String, ModernHologram> = activeHolograms
 
     /**
-     * Recarga todos los hologramas desde el archivo de configuración HOCON.
+     * Recarga todos los hologramas desde la carpeta de configuraciones.
      */
     fun reloadHolograms(): java.util.concurrent.CompletableFuture<Void> {
-        shutdown()
-        return configManager.loadModuleConfig("holograms.conf", HologramConfig::class.java, HologramConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                loadedConfig.holograms.forEach { (id, ph) ->
-                    val world = Bukkit.getWorld(ph.world)
-                    if (world != null) {
-                        val loc = Location(world, ph.x, ph.y, ph.z)
-                        val holo = ModernHologram(id, loc, plugin, placeholderBridge)
-                        holo.clickCommand = ph.clickCommand
-                        holo.lineSpacing = ph.lineSpacing
-                        holo.backgroundColor = ph.backgroundColor
-                        holo.renderDistance = ph.renderDistance
-                        holo.setup(ph.lines)
-                        activeHolograms[id] = holo
-
-                        if (ph.updatable) {
-                            scheduleHologramUpdate(holo, ph.updateInterval)
-                        }
-                    }
-                }
-                plugin.logger.info("¡Se han recargado con éxito ${activeHolograms.size} hologramas desde holograms.conf!")
-            }
+        return java.util.concurrent.CompletableFuture.runAsync({
+            loadAllHolograms()
+            plugin.logger.info("¡Se han recargado con éxito ${activeHolograms.size} hologramas desde la carpeta holograms/!")
+        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
     }
 
     private fun scheduleHologramUpdate(holo: ModernHologram, intervalMinutes: Int) {
