@@ -29,6 +29,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
+import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 
 data class ActivePodium(val uuid: UUID, val location: Location)
 
@@ -37,7 +38,8 @@ class LeaderboardService(
     private val configManager: com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager,
     private val messagesConfig: MessagesConfig,
     private val databaseService: DatabaseService,
-    private val placeholderBridge: LegacyPlaceholderBridge
+    private val placeholderBridge: LegacyPlaceholderBridge,
+    private val profileRegistry: ProfileRegistry
 ) : Listener {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
@@ -54,8 +56,6 @@ class LeaderboardService(
         loadAllLeaderboards()
         
         databaseService.initFuture.thenAccept {
-            setupDatabaseTable()
-            
             // Spawn de podios persistidos
             Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
                 spawnAllPersistedLeaderboards()
@@ -113,13 +113,7 @@ class LeaderboardService(
         }
     }
 
-    private fun setupDatabaseTable() {
-        try {
-            databaseService.execute("CREATE TABLE IF NOT EXISTS player_scores (uuid VARCHAR(36), username VARCHAR(16), leaderboard_id VARCHAR(32), score DOUBLE, PRIMARY KEY (uuid, leaderboard_id))")
-        } catch (e: Exception) {
-            plugin.logger.severe("Fallo al inicializar la tabla player_scores: ${e.message}")
-        }
-    }
+
 
     fun spawnAllPersistedLeaderboards() {
         leaderboards.forEach { (id, config) ->
@@ -310,13 +304,47 @@ class LeaderboardService(
     }
 
     private fun saveScore(uuid: UUID, username: String, leaderboardId: String, score: Double) {
-        databaseService.executeAsync(
-            "REPLACE INTO player_scores (uuid, username, leaderboard_id, score) VALUES (?, ?, ?, ?)"
-        ) { ps ->
-            ps.setString(1, uuid.toString())
-            ps.setString(2, username)
-            ps.setString(3, leaderboardId)
-            ps.setDouble(4, score)
+        val profile = profileRegistry.getProfile(uuid)
+        val userIdFuture = if (profile != null) {
+            CompletableFuture.completedFuture(profile.internalId)
+        } else {
+            databaseService.querySingleAsync(
+                "SELECT id FROM core_users WHERE uuid = ?",
+                preparer = { stmt -> stmt.setString(1, uuid.toString()) },
+                mapper = { rs -> rs.getInt("id") }
+            ).thenCompose { id ->
+                if (id != null) {
+                    CompletableFuture.completedFuture(id)
+                } else {
+                    CompletableFuture.supplyAsync {
+                        databaseService.transaction { conn ->
+                            val insertSql = "INSERT INTO core_users (uuid, username) VALUES (?, ?)"
+                            conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
+                                stmt.setString(1, uuid.toString())
+                                stmt.setString(2, username)
+                                stmt.executeUpdate()
+                                stmt.generatedKeys.use { gk ->
+                                    if (gk.next()) gk.getInt(1) else throw java.sql.SQLException("No key")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        userIdFuture.thenAccept { userId ->
+            val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
+            val upsertSql = if (isMySQL) {
+                "INSERT INTO player_scores (user_id, leaderboard_id, score) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE score = VALUES(score)"
+            } else {
+                "INSERT INTO player_scores (user_id, leaderboard_id, score) VALUES (?, ?, ?) ON CONFLICT(user_id, leaderboard_id) DO UPDATE SET score = excluded.score"
+            }
+            databaseService.executeAsync(upsertSql) { stmt ->
+                stmt.setInt(1, userId)
+                stmt.setString(2, leaderboardId)
+                stmt.setDouble(3, score)
+            }
         }.exceptionally { e ->
             plugin.logger.severe("Error al guardar puntuación en la base de datos: ${e.message}")
             null
@@ -324,7 +352,13 @@ class LeaderboardService(
     }
 
     fun getTop10(leaderboardId: String): CompletableFuture<List<Map.Entry<String, Double>>> {
-        val sql = "SELECT username, score FROM player_scores WHERE leaderboard_id = ? ORDER BY score DESC LIMIT 10"
+        val sql = """
+            SELECT u.username, s.score FROM player_scores s
+            JOIN core_users u ON s.user_id = u.id
+            WHERE s.leaderboard_id = ? 
+            ORDER BY s.score DESC 
+            LIMIT 10
+        """.trimIndent()
         return databaseService.queryAsync(
             sql,
             preparer = { stmt -> stmt.setString(1, leaderboardId) },

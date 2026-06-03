@@ -24,16 +24,6 @@ class ProjectileTrailListener(
 
     private val trailKey = NamespacedKey(plugin, "projectile_trail_id")
 
-    @EventHandler(priority = EventPriority.MONITOR)
-    fun onPlayerJoin(event: PlayerJoinEvent) {
-        trailManager.loadPlayerTrail(event.player.uniqueId)
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    fun onPlayerQuit(event: PlayerQuitEvent) {
-        trailManager.activePlayerTrails.remove(event.player.uniqueId)
-    }
-
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onProjectileLaunch(event: ProjectileLaunchEvent) {
         val proj = event.entity
@@ -41,7 +31,7 @@ class ProjectileTrailListener(
 
         // 1. Resolver qué estela aplicar (prioridad: PDC del proyectil > cosmético del jugador)
         val pdcTrailId = proj.persistentDataContainer.get(trailKey, PersistentDataType.STRING)
-        val playerTrailId = if (shooter != null) trailManager.activePlayerTrails[shooter.uniqueId] else null
+        val playerTrailId = if (shooter != null) trailManager.getActiveTrail(shooter.uniqueId) else null
         val finalTrailId = pdcTrailId ?: playerTrailId ?: return
 
         val config = trailManager.trails[finalTrailId.lowercase()] ?: return

@@ -32,17 +32,26 @@ class DatabaseService(
     private fun initializePool() {
         val hikariConfig = HikariConfig()
         
-        if (config.driver.equals("sqlite", ignoreCase = true)) {
-            val dbFile = plugin.dataFolder.resolve("database.db")
-            hikariConfig.jdbcUrl = "jdbc:sqlite:${dbFile.absolutePath}"
-            hikariConfig.driverClassName = "org.sqlite.JDBC"
-            // Habilitar modo WAL y busy_timeout de 5s para alta concurrencia/evitar bloqueos de base de datos
-            hikariConfig.connectionInitSql = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;"
-        } else {
-            hikariConfig.jdbcUrl = "jdbc:mysql://${config.host}:${config.port}/${config.database}?useSSL=false&characterEncoding=UTF-8"
-            hikariConfig.username = config.username
-            hikariConfig.password = config.password
-            hikariConfig.driverClassName = "com.mysql.cj.jdbc.Driver"
+        when {
+            config.driver.equals("sqlite", ignoreCase = true) -> {
+                val dbFile = plugin.dataFolder.resolve("database.db")
+                hikariConfig.jdbcUrl = "jdbc:sqlite:${dbFile.absolutePath}"
+                hikariConfig.driverClassName = "org.sqlite.JDBC"
+                // Habilitar modo WAL y busy_timeout de 5s para alta concurrencia/evitar bloqueos de base de datos
+                hikariConfig.connectionInitSql = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;"
+            }
+            config.driver.equals("postgresql", ignoreCase = true) -> {
+                hikariConfig.jdbcUrl = "jdbc:postgresql://${config.host}:${config.port}/${config.database}?sslmode=disable"
+                hikariConfig.username = config.username
+                hikariConfig.password = config.password
+                hikariConfig.driverClassName = "org.postgresql.Driver"
+            }
+            else -> {
+                hikariConfig.jdbcUrl = "jdbc:mysql://${config.host}:${config.port}/${config.database}?useSSL=false&characterEncoding=UTF-8"
+                hikariConfig.username = config.username
+                hikariConfig.password = config.password
+                hikariConfig.driverClassName = "com.mysql.cj.jdbc.Driver"
+            }
         }
 
         hikariConfig.maximumPoolSize = config.maxPoolSize
@@ -57,9 +66,13 @@ class DatabaseService(
         try {
             dataSource = HikariDataSource(hikariConfig)
             plugin.logger.info("¡Pool de conexiones HikariCP (${config.driver.uppercase()}) inicializado con éxito!")
+            
+            // Ejecutar migraciones de base de datos de forma automática y secuencial
+            MigrationManager({ getConnection() }, config.driver, plugin.logger).runMigrations()
         } catch (e: Exception) {
-            plugin.logger.severe("Fallo al inicializar el pool de conexiones HikariCP: ${e.message}")
+            plugin.logger.severe("Fallo al inicializar el pool de conexiones HikariCP o ejecutar migraciones: ${e.message}")
             e.printStackTrace()
+            throw e
         }
     }
 

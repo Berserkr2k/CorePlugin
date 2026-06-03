@@ -31,7 +31,7 @@ class TrailGuis(
             }
         }
 
-        val activeTrail = trailManager.activePlayerTrails[player.uniqueId]
+        val activeTrail = trailManager.getActiveTrail(player.uniqueId)
 
         // 1. Determinar qué ranuras están ocupadas por botones estáticos
         val occupiedSlots = mutableSetOf<Int>()

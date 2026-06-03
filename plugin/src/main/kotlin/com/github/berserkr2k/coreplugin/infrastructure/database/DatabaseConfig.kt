@@ -4,7 +4,7 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
 @ConfigSerializable
 data class DatabaseConfig(
-    val driver: String = "sqlite", // sqlite o mysql
+    val driver: String = "sqlite", // sqlite, mysql, o postgresql
     val host: String = "localhost",
     val port: Int = 3306,
     val database: String = "core_db",

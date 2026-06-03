@@ -5,6 +5,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.database.*
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -14,10 +15,6 @@ import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.enchantments.Enchantment
 import org.bukkit.NamespacedKey
-import org.bukkit.event.EventHandler
-import org.bukkit.event.Listener
-import org.bukkit.event.player.PlayerJoinEvent
-import org.bukkit.event.player.PlayerQuitEvent
 import java.io.File
 import java.math.BigDecimal
 import java.util.UUID
@@ -34,34 +31,14 @@ class KitService(
     private val configManager: ModularConfigManager,
     private val databaseService: DatabaseService,
     private val economyService: EconomyService,
-    private val messagesConfig: MessagesConfig
-) : Listener {
+    private val messagesConfig: MessagesConfig,
+    private val profileRegistry: ProfileRegistry
+) {
     val kits = ConcurrentHashMap<String, KitConfig>()
-    val cooldownCache = ConcurrentHashMap<UUID, ConcurrentHashMap<String, Long>>()
-    
     private val kitsFolder = plugin.dataFolder.resolve("kits")
 
     init {
-        createTables()
         loadAllKits()
-        Bukkit.getPluginManager().registerEvents(this, plugin)
-    }
-
-    private fun createTables() {
-        databaseService.initFuture.thenAccept {
-            val sql = """
-                CREATE TABLE IF NOT EXISTS player_kit_cooldowns (
-                    uuid VARCHAR(36) NOT NULL,
-                    kit_name VARCHAR(64) NOT NULL,
-                    claimed_at BIGINT NOT NULL,
-                    PRIMARY KEY (uuid, kit_name)
-                );
-            """.trimIndent()
-            databaseService.execute(sql)
-        }.exceptionally { e ->
-            plugin.logger.severe("Fallo al crear la tabla de cooldowns de kits: ${e.message}")
-            null
-        }
     }
 
     fun loadAllKits() {
@@ -80,7 +57,6 @@ class KitService(
         for (file in confFiles) {
             val kitId = file.nameWithoutExtension.lowercase()
             try {
-                // Delegar al ModularConfigManager centralizado
                 val kitConfig = configManager.loadModuleConfig("kits/${file.name}", KitConfig::class.java, KitConfig()).join()
                 kits[kitId] = kitConfig
             } catch (e: Exception) {
@@ -90,39 +66,10 @@ class KitService(
         plugin.logger.info("¡Se han cargado ${kits.size} kits con éxito!")
     }
 
-    fun loadPlayerCooldowns(uuid: UUID): CompletableFuture<Void> {
-        val sql = "SELECT kit_name, claimed_at FROM player_kit_cooldowns WHERE uuid = ?"
-        return databaseService.queryAsync(
-            sql,
-            preparer = { stmt -> stmt.setString(1, uuid.toString()) },
-            mapper = { rs -> rs.getString(1).lowercase() to rs.getLong(2) }
-        ).thenAccept { results ->
-            val playerCooldowns = ConcurrentHashMap<String, Long>()
-            results.forEach { (kitName, claimedAt) ->
-                playerCooldowns[kitName] = claimedAt
-            }
-            cooldownCache[uuid] = playerCooldowns
-        }
-    }
-
-    fun unloadPlayerCooldowns(uuid: UUID) {
-        cooldownCache.remove(uuid)
-    }
-
-    @EventHandler
-    fun onPlayerJoin(event: PlayerJoinEvent) {
-        loadPlayerCooldowns(event.player.uniqueId)
-    }
-
-    @EventHandler
-    fun onPlayerQuit(event: PlayerQuitEvent) {
-        unloadPlayerCooldowns(event.player.uniqueId)
-    }
-
     fun getRemainingCooldown(uuid: UUID, kitId: String): Long {
         val config = kits[kitId.lowercase()] ?: return 0L
-        val playerCooldowns = cooldownCache[uuid] ?: return 0L
-        val lastClaimed = playerCooldowns[kitId.lowercase()] ?: return 0L
+        val profile = profileRegistry.getProfile(uuid) ?: return 0L
+        val lastClaimed = profile.getCooldown(kitId)
         val elapsed = (System.currentTimeMillis() - lastClaimed) / 1000L
         val remaining = config.cooldownSeconds - elapsed
         return if (remaining > 0) remaining else 0L
@@ -190,7 +137,8 @@ class KitService(
     fun claimKit(player: Player, kitId: String, isGift: Boolean): CompletableFuture<ClaimResult> {
         return CompletableFuture.supplyAsync({
             val config = kits[kitId.lowercase()] ?: return@supplyAsync ClaimResult.Failure(messagesConfig.utility["kit-not-found"] ?: "<red>El kit especificado no existe.</red>")
-            
+            val profile = profileRegistry.getProfile(player.uniqueId) ?: return@supplyAsync ClaimResult.Failure("<red>Tu perfil no está cargado en el sistema.</red>")
+
             if (!isGift) {
                 if (!player.hasPermission(config.permission)) {
                     return@supplyAsync ClaimResult.Failure(messagesConfig.utility["no-permission"] ?: "<red>No tienes permiso para esto.</red>")
@@ -231,17 +179,9 @@ class KitService(
                 }
             }
 
+            // Actualizar cooldown en caché (isDirty se marcará a true automáticamente)
             val now = System.currentTimeMillis()
-            try {
-                databaseService.execute("REPLACE INTO player_kit_cooldowns (uuid, kit_name, claimed_at) VALUES (?, ?, ?)") { ps ->
-                    ps.setString(1, player.uniqueId.toString())
-                    ps.setString(2, kitId.lowercase())
-                    ps.setLong(3, now)
-                }
-                cooldownCache.computeIfAbsent(player.uniqueId) { ConcurrentHashMap() }[kitId.lowercase()] = now
-            } catch (e: Exception) {
-                plugin.logger.severe("Fallo al persistir cooldown para ${player.name} en el kit $kitId: ${e.message}")
-            }
+            profile.setCooldown(kitId, now)
 
             Bukkit.getRegionScheduler().run(plugin, player.location) { _ ->
                 itemStacks.forEach { item ->

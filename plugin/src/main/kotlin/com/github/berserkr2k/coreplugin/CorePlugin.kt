@@ -18,7 +18,6 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEdi
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
-import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyListener
 import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
 import org.bukkit.plugin.java.JavaPlugin
@@ -54,6 +53,7 @@ class CorePlugin(
         private set
 
     private var databaseService: DatabaseService? = null
+    private var profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry? = null
     private var chatModule: ChatModule? = null
     private var anvilModule: AnvilModule? = null
     private var hologramService: HologramService? = null
@@ -91,6 +91,14 @@ class CorePlugin(
     private fun initializeModules(messagesConfig: MessagesConfig) {
         // 1. Inicializar Base de Datos (Módulo SQL)
         databaseService = DatabaseService(this, configManager)
+
+        // Inicializar caché relacional centralizada (ProfileRegistry y Listener)
+        val registry = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(databaseService!!, logger)
+        profileRegistry = registry
+        server.pluginManager.registerEvents(
+            com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, registry),
+            this
+        )
         
         // 2. Inicializar Módulo de Interfaces (Tablist, Bossbars) sin NMS
         interfaceService = InterfaceService(this, placeholderBridge, configManager)
@@ -107,7 +115,7 @@ class CorePlugin(
         HologramCommand(this, commandManager, holoService)
         
         // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands
-        val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge)
+        val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge, registry)
         leaderboardService = lService
         server.pluginManager.registerEvents(lService, this)
         
@@ -131,10 +139,8 @@ class CorePlugin(
         server.pluginManager.registerEvents(cListener, this)
 
         // 8. Inicializar Módulo de Economía Multi-Divisa Altamente Seguro
-        val ecoService = EconomyService(this, configManager, databaseService!!)
+        val ecoService = EconomyService(this, configManager, databaseService!!, registry)
         economyService = ecoService
-        
-        server.pluginManager.registerEvents(EconomyListener(this, ecoService), this)
 
         val isVaultEnabled = server.pluginManager.isPluginEnabled("Vault")
         val isVaultUnlockedEnabled = server.pluginManager.isPluginEnabled("VaultUnlocked")
@@ -195,12 +201,12 @@ class CorePlugin(
         SendTitleCommand(this, commandManager, messagesConfig)
         
         // 10. Inicializar Módulo Premium de Kits
-        val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, ecoService, messagesConfig)
+        val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, ecoService, messagesConfig, registry)
         val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, configManager, kService)
         com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis)
 
         // 11. Inicializar Módulo Premium de Estelas de Partículas (Projectile Trails)
-        val trailManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager(this, databaseService!!, configManager)
+        val trailManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager(this, databaseService!!, configManager, registry)
         val trailGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailGuis(this, configManager, trailManager)
         server.pluginManager.registerEvents(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailListener(this, trailManager), this)
         com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailCommand(this, commandManager, trailManager, trailGuis)
@@ -215,10 +221,15 @@ class CorePlugin(
         threadCoordinator.runTimerAsync(72000, 1728000) {
             ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
                 if (deleted > 0) {
-                    paperLogger.info("¡Purga de base de datos completada! $deleted cuentas inactivas eliminadas.")
+                    paperLogger.info("¡Purga de base de datos completada! $deleted cuentas inactivas eliminadas (y cascada).")
                 }
             }
         }
+
+        // Programar guardado por lotes cada 5 minutos asíncronamente
+        Bukkit.getAsyncScheduler().runAtFixedRate(this, { _ ->
+            registry.flushAllActive()
+        }, 5, 5, java.util.concurrent.TimeUnit.MINUTES)
         
         // Imprimir Dashboard Visual Premium de Estado de Módulos
         val mm = net.kyori.adventure.text.minimessage.MiniMessage.miniMessage()
@@ -272,6 +283,10 @@ $logo
         hologramService?.shutdown()
         leaderboardService?.shutdown()
         chairListener?.shutdown()
+
+        // Guardar todos los perfiles de usuario sucios en memoria antes de apagar
+        profileRegistry?.flushAllActive()?.join()
+
         databaseService?.shutdown()
         configManager.shutdown()
     }
