@@ -106,7 +106,14 @@ class EconomyService(
         // 1. Consultar Caché en el perfil unificado
         val profile = profileRegistry.getProfile(uuid)
         if (profile != null) {
-            return profile.getBalance(currencyId)
+            val key = currencyId.lowercase()
+            val cachedBal = profile.economies[key]
+            if (cachedBal == null) {
+                val initial = BigDecimal(currency.initialBalance)
+                profile.setBalance(currencyId, initial)
+                return initial
+            }
+            return cachedBal
         }
 
         // 2. Jugador Offline -> Consultar Base de Datos directamente (Síncrono)
@@ -136,7 +143,7 @@ class EconomyService(
 
         if (profile != null) {
             // JUGADOR ONLINE -> Operación en caché instantánea (0ms Spigot Tick)
-            val current = profile.getBalance(currencyId)
+            val current = getBalance(uuid, currencyId)
             val finalBal = current.add(amount)
             val maxBal = BigDecimal(currency.maxBalance)
 
@@ -198,13 +205,8 @@ class EconomyService(
                     throw IllegalStateException("Límite de balance excedido en base de datos.")
                 }
 
-                // Guardar usando Upsert dinámico por driver
-                val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
-                val upsertSql = if (isMySQL) {
-                    "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE balance = VALUES(balance)"
-                } else {
-                    "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
-                }
+                // Guardar usando Upsert
+                val upsertSql = "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
 
                 conn.prepareStatement(upsertSql).use { stmt ->
                     stmt.setInt(1, userId)
@@ -244,10 +246,10 @@ class EconomyService(
         if (senderProfile != null && receiverProfile != null) {
             // Ambos online -> Operar en memoria atómicamente
             synchronized(this) {
-                val sBal = senderProfile.getBalance(currencyId)
+                val sBal = getBalance(sender, currencyId)
                 if (sBal < amount) return java.util.concurrent.CompletableFuture.completedFuture(false)
                 
-                val rBal = receiverProfile.getBalance(currencyId)
+                val rBal = getBalance(receiver, currencyId)
                 val newRBal = rBal.add(amount)
                 if (newRBal > BigDecimal(currency.maxBalance)) return java.util.concurrent.CompletableFuture.completedFuture(false)
 
@@ -332,12 +334,7 @@ class EconomyService(
                 }
 
                 // 3. Upserts
-                val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
-                val upsertSql = if (isMySQL) {
-                    "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE balance = VALUES(balance)"
-                } else {
-                    "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
-                }
+                val upsertSql = "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
 
                 conn.prepareStatement(upsertSql).use { stmt ->
                     stmt.setInt(1, senderId)

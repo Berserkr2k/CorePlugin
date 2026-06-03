@@ -29,44 +29,10 @@ class ShopManager(
         private set
 
     init {
-        setupTablesAndIndices()
         loadConfigurations().thenRun {
             loadMarketVolumes().thenRun {
                 startPurgeScheduler()
             }
-        }
-    }
-
-    private fun setupTablesAndIndices() {
-        val isSQLite = databaseService.config.driver.equals("sqlite", ignoreCase = true)
-        val createSql = if (isSQLite) {
-            """
-                CREATE TABLE IF NOT EXISTS market_transactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    shop_id VARCHAR(32) NOT NULL,
-                    item_id VARCHAR(64) NOT NULL,
-                    transaction_type VARCHAR(8) NOT NULL,
-                    quantity INT NOT NULL,
-                    timestamp BIGINT NOT NULL
-                )
-            """.trimIndent()
-        } else {
-            """
-                CREATE TABLE IF NOT EXISTS market_transactions (
-                    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                    shop_id VARCHAR(32) NOT NULL,
-                    item_id VARCHAR(64) NOT NULL,
-                    transaction_type VARCHAR(8) NOT NULL,
-                    quantity INT NOT NULL,
-                    timestamp BIGINT NOT NULL
-                )
-            """.trimIndent()
-        }
-        try {
-            databaseService.execute(createSql)
-            databaseService.execute("CREATE INDEX IF NOT EXISTS idx_market_lookup ON market_transactions (item_id, timestamp)")
-        } catch (e: Exception) {
-            plugin.logger.severe("Error al inicializar las tablas e índices de tiendas: ${e.message}")
         }
     }
 

@@ -10,20 +10,17 @@ class MigrationManager(
 ) {
 
     fun runMigrations() {
-        val isSQLite = driver.equals("sqlite", ignoreCase = true)
         val isPostgreSQL = driver.equals("postgresql", ignoreCase = true)
-        val isMySQL = !isSQLite && !isPostgreSQL
+        val isSQLite = !isPostgreSQL
 
-        val idType = when {
-            isSQLite -> "INTEGER PRIMARY KEY AUTOINCREMENT"
-            isPostgreSQL -> "SERIAL PRIMARY KEY"
-            else -> "INT UNSIGNED AUTO_INCREMENT PRIMARY KEY"
+        val idType = if (isPostgreSQL) {
+            "SERIAL PRIMARY KEY"
+        } else {
+            "INTEGER PRIMARY KEY AUTOINCREMENT"
         }
 
-        val fkType = when {
-            isSQLite -> "INTEGER"
-            else -> "INT UNSIGNED"
-        }
+        // En SQLite e PostgreSQL 'INTEGER' es el tipo estándar para llaves primarias/foráneas
+        val fkType = "INTEGER"
 
         val migrations = listOf(
             // 1. Tabla Maestra de Usuarios
@@ -85,7 +82,37 @@ class MigrationManager(
                 uuid VARCHAR(36) PRIMARY KEY,
                 locked_at BIGINT NOT NULL
             )
-            """.trimIndent()
+            """.trimIndent(),
+
+            // 7. Tabla de Logs de Transacciones de Economía
+            """
+            CREATE TABLE IF NOT EXISTS economy_transactions (
+                id $idType,
+                sender_uuid VARCHAR(36),
+                receiver_uuid VARCHAR(36) NOT NULL,
+                currency_id VARCHAR(32) NOT NULL,
+                amount DECIMAL(20,4) NOT NULL,
+                transaction_type VARCHAR(16) NOT NULL,
+                initial_balance DECIMAL(20,4) NOT NULL,
+                final_balance DECIMAL(20,4) NOT NULL,
+                timestamp BIGINT NOT NULL
+            )
+            """.trimIndent(),
+
+            // 8. Tabla de Transacciones del Mercado Dinámico (Tienda)
+            """
+            CREATE TABLE IF NOT EXISTS market_transactions (
+                id $idType,
+                shop_id VARCHAR(32) NOT NULL,
+                item_id VARCHAR(64) NOT NULL,
+                transaction_type VARCHAR(8) NOT NULL,
+                quantity INT NOT NULL,
+                timestamp BIGINT NOT NULL
+            )
+            """.trimIndent(),
+
+            // 9. Índice para búsquedas rápidas en transacciones de mercado
+            "CREATE INDEX IF NOT EXISTS idx_market_lookup ON market_transactions (item_id, timestamp)"
         )
 
         try {
@@ -94,10 +121,8 @@ class MigrationManager(
                 conn.autoCommit = false
                 try {
                     conn.createStatement().use { stmt ->
-                        // Desactivar temporalmente foreign key checks si es MySQL o SQLite para evitar errores de dependencias circulares
-                        if (isMySQL) {
-                            stmt.execute("SET FOREIGN_KEY_CHECKS = 0;")
-                        } else if (isSQLite) {
+                        // Desactivar temporalmente foreign key checks si es SQLite para evitar errores de dependencias circulares
+                        if (isSQLite) {
                             stmt.execute("PRAGMA foreign_keys = OFF;")
                         }
 
@@ -105,9 +130,7 @@ class MigrationManager(
                             stmt.execute(query)
                         }
 
-                        if (isMySQL) {
-                            stmt.execute("SET FOREIGN_KEY_CHECKS = 1;")
-                        } else if (isSQLite) {
+                        if (isSQLite) {
                             stmt.execute("PRAGMA foreign_keys = ON;")
                         }
                     }

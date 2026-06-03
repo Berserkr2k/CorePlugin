@@ -22,6 +22,7 @@ dependencies {
 
     // Bases de datos asíncronas
     implementation(libs.hikaricp)
+    implementation(libs.postgresql.jdbc)
     compileOnly(libs.sqlite.jdbc)
 }
 
@@ -31,6 +32,7 @@ tasks {
 
         val prefix = "com.github.berserkr2k.coreplugin.libs"
         relocate("com.zaxxer.hikari", "$prefix.hikari")
+        relocate("org.postgresql", "$prefix.postgresql")
     }
 
     build {

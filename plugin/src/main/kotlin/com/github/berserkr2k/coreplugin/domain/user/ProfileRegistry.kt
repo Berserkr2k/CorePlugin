@@ -128,12 +128,7 @@ class ProfileRegistry(
     }
 
     fun acquireSyncLock(uuid: UUID) {
-        val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
-        val sql = if (isMySQL) {
-            "INSERT INTO player_sync_locks (uuid, locked_at) VALUES (?, ?) ON DUPLICATE KEY UPDATE locked_at = VALUES(locked_at)"
-        } else {
-            "INSERT INTO player_sync_locks (uuid, locked_at) VALUES (?, ?) ON CONFLICT(uuid) DO UPDATE SET locked_at = excluded.locked_at"
-        }
+        val sql = "INSERT INTO player_sync_locks (uuid, locked_at) VALUES (?, ?) ON CONFLICT(uuid) DO UPDATE SET locked_at = excluded.locked_at"
         databaseService.execute(sql) { stmt ->
             stmt.setString(1, uuid.toString())
             stmt.setLong(2, System.currentTimeMillis())
@@ -195,27 +190,10 @@ class ProfileRegistry(
 
     private fun flushProfiles(profilesToFlush: List<UserProfile>): CompletableFuture<Void> {
         return CompletableFuture.runAsync {
-            val driver = databaseService.config.driver
-            val isMySQL = driver.equals("mysql", ignoreCase = true)
-
-            val economySql = if (isMySQL) {
-                "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE balance = VALUES(balance)"
-            } else {
-                // PostgreSQL y SQLite (3.24+) soportan ON CONFLICT DO UPDATE
-                "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
-            }
-
-            val cooldownSql = if (isMySQL) {
-                "INSERT INTO core_kits_cooldowns (user_id, kit_id, last_claimed) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE last_claimed = VALUES(last_claimed)"
-            } else {
-                "INSERT INTO core_kits_cooldowns (user_id, kit_id, last_claimed) VALUES (?, ?, ?) ON CONFLICT(user_id, kit_id) DO UPDATE SET last_claimed = excluded.last_claimed"
-            }
-
-            val trailUpsertSql = if (isMySQL) {
-                "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE trail_id = VALUES(trail_id)"
-            } else {
-                "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET trail_id = excluded.trail_id"
-            }
+            // PostgreSQL y SQLite (3.24+) soportan ON CONFLICT DO UPDATE
+            val economySql = "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
+            val cooldownSql = "INSERT INTO core_kits_cooldowns (user_id, kit_id, last_claimed) VALUES (?, ?, ?) ON CONFLICT(user_id, kit_id) DO UPDATE SET last_claimed = excluded.last_claimed"
+            val trailUpsertSql = "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET trail_id = excluded.trail_id"
 
             val trailDeleteSql = "DELETE FROM core_player_projectile_trails WHERE user_id = ?"
 

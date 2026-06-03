@@ -33,24 +33,19 @@ class DatabaseService(
         val hikariConfig = HikariConfig()
         
         when {
-            config.driver.equals("sqlite", ignoreCase = true) -> {
+            config.driver.equals("postgresql", ignoreCase = true) -> {
+                hikariConfig.jdbcUrl = "jdbc:postgresql://${config.host}:${config.port}/${config.database}?sslmode=disable"
+                hikariConfig.username = config.username
+                hikariConfig.password = config.password
+                hikariConfig.driverClassName = "com.github.berserkr2k.coreplugin.libs.postgresql.Driver"
+            }
+            else -> {
+                // SQLite as default local fallback
                 val dbFile = plugin.dataFolder.resolve("database.db")
                 hikariConfig.jdbcUrl = "jdbc:sqlite:${dbFile.absolutePath}"
                 hikariConfig.driverClassName = "org.sqlite.JDBC"
                 // Habilitar modo WAL y busy_timeout de 5s para alta concurrencia/evitar bloqueos de base de datos
                 hikariConfig.connectionInitSql = "PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;"
-            }
-            config.driver.equals("postgresql", ignoreCase = true) -> {
-                hikariConfig.jdbcUrl = "jdbc:postgresql://${config.host}:${config.port}/${config.database}?sslmode=disable"
-                hikariConfig.username = config.username
-                hikariConfig.password = config.password
-                hikariConfig.driverClassName = "org.postgresql.Driver"
-            }
-            else -> {
-                hikariConfig.jdbcUrl = "jdbc:mysql://${config.host}:${config.port}/${config.database}?useSSL=false&characterEncoding=UTF-8"
-                hikariConfig.username = config.username
-                hikariConfig.password = config.password
-                hikariConfig.driverClassName = "com.mysql.cj.jdbc.Driver"
             }
         }
 

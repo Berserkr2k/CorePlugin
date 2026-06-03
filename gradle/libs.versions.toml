@@ -7,6 +7,7 @@ coroutines = "1.9.0"
 shadow = "9.3.2"
 hikari = "7.0.2"
 sqlite = "3.51.2.0"
+postgresql = "42.7.3"
 protocollib-modern = "5.4.0"
 protocollib-legacy = "5.3.0"
 placeholderapi = "2.11.6"
@@ -27,6 +28,7 @@ adventure-legacy = { module = "net.kyori:adventure-text-serializer-legacy", vers
 
 hikaricp = { module = "com.zaxxer:HikariCP", version.ref = "hikari" }
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqlite" }
+postgresql-jdbc = { module = "org.postgresql:postgresql", version.ref = "postgresql" }
 
 protocollib-modern = { module = "net.dmulloy2:ProtocolLib", version.ref = "protocollib-modern" }
 protocollib-legacy = { module = "com.comphenix.protocol:ProtocolLib", version.ref = "protocollib-legacy" }
