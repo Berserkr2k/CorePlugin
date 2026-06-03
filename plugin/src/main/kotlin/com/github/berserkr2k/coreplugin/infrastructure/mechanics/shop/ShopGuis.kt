@@ -48,13 +48,108 @@ class ShopGuis(
         
         // Registrar acciones locales dinámicas asociadas al menú
         config.items.forEach { (shopId, _) ->
-            menu.registerLocalAction("open_shop_$shopId") { p, _ ->
-                openCategoryMenu(p, shopId)
+            if (shopId == "history") {
+                menu.registerLocalAction("open_shop_history") { p, _ ->
+                    openHistoryMenu(p)
+                }
+            } else {
+                menu.registerLocalAction("open_shop_$shopId") { p, _ ->
+                    openCategoryMenu(p, shopId)
+                }
             }
         }
 
         menu.loadFromConfig(config)
         menu.open(player)
+    }
+
+    fun openHistoryMenu(player: Player) {
+        if (!shopManager.marketReady) {
+            player.sendMessage(ColorUtility.parse(getMsg("market-regulating")))
+            return
+        }
+
+        shopManager.getPlayerTransactionHistory(player.uniqueId).thenAccept { history ->
+            Bukkit.getScheduler().runTask(plugin, Runnable {
+                if (!player.isOnline) return@Runnable
+
+                val config = shopManager.marketConfig.historyMenu
+                val title = ColorUtility.parse(config.title)
+                val size = config.size
+                val menu = CustomMenu(title, size, plugin)
+
+                // Fondo de cristal gris (o el configurado en filler)
+                if (config.filler.enabled) {
+                    val filler = ItemBuilder.fromConfig(config.filler.item).build()
+                    for (i in 0 until size) {
+                        menu.setItem(i, filler.clone())
+                    }
+                }
+
+                // Botón de retorno al selector
+                val backMatStr = getMsg("back-item-material")
+                val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
+                val backName = getMsg("back-item-name")
+                val backLore = listOf(getMsg("back-item-lore"))
+
+                val backItem = ItemBuilder(backMat)
+                    .displayName(backName)
+                    .lore(backLore)
+                    .build()
+
+                val backSlot = size - 5
+                menu.setItem(backSlot, backItem) { p, _ ->
+                    openCategoriesMenu(p)
+                }
+
+                // Elementos paginados
+                menu.placePaginatedItems(
+                    config,
+                    history,
+                    config.previousPageItem,
+                    config.nextPageItem
+                ) { record, slot ->
+                    val matName = record.itemId.substringBefore("_").uppercase()
+                    val mat = Material.matchMaterial(matName) ?: org.bukkit.Material.PAPER
+                    
+                    val nameFormat = if (record.type.equals("BUY", ignoreCase = true)) {
+                        shopManager.marketConfig.historyItemBuyFormat
+                    } else {
+                        shopManager.marketConfig.historyItemSellFormat
+                    }
+                    val displayName = nameFormat.replace("<material>", mat.name.replace("_", " "))
+
+                    val datePattern = shopManager.marketConfig.historyDateFormat
+                    val sdf = try {
+                        java.text.SimpleDateFormat(datePattern, java.util.Locale.US)
+                    } catch (e: Exception) {
+                        java.text.SimpleDateFormat("dd/MM/yyyy HH:mm:ss", java.util.Locale.US)
+                    }
+                    val dateStr = sdf.format(java.util.Date(record.timestamp))
+
+                    val totalFormatted = economyService.formatBalance(shopManager.marketConfig.currencyId, record.totalPrice)
+                    val lore = shopManager.marketConfig.historyItemLoreFormat.map { line ->
+                        line.replace("<category>", record.shopId)
+                            .replace("<quantity>", record.quantity.toString())
+                            .replace("<total>", totalFormatted)
+                            .replace("<date>", dateStr)
+                    }
+
+                    val item = ItemBuilder(mat)
+                        .displayName(displayName)
+                        .lore(lore)
+                        .build()
+
+                    menu.setItem(slot, item, null)
+                }
+
+                menu.open(player)
+            })
+        }.exceptionally { ex ->
+            plugin.logger.severe("Fallo al abrir historial de transacciones para ${player.name}: ${ex.message}")
+            player.sendMessage(ColorUtility.parse(getMsg("history-error")))
+            null
+        }
     }
 
     fun openCategoryMenu(player: Player, shopId: String) {
@@ -447,7 +542,7 @@ class ShopGuis(
                             
                             // Registrar volumen de mercado
                             val itemId = shopManager.getItemId(itemConfig)
-                            shopManager.recordTransaction(shopId, itemId, "BUY", actualQty)
+                            shopManager.recordTransaction(player, shopId, itemId, "BUY", actualQty, totalCost)
                         } finally {
                             TransactionLockManager.release(uuid)
                             // Refrescar GUI
@@ -566,7 +661,7 @@ class ShopGuis(
 
                             // Registrar volumen de mercado
                             val itemId = shopManager.getItemId(itemConfig)
-                            shopManager.recordTransaction(shopId, itemId, "SELL", finalQty)
+                            shopManager.recordTransaction(player, shopId, itemId, "SELL", finalQty, totalPayout)
                         } finally {
                             TransactionLockManager.release(uuid)
                             // Refrescar GUI

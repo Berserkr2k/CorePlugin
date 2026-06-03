@@ -28,11 +28,19 @@ class ShopManager(
     var marketReady = false
         private set
 
+    val initFuture = CompletableFuture<Void>()
+
     init {
-        loadConfigurations().thenRun {
-            loadMarketVolumes().thenRun {
-                startPurgeScheduler()
-            }
+        purgeOldMarketTransactions().thenCompose {
+            loadConfigurations()
+        }.thenCompose {
+            loadMarketVolumes()
+        }.thenRun {
+            startSchedulers()
+            initFuture.complete(null)
+        }.exceptionally { ex ->
+            initFuture.completeExceptionally(ex)
+            null
         }
     }
 
@@ -144,6 +152,19 @@ $itemsStr
         }
     }
 
+    fun purgeOldMarketTransactions(): CompletableFuture<Void> {
+        val sevenDaysAgo = System.currentTimeMillis() - (7L * 24L * 60L * 60L * 1000L)
+        val sql = "DELETE FROM market_transactions WHERE timestamp < ?"
+        return databaseService.executeAsync(sql) { ps ->
+            ps.setLong(1, sevenDaysAgo)
+        }.thenRun {
+            plugin.logger.info("✔ Market transactions database purge completed. Deleted records older than 7 days.")
+        }.exceptionally { e ->
+            plugin.logger.severe("Failed to purge old market transactions: ${e.message}")
+            null
+        }
+    }
+
     fun refreshMarketCache() {
         val now = System.currentTimeMillis()
         val windowMillis = marketConfig.historyWindowHours * 60L * 60L * 1000L
@@ -153,12 +174,6 @@ $itemsStr
         val tempSell = ConcurrentHashMap<String, Int>()
         
         databaseService.transactionAsync { conn ->
-            // Purga automática de registros inútiles mayores a 24 horas
-            conn.prepareStatement("DELETE FROM market_transactions WHERE timestamp < ?").use { purgePs ->
-                purgePs.setLong(1, threshold)
-                purgePs.executeUpdate()
-            }
-            
             // Cargar volumen de transacciones de la ventana activa
             val query = "SELECT item_id, transaction_type, SUM(quantity) FROM market_transactions WHERE timestamp >= ? GROUP BY item_id, transaction_type"
             conn.prepareStatement(query).use { ps ->
@@ -182,21 +197,26 @@ $itemsStr
             buyVolumeCache.putAll(tempBuy)
             sellVolumeCache.clear()
             sellVolumeCache.putAll(tempSell)
-            plugin.logger.fine("Caché de mercado dinámico de 24 horas actualizada de forma asíncrona.")
+            plugin.logger.fine("Dynamic market cache updated asynchronously.")
         }.exceptionally { e ->
-            plugin.logger.severe("Fallo al actualizar el caché del mercado: ${e.message}")
+            plugin.logger.severe("Failed to update market volumes cache: ${e.message}")
             null
         }
     }
 
-    private fun startPurgeScheduler() {
-        val interval = marketConfig.purgeIntervalMinutes.toLong()
+    private fun startSchedulers() {
+        // Programar actualización de volumen activo (cada 1 hora)
         Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
             refreshMarketCache()
-        }, interval, interval, TimeUnit.MINUTES)
+        }, 1, 1, TimeUnit.HOURS)
+
+        // Programar purga de 7 días (cada 24 horas)
+        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+            purgeOldMarketTransactions()
+        }, 24, 24, TimeUnit.HOURS)
     }
 
-    fun recordTransaction(shopId: String, itemId: String, type: String, quantity: Int): CompletableFuture<Void> {
+    fun recordTransaction(player: org.bukkit.entity.Player, shopId: String, itemId: String, type: String, quantity: Int, totalPrice: BigDecimal): CompletableFuture<Void> {
         // Impacto síncrono local en memoria
         if (type.equals("BUY", ignoreCase = true)) {
             buyVolumeCache.merge(itemId, quantity) { old, new -> old + new }
@@ -205,17 +225,61 @@ $itemsStr
         }
         
         // Impacto asíncrono e inmutable en base de datos
-        val sql = "INSERT INTO market_transactions (shop_id, item_id, transaction_type, quantity, timestamp) VALUES (?, ?, ?, ?, ?)"
-        return databaseService.executeAsync(sql) { ps ->
-            ps.setString(1, shopId)
-            ps.setString(2, itemId)
-            ps.setString(3, type.uppercase())
-            ps.setInt(4, quantity)
-            ps.setLong(5, System.currentTimeMillis())
+        return CompletableFuture.runAsync {
+            databaseService.getConnection().use { conn ->
+                var userId = -1
+                conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { ps ->
+                    ps.setString(1, player.uniqueId.toString())
+                    ps.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            userId = rs.getInt(1)
+                        }
+                    }
+                }
+                
+                if (userId != -1) {
+                    val sql = "INSERT INTO market_transactions (user_id, shop_id, item_id, transaction_type, quantity, total_price, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                    conn.prepareStatement(sql).use { ps ->
+                        ps.setInt(1, userId)
+                        ps.setString(2, shopId)
+                        ps.setString(3, itemId)
+                        ps.setString(4, type.uppercase())
+                        ps.setInt(5, quantity)
+                        ps.setBigDecimal(6, totalPrice)
+                        ps.setLong(7, System.currentTimeMillis())
+                        ps.executeUpdate()
+                    }
+                }
+            }
         }.thenAccept { }.exceptionally { e ->
             plugin.logger.severe("Error de persistencia SQL en recordTransaction: ${e.message}")
             null as Void?
         }
+    }
+
+    fun getPlayerTransactionHistory(uuid: java.util.UUID): CompletableFuture<List<MarketTransactionRecord>> {
+        val sql = """
+            SELECT t.shop_id, t.item_id, t.transaction_type, t.quantity, t.total_price, t.timestamp
+            FROM market_transactions t
+            JOIN core_users u ON t.user_id = u.id
+            WHERE u.uuid = ?
+            ORDER BY t.timestamp DESC
+        """.trimIndent()
+
+        return databaseService.queryAsync(
+            sql,
+            preparer = { ps -> ps.setString(1, uuid.toString()) },
+            mapper = { rs ->
+                MarketTransactionRecord(
+                    shopId = rs.getString(1),
+                    itemId = rs.getString(2),
+                    type = rs.getString(3),
+                    quantity = rs.getInt(4),
+                    totalPrice = rs.getBigDecimal(5),
+                    timestamp = rs.getLong(6)
+                )
+            }
+        )
     }
 
     fun getItemId(item: ShopItemConfig): String {
@@ -330,3 +394,12 @@ $itemsStr
         return this
     }
 }
+
+data class MarketTransactionRecord(
+    val shopId: String,
+    val itemId: String,
+    val type: String,
+    val quantity: Int,
+    val totalPrice: java.math.BigDecimal,
+    val timestamp: Long
+)

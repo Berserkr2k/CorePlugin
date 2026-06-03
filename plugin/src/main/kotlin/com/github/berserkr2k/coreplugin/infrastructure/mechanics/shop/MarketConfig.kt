@@ -17,6 +17,15 @@ data class MarketConfig(
     val defaultPriceCeilingPercent: Double = 500.0, // 500% de P_base
     val defaultSpread: Double = 0.15, // 15% spread para venta
     val blockedSellPdcKeys: List<String> = listOf("core:kit_item"),
+    val historyItemBuyFormat: String = "<green><bold>✔ COMPRA</bold></green> <yellow><material></yellow>",
+    val historyItemSellFormat: String = "<red><bold>▼ VENTA</bold></red> <yellow><material></yellow>",
+    val historyItemLoreFormat: List<String> = listOf(
+        "<gray>Categoría: <white><category></white></gray>",
+        "<gray>Cantidad: <yellow>x<quantity></yellow></gray>",
+        "<gray>Total: <aqua><total></aqua></gray>",
+        "<gray>Fecha: <white><date></white></gray>"
+    ),
+    val historyDateFormat: String = "dd/MM/yyyy HH:mm:ss",
     val categoriesMenu: MenuConfig = MenuConfig(
         title = "<gold><bold>Mercado Dinámico</bold></gold>",
         size = 27,
@@ -69,6 +78,37 @@ data class MarketConfig(
                     )
                 ),
                 action = "open_shop_minerals"
+            ),
+            "history" to MenuItemConfig(
+                slots = listOf(22),
+                item = ItemConfig(
+                    material = "BOOK",
+                    displayName = "<gray><bold>📜 Historial de Transacciones</bold></gray>",
+                    lore = listOf(
+                        "<gray>Ver tus compras y ventas</gray>",
+                        "<gray>realizadas en los últimos 7 días.</gray>",
+                        "",
+                        "<yellow>▶ Haz clic para abrir historial</yellow>"
+                    )
+                ),
+                action = "open_shop_history"
+            )
+        )
+    ),
+    val historyMenu: MenuConfig = MenuConfig(
+        title = "<dark_gray><bold>Historial (7 días)</bold></dark_gray>",
+        size = 54,
+        paginated = true,
+        dynamicSlots = (9..44).toList(),
+        previousPageSlot = 45,
+        nextPageSlot = 53,
+        previousPageItem = ItemConfig(material = "ARROW", displayName = "<yellow>◀ Página Anterior</yellow>"),
+        nextPageItem = ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página ▶</yellow>"),
+        filler = FillerConfig(
+            enabled = true,
+            item = ItemConfig(
+                material = "GRAY_STAINED_GLASS_PANE",
+                displayName = " "
             )
         )
     )

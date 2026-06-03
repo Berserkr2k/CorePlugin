@@ -103,17 +103,64 @@ class MigrationManager(
             """
             CREATE TABLE IF NOT EXISTS market_transactions (
                 id $idType,
+                user_id $fkType NOT NULL,
                 shop_id VARCHAR(32) NOT NULL,
                 item_id VARCHAR(64) NOT NULL,
                 transaction_type VARCHAR(8) NOT NULL,
                 quantity INT NOT NULL,
-                timestamp BIGINT NOT NULL
+                total_price DECIMAL(20,4) NOT NULL DEFAULT 0.0000,
+                timestamp BIGINT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES core_users(id) ON DELETE CASCADE
             )
             """.trimIndent(),
 
             // 9. Índice para búsquedas rápidas en transacciones de mercado
             "CREATE INDEX IF NOT EXISTS idx_market_lookup ON market_transactions (item_id, timestamp)"
         )
+
+        // 1. Detectar y recrear tabla si es una estructura antigua (sin total_price)
+        try {
+            connectionProvider().use { conn ->
+                val meta = conn.metaData
+                var tableExists = false
+                meta.getTables(null, null, null, arrayOf("TABLE")).use { rs ->
+                    while (rs.next()) {
+                        val name = rs.getString("TABLE_NAME")
+                        if (name.equals("market_transactions", ignoreCase = true)) {
+                            tableExists = true
+                            break
+                        }
+                    }
+                }
+
+                var hasTotalPrice = false
+                if (tableExists) {
+                    meta.getColumns(null, null, null, null).use { rs ->
+                        while (rs.next()) {
+                            val tableName = rs.getString("TABLE_NAME")
+                            val columnName = rs.getString("COLUMN_NAME")
+                            if (tableName.equals("market_transactions", ignoreCase = true) &&
+                                columnName.equals("total_price", ignoreCase = true)) {
+                                hasTotalPrice = true
+                                break
+                            }
+                        }
+                    }
+                }
+
+                if (tableExists && !hasTotalPrice) {
+                    logger.warning("⚠ Se detectó un esquema antiguo en la tabla market_transactions. Recreando la tabla para aplicar el nuevo diseño relacional...")
+                    conn.createStatement().use { stmt ->
+                        try {
+                            stmt.execute("DROP INDEX IF EXISTS idx_market_lookup;")
+                        } catch (ignored: Exception) {}
+                        stmt.execute("DROP TABLE IF EXISTS market_transactions;")
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.severe("Fallo al verificar/recrear la tabla market_transactions: ${e.message}")
+        }
 
         try {
             connectionProvider().use { conn ->

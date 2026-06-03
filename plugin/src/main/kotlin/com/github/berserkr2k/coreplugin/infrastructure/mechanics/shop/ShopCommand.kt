@@ -7,16 +7,42 @@ import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 
+import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.infrastructure.config.getShops
+
 class ShopCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val shopManager: ShopManager,
-    private val shopGuis: ShopGuis
+    private val shopGuis: ShopGuis,
+    private val messagesConfig: MessagesConfig
 ) {
+
+    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
+        return messagesConfig.getShops(key, *placeholders)
+    }
 
     init {
         registerShopCommand()
         registerAdminReloadCommand()
+        
+        shopManager.initFuture.thenRun {
+            registerGlobalActions()
+        }
+    }
+
+    private fun registerGlobalActions() {
+        shopManager.marketConfig.categoriesMenu.items.forEach { (shopId, _) ->
+            try {
+                com.github.berserkr2k.coreplugin.common.gui.MenuActionRegistry.register("open_shop_$shopId") { player, _ ->
+                    if (shopId == "history") {
+                        shopGuis.openHistoryMenu(player)
+                    } else {
+                        shopGuis.openCategoryMenu(player, shopId)
+                    }
+                }
+            } catch (e: Exception) {}
+        }
     }
 
     private fun registerShopCommand() {
@@ -26,18 +52,20 @@ class ShopCommand(
             .handler { context ->
                 val sender = context.sender()
                 if (sender !is Player) {
-                    sender.sendMessage(ColorUtility.parse("<red>❌ Solo los jugadores pueden abrir las tiendas.</red>"))
+                    sender.sendMessage(ColorUtility.parse(getMsg("only-players")))
                     return@handler
                 }
 
                 val category = context.optional<String>("category").orElse(null)
                 if (category != null) {
                     val catId = category.lowercase()
-                    if (shopManager.categories.containsKey(catId)) {
+                    if (catId == "history" || catId == "historial") {
+                        shopGuis.openHistoryMenu(sender)
+                    } else if (shopManager.categories.containsKey(catId)) {
                         shopGuis.openCategoryMenu(sender, catId)
                     } else {
-                        sender.sendMessage(ColorUtility.parse("<red>❌ La categoría de tienda '$category' no existe.</red>"))
-                        sender.sendMessage(ColorUtility.parse("<gray>Usa /shop para ver las categorías disponibles.</gray>"))
+                        sender.sendMessage(ColorUtility.parse(getMsg("category-not-found", "category" to category)))
+                        sender.sendMessage(ColorUtility.parse(getMsg("category-usage")))
                     }
                 } else {
                     shopGuis.openCategoriesMenu(sender)
@@ -61,14 +89,7 @@ class ShopCommand(
                     .thenRun {
                         sender.sendMessage(ColorUtility.parse("<green>✔ ¡Configuración de tiendas recargada con éxito!</green>"))
                         // Re-registrar acciones dinámicas si cambian
-                        shopManager.marketConfig.categoriesMenu.items.forEach { (shopId, _) ->
-                            try {
-                                org.incendo.cloud.component.CommandComponent.builder<CommandSender, Any>()
-                                com.github.berserkr2k.coreplugin.common.gui.MenuActionRegistry.register("open_shop_$shopId") { player, _ ->
-                                    shopGuis.openCategoryMenu(player, shopId)
-                                }
-                            } catch (e: Exception) {}
-                        }
+                        registerGlobalActions()
                     }
                     .exceptionally { ex ->
                         sender.sendMessage(ColorUtility.parse("<red>❌ Falló la recarga de tiendas: ${ex.message}</red>"))
