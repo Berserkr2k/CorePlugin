@@ -87,7 +87,9 @@ data class MessagesConfig(
         
         "broadcast-usage" to "<red>Uso: /broadcast <chat/title/actionbar/bossbar> <mensaje></red>",
         "broadcast-invalid-type" to "<red>Tipo de broadcast inválido. Tipos válidos: chat, title, actionbar, bossbar</red>",
-        "sendtitle-usage" to "<red>Uso: /sendtitle <player> <titulo>[|subtitulo]</red>"
+        "sendtitle-usage" to "<red>Uso: /sendtitle <player> <titulo>[|subtitulo]</red>",
+        "chair-occupied" to "<red>❌ ¡Esta silla ya está ocupada!</red>",
+        "chair-unsafe" to "<red>❌ No puedes sentarte aquí (espacio obstruido o inseguro).</red>"
     ),
     val shops: Map<String, String> = mapOf(
         "locked" to "<red>⚠️ Por favor espera a que se complete tu transacción anterior.</red>",
@@ -136,6 +138,17 @@ fun MessagesConfig.getEconomy(key: String, vararg placeholders: Pair<String, Any
  */
 fun MessagesConfig.getShops(key: String, vararg placeholders: Pair<String, Any>): String {
     var msg = this.shops[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de utilidades reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getUtility(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.utility[key] ?: ""
     for (ph in placeholders) {
         msg = msg.replace("<${ph.first}>", ph.second.toString())
     }

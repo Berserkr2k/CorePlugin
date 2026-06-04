@@ -134,7 +134,7 @@ class CorePlugin(
         )
 
         // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
-        val cListener = ChairListener(this)
+        val cListener = ChairListener(this, messagesConfig)
         chairListener = cListener
         server.pluginManager.registerEvents(cListener, this)
 

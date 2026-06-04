@@ -8,6 +8,7 @@ import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
+import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
@@ -17,13 +18,23 @@ import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.infrastructure.config.getUtility
 
-class ChairListener(private val plugin: Plugin) : Listener {
+class ChairListener(
+    private val plugin: Plugin,
+    private val messagesConfig: MessagesConfig
+) : Listener {
 
     private val chairKey = NamespacedKey(plugin, "chair_entity")
     val activeChairs = ConcurrentHashMap.newKeySet<UUID>()
 
-    @EventHandler
+    private fun getMsg(key: String): String {
+        return messagesConfig.getUtility(key)
+    }
+
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onPlayerInteract(event: PlayerInteractEvent) {
         if (event.action != Action.RIGHT_CLICK_BLOCK) return
         val block = event.clickedBlock ?: return
@@ -34,9 +45,24 @@ class ChairListener(private val plugin: Plugin) : Listener {
         
         val player = event.player
 
-        // No permitimos sentarse si ya está en un vehículo o si está agachado
-        if (player.vehicle != null) return
-        if (player.isSneaking) return
+        // No permitimos sentarse en escaleras al revés (upside-down)
+        if (stairsData.half == org.bukkit.block.data.Bisected.Half.TOP) return
+
+        // Comprobaciones de seguridad y estado
+        if (player.vehicle != null || player.isSneaking || player.isDead) return
+        if (player.gameMode == org.bukkit.GameMode.SPECTATOR) return
+        if (player.fireTicks > 0) return
+
+        // Evitar que interactúen a través de paredes o desde muy lejos (reach limit)
+        if (player.location.distanceSquared(block.location) > 16.0) return
+
+        // Comprobación de obstrucción física / espacio de aire sobre la silla para prevenir X-ray/clipping
+        val up1 = block.getRelative(org.bukkit.block.BlockFace.UP)
+        val up2 = up1.getRelative(org.bukkit.block.BlockFace.UP)
+        if (up1.type.isSolid || up2.type.isSolid || up1.isLiquid) {
+            player.sendMessage(ColorUtility.parse(getMsg("chair-unsafe")))
+            return
+        }
 
         // Posicionamiento de la silla: Y ajustado a -0.55
         val loc = block.location.clone().add(0.5, -0.55, 0.5)
@@ -59,7 +85,7 @@ class ChairListener(private val plugin: Plugin) : Listener {
             }.isNotEmpty()
 
             if (alreadyOccupied) {
-                player.sendMessage(net.kyori.adventure.text.minimessage.MiniMessage.miniMessage().deserialize("<red>¡Esta silla ya está ocupada!</red>"))
+                player.sendMessage(ColorUtility.parse(getMsg("chair-occupied")))
                 return@execute
             }
 
