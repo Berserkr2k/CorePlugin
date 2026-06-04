@@ -27,6 +27,12 @@ class ProjectileTrailListener(
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     fun onProjectileLaunch(event: ProjectileLaunchEvent) {
         val proj = event.entity
+        
+        // Solo aplicar estelas a proyectiles de armas (Bows, Crossbows, Tridents), no huevos, bolas de nieve, etc.
+        if (proj !is org.bukkit.entity.AbstractArrow) {
+            return
+        }
+
         val shooter = proj.shooter as? Player
 
         // 1. Resolver qué estela aplicar (prioridad: PDC del proyectil > cosmético del jugador)
