@@ -86,10 +86,10 @@ class KitGuis(
                             player.hasPermission("core.kits.bypass.cooldown.${kitId.lowercase()}")
             val isCooldownActive = remaining > 0 && !hasBypass
             
-            val displayMat = Material.matchMaterial(config.guiIcon) ?: Material.CHEST
+            val baseItem = config.item
             
             val loreLines = mutableListOf<String>()
-            config.guiLore.forEach { line ->
+            baseItem.lore.forEach { line ->
                 loreLines.add(line)
             }
             loreLines.add(" ")
@@ -118,8 +118,7 @@ class KitGuis(
             loreLines.add("<yellow>⚡ Click Izquierdo para Reclamar</yellow>")
             loreLines.add("<aqua>⚡ Click Derecho para Previsualizar</aqua>")
 
-            val kitIcon = ItemBuilder(displayMat)
-                .displayName(config.displayName)
+            val kitIcon = ItemBuilder.fromConfig(baseItem)
                 .lore(loreLines)
                 .build()
 

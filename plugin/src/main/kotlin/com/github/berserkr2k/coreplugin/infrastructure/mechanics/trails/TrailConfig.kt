@@ -1,5 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 
+import com.github.berserkr2k.coreplugin.common.gui.ItemConfig
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
 @ConfigSerializable
@@ -16,7 +17,6 @@ data class TrailLayerConfig(
 @ConfigSerializable
 data class TrailConfig(
     val id: String = "fire",
-    val displayName: String = "<red><bold>Estela de Fuego</bold></red>",
     val permission: String = "core.trail.use.fire",
     val particleType: String = "FLAME",
     val particleCount: Int = 1,
@@ -49,6 +49,12 @@ data class TrailConfig(
     val gradient: List<String> = emptyList(),
     val gradients: List<String> = emptyList(),
     val guiSlot: Int = -1,
-    val guiIcon: String = "FLINT_AND_STEEL",
-    val guiLore: List<String> = listOf("<gray>Una ardiente estela de fuego</gray>", "<gray>que rodea tus proyectiles.</gray>")
-)
+    val item: ItemConfig = ItemConfig(
+        material = "FLINT_AND_STEEL",
+        displayName = "<red><bold>Estela de Fuego</bold></red>",
+        lore = listOf("<gray>Una ardiente estela de fuego</gray>", "<gray>que rodea tus proyectiles.</gray>")
+    )
+) {
+    val displayName: String
+        get() = item.displayName ?: "<red><bold>Estela $id</bold></red>"
+}

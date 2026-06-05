@@ -46,7 +46,6 @@ class ProjectileTrailManager(
         if (!defaultFireFile.exists()) {
             saveDefaultTrail(defaultFireFile, TrailConfig(
                 id = "fire",
-                displayName = "<red><bold>Estela Infernal</bold></red>",
                 permission = "core.trail.use.fire",
                 particleType = "FLAME",
                 particleCount = 2,
@@ -73,11 +72,14 @@ class ProjectileTrailManager(
                     TrailLayerConfig(particle = "SMOKE", count = 1, speed = 0.002, radius = 0.35, offsetX = 0.02, offsetY = 0.02, offsetZ = 0.02)
                 ),
                 gradient = listOf("#ff6600", "#ff2200", "#ffaa00"),
-                guiIcon = "FLINT_AND_STEEL",
-                guiLore = listOf(
-                    "<gray>Una ardiente doble hélice</gray>",
-                    "<gray>envuelve tus proyectiles.</gray>",
-                    "<dark_gray>Fuego, humo y brasas.</dark_gray>"
+                item = ItemConfig(
+                    material = "FLINT_AND_STEEL",
+                    displayName = "<red><bold>Estela Infernal</bold></red>",
+                    lore = listOf(
+                        "<gray>Una ardiente doble hélice</gray>",
+                        "<gray>envuelve tus proyectiles.</gray>",
+                        "<dark_gray>Fuego, humo y brasas.</dark_gray>"
+                    )
                 )
             ))
         }
@@ -87,7 +89,6 @@ class ProjectileTrailManager(
         if (!defaultArcaneFile.exists()) {
             saveDefaultTrail(defaultArcaneFile, TrailConfig(
                 id = "arcane",
-                displayName = "<light_purple><bold>Arcane Ribbon</bold></light_purple>",
                 permission = "core.trail.use.arcane",
                 particleType = "END_ROD",
                 particleCount = 3,
@@ -115,11 +116,14 @@ class ProjectileTrailManager(
                     TrailLayerConfig(particle = "GLOW", count = 1, speed = 0.003, radius = 0.15)
                 ),
                 gradient = listOf("#a855f7", "#3b82f6", "#ec4899"),
-                guiIcon = "AMETHYST_SHARD",
-                guiLore = listOf(
-                    "<gray>Ondas arcanas brillantes</gray>",
-                    "<gray>siguen cada disparo.</gray>",
-                    "<dark_gray>Energía ancestral.</dark_gray>"
+                item = ItemConfig(
+                    material = "AMETHYST_SHARD",
+                    displayName = "<light_purple><bold>Arcane Ribbon</bold></light_purple>",
+                    lore = listOf(
+                        "<gray>Ondas arcanas brillantes</gray>",
+                        "<gray>siguen cada disparo.</gray>",
+                        "<dark_gray>Energía ancestral.</dark_gray>"
+                    )
                 )
             ))
         }
@@ -129,7 +133,6 @@ class ProjectileTrailManager(
         if (!defaultThunderFile.exists()) {
             saveDefaultTrail(defaultThunderFile, TrailConfig(
                 id = "thunder",
-                displayName = "<yellow><bold>Thunder Shot</bold></yellow>",
                 permission = "core.trail.use.thunder",
                 particleType = "ELECTRIC_SPARK",
                 particleCount = 4,
@@ -158,11 +161,14 @@ class ProjectileTrailManager(
                     TrailLayerConfig(particle = "GLOW", count = 1, speed = 0.01, radius = 0.25)
                 ),
                 gradient = listOf("#fff700", "#ffffff", "#ffe066"),
-                guiIcon = "LIGHTNING_ROD",
-                guiLore = listOf(
-                    "<gray>Descargas eléctricas caóticas</gray>",
-                    "<gray>acompañan tus proyectiles.</gray>",
-                    "<dark_gray>Poder inestable.</dark_gray>"
+                item = ItemConfig(
+                    material = "LIGHTNING_ROD",
+                    displayName = "<yellow><bold>Thunder Shot</bold></yellow>",
+                    lore = listOf(
+                        "<gray>Descargas eléctricas caóticas</gray>",
+                        "<gray>acompañan tus proyectiles.</gray>",
+                        "<dark_gray>Poder inestable.</dark_gray>"
+                    )
                 )
             ))
         }
@@ -172,7 +178,6 @@ class ProjectileTrailManager(
         if (!defaultFrostFile.exists()) {
             saveDefaultTrail(defaultFrostFile, TrailConfig(
                 id = "frost",
-                displayName = "<aqua><bold>Frozen Soul</bold></aqua>",
                 permission = "core.trail.use.frost",
                 particleType = "SNOWFLAKE",
                 particleCount = 3,
@@ -198,11 +203,14 @@ class ProjectileTrailManager(
                     TrailLayerConfig(particle = "FALLING_WATER", count = 1, speed = 0.001, radius = 0.22)
                 ),
                 gradient = listOf("#dff6ff", "#9bdfff", "#b8f3ff"),
-                guiIcon = "BLUE_ICE",
-                guiLore = listOf(
-                    "<gray>Un rastro helado y elegante</gray>",
-                    "<gray>cubre cada proyectil.</gray>",
-                    "<dark_gray>Frío absoluto.</dark_gray>"
+                item = ItemConfig(
+                    material = "BLUE_ICE",
+                    displayName = "<aqua><bold>Frozen Soul</bold></aqua>",
+                    lore = listOf(
+                        "<gray>Un rastro helado y elegante</gray>",
+                        "<gray>cubre cada proyectil.</gray>",
+                        "<dark_gray>Frío absoluto.</dark_gray>"
+                    )
                 )
             ))
         }
@@ -212,7 +220,6 @@ class ProjectileTrailManager(
         if (!defaultVoidFile.exists()) {
             saveDefaultTrail(defaultVoidFile, TrailConfig(
                 id = "void",
-                displayName = "<dark_purple><bold>Void Collapse</bold></dark_purple>",
                 permission = "core.trail.use.void",
                 particleType = "PORTAL",
                 particleCount = 5,
@@ -238,11 +245,14 @@ class ProjectileTrailManager(
                     TrailLayerConfig(particle = "REVERSE_PORTAL", count = 1, speed = 0.003, radius = 0.55)
                 ),
                 gradient = listOf("#240046", "#5a189a", "#9d4edd"),
-                guiIcon = "ENDER_EYE",
-                guiLore = listOf(
-                    "<gray>La energía del vacío</gray>",
-                    "<gray>distorsiona el entorno.</gray>",
-                    "<dark_gray>Oscuridad inestable.</dark_gray>"
+                item = ItemConfig(
+                    material = "ENDER_EYE",
+                    displayName = "<dark_purple><bold>Void Collapse</bold></dark_purple>",
+                    lore = listOf(
+                        "<gray>La energía del vacío</gray>",
+                        "<gray>distorsiona el entorno.</gray>",
+                        "<dark_gray>Oscuridad inestable.</dark_gray>"
+                    )
                 )
             ))
         }

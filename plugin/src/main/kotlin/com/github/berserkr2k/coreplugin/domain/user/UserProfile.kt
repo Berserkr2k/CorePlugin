@@ -10,7 +10,9 @@ data class UserProfile(
     var username: String,
     val economies: ConcurrentHashMap<String, BigDecimal> = ConcurrentHashMap(),
     val kitCooldowns: ConcurrentHashMap<String, Long> = ConcurrentHashMap(),
-    var activeTrailId: String? = null
+    var activeTrailId: String? = null,
+    var chatColor: String? = null,
+    var socialSpy: Boolean = false
 ) {
     @Volatile
     var isDirty: Boolean = false

@@ -41,7 +41,14 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
                 Files.createFile(file)
             }
 
-            val loader = HoconConfigurationLoader.builder().path(file).build()
+            val loader = HoconConfigurationLoader.builder()
+                .path(file)
+                .defaultOptions { options ->
+                    options.serializers { builder ->
+                        builder.registerAnnotatedObjects(mapperFactory)
+                    }
+                }
+                .build()
             loaders[fileName] = loader
 
             try {
@@ -55,10 +62,14 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
                     mappedInstance = defaultInstance
                 } else {
                     mappedInstance = mapper.load(root) ?: defaultInstance
-                    // Guardado automático inmediato: si el archivo físico carece de nuevos campos añadidos en Kotlin,
-                    // Sponge Configurate los añade de forma segura sin borrar los comentarios del usuario.
-                    mapper.save(mappedInstance, root)
-                    loader.save(root)
+                    // Limpiar y ordenar el archivo físico eliminando claves inválidas/obsoletas
+                    val tempRoot = loader.createNode()
+                    mapper.save(mappedInstance, tempRoot)
+                    
+                    val orderedRoot = loader.createNode()
+                    reorderAndClean(root, tempRoot, orderedRoot)
+                    
+                    loader.save(orderedRoot)
                 }
 
                 loadedConfigs[fileName] = mappedInstance
@@ -76,12 +87,25 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
     fun <T : Any> saveModuleConfig(fileName: String, configClass: Class<T>, instance: T): CompletableFuture<Void> {
         return CompletableFuture.runAsync({
             val file = configDirectory.resolve(fileName)
-            val loader = loaders[fileName] ?: HoconConfigurationLoader.builder().path(file).build()
+            val loader = loaders[fileName] ?: HoconConfigurationLoader.builder()
+                .path(file)
+                .defaultOptions { options ->
+                    options.serializers { builder ->
+                        builder.registerAnnotatedObjects(mapperFactory)
+                    }
+                }
+                .build()
             try {
                 val root = loader.load() // Carga el nodo existente para mantener comentarios
                 val mapper = mapperFactory.get(configClass)
-                mapper.save(instance, root)
-                loader.save(root)
+                
+                val tempRoot = loader.createNode()
+                mapper.save(instance, tempRoot)
+                
+                val orderedRoot = loader.createNode()
+                reorderAndClean(root, tempRoot, orderedRoot)
+                
+                loader.save(orderedRoot)
                 loadedConfigs[fileName] = instance
             } catch (e: ConfigurateException) {
                 plugin.logger.severe("Fallo al guardar HOCON: $fileName")
@@ -90,6 +114,27 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
         })
     }
 
+    private fun reorderAndClean(
+        original: CommentedConfigurationNode,
+        schema: CommentedConfigurationNode,
+        target: CommentedConfigurationNode
+    ) {
+        original.comment()?.let { target.comment(it) }
+
+        if (schema.isMap) {
+            val schemaKeys = schema.childrenMap().keys
+            
+            // Procesar llaves de esquema en el orden correcto
+            for (key in schemaKeys) {
+                val schemaChild = schema.node(key)
+                val originalChild = original.node(key)
+                val targetChild = target.node(key)
+                reorderAndClean(originalChild, schemaChild, targetChild)
+            }
+        } else {
+            target.raw(schema.raw())
+        }
+    }
 
     fun shutdown() {
         loadedConfigs.clear()

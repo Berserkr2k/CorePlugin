@@ -10,7 +10,8 @@ import org.bukkit.plugin.Plugin
 class ChatModule(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val papiBridge: LegacyPlaceholderBridge
+    private val papiBridge: LegacyPlaceholderBridge,
+    private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 ) {
     lateinit var config: ChatConfig
         private set
@@ -23,7 +24,7 @@ class ChatModule(
                 
                 // Registro del listener en el planificador regional maestro
                 Bukkit.getGlobalRegionScheduler().execute(plugin) {
-                    val chatListener = ModernChatModuleListener(config, papiBridge)
+                    val chatListener = ModernChatModuleListener(config, papiBridge, profileRegistry)
                     plugin.server.pluginManager.registerEvents(chatListener, plugin)
                     listener = chatListener
                 }

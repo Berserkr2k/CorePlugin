@@ -6,6 +6,10 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManag
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
 import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatModule
+import com.github.berserkr2k.coreplugin.infrastructure.chat.PrivateMessageCommand
+import com.github.berserkr2k.coreplugin.infrastructure.chat.ColorCommand
+import com.github.berserkr2k.coreplugin.infrastructure.warps.WarpService
+import com.github.berserkr2k.coreplugin.infrastructure.warps.WarpCommand
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.AnvilModule
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramService
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramCommand
@@ -16,7 +20,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEdi
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorGui
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
-import com.github.berserkr2k.coreplugin.infrastructure.ui.InterfaceService
+import com.github.berserkr2k.coreplugin.infrastructure.ui.TablistService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
@@ -59,10 +63,11 @@ class CorePlugin(
     private var hologramService: HologramService? = null
     private var leaderboardService: LeaderboardService? = null
     private var chairListener: ChairListener? = null
-    private var interfaceService: InterfaceService? = null
+    private var tablistService: TablistService? = null
     private var economyService: EconomyService? = null
     private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
+    private var warpService: WarpService? = null
 
     override fun onEnable() {
         threadCoordinator = ThreadCoordinator(this)
@@ -101,10 +106,14 @@ class CorePlugin(
         )
         
         // 2. Inicializar Módulo de Interfaces (Tablist, Bossbars) sin NMS
-        interfaceService = InterfaceService(this, placeholderBridge, configManager)
+        tablistService = TablistService(this, placeholderBridge, configManager)
         
         // 3. Inicializar Módulo de Chat Enriquecido (DeluxeChat Equivalence)
-        chatModule = ChatModule(this, configManager, placeholderBridge)
+        chatModule = ChatModule(this, configManager, placeholderBridge, registry)
+        
+        // Registrar comandos personalizados de Chat (Mensajería Privada, SocialSpy, Color Selector)
+        PrivateMessageCommand(this, commandManager, registry, messagesConfig)
+        ColorCommand(this, commandManager, registry, configManager, messagesConfig)
         
         // 4. Inicializar Módulo de Yunques (Moderación y Permisos de Color)
         anvilModule = AnvilModule(this, configManager)
@@ -217,6 +226,12 @@ class CorePlugin(
         val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, ecoService, messagesConfig)
         com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopCommand(this, commandManager, sManager, sGuis, messagesConfig)
 
+        // 13. Inicializar Módulo de Teletransporte (Warps)
+        val wService = WarpService(this, configManager, messagesConfig)
+        warpService = wService
+        server.pluginManager.registerEvents(wService, this)
+        WarpCommand(this, commandManager, wService, messagesConfig)
+
         // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
         threadCoordinator.runTimerAsync(72000, 1728000) {
             ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
@@ -245,20 +260,21 @@ $logo
 <dark_gray>======================================================</dark_gray>
 <yellow><bold>          COREPLUGIN MODULES STATUS</bold></yellow>
 <dark_gray>======================================================</dark_gray>
- <gray>⚡ <gold>Base de Datos</gold>      : <green>[ ACTIVO ]</green> (SQLite JDBC)</gray>
- <gray>⚡ <gold>Interfaces</gold>         : <green>[ ACTIVO ]</green> (Tablist & Bossbars)</gray>
- <gray>⚡ <gold>Chat Enriquecido</gold>   : <green>[ ACTIVO ]</green> (DeluxeChat Equiv)</gray>
- <gray>⚡ <gold>Yunques</gold>            : <green>[ ACTIVO ]</green> (Filtros & Colores)</gray>
- <gray>⚡ <gold>Hologramas</gold>         : <green>[ ACTIVO ]</green> (Packet-Based)</gray>
- <gray>⚡ <gold>Podios Físicos</gold>     : <green>[ ACTIVO ]</green> (ArmorStands Editor)</gray>
- <gray>⚡ <gold>Mecánica Sillas</gold>    : <green>[ ACTIVO ]</green> (Stairs Sitting)</gray>
- <gray>⚡ <gold>Economía</gold>           : <green>[ ACTIVO ]</green> (Multi-Divisa & Vault)</gray>
- <gray>⚡ <gold>Utilidades</gold>         : <green>[ ACTIVO ]</green> (Modular Commands)</gray>
- <gray>⚡ <gold>Kits Premium</gold>       : <green>[ ACTIVO ]</green> (HOCON & GUIs)</gray>
- <gray>⚡ <gold>Estelas Proyectil</gold>  : <green>[ ACTIVO ]</green> (Async & 3D Math)</gray>
-  <gray>⚡ <gold>Tiendas Mercado</gold>   : <green>[ ACTIVO ]</green> (Dynamic & Symmetric)</gray>
+ <gray>⚡ <gold>Base de Datos</gold>       : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Chat y Mensajería</gold>   : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Economía</gold>            : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Estelas Proyectil</gold>   : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Hologramas</gold>          : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Interfaces (Tab)</gold>    : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Kits Especiales</gold>     : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Mecánica Sillas</gold>     : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Podios Físicos</gold>      : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Tiendas Mercado</gold>     : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Utilidades</gold>          : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Warps Especiales</gold>    : <green>[ ACTIVO ]</green></gray>
+ <gray>⚡ <gold>Yunques y Colores</gold>   : <green>[ ACTIVO ]</green></gray>
 <dark_gray>======================================================</dark_gray>
-<green>¡Todos los módulos del plugin Core cargados de forma síncrona!</green>
+<green>¡Todos los módulos de CorePlugin cargados con éxito!</green>
         """.trimIndent()
 
         paperLogger.info(mm.deserialize(dashboard))

@@ -3,6 +3,7 @@ package com.github.berserkr2k.coreplugin.common
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
+import net.kyori.adventure.text.format.TextDecoration
 import java.util.regex.Pattern
 
 object ColorUtility {
@@ -34,7 +35,14 @@ object ColorUtility {
         val translated = legacyStr.replace('&', '§')
 
         // 5. Deserializar de nuevo mediante el serializador de secciones heredadas
-        return legacySectionSerializer.deserialize(translated)
+        val result = legacySectionSerializer.deserialize(translated)
+
+        // 6. Si no se especificó cursiva explícitamente en el texto, desactivarla por defecto para evitar cursivas automáticas del cliente en items.
+        return if (result.decoration(TextDecoration.ITALIC) == TextDecoration.State.NOT_SET) {
+            result.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+        } else {
+            result
+        }
     }
 
     private fun translateHexColorCodes(text: String): String {

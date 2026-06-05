@@ -29,6 +29,8 @@ class MigrationManager(
                 id $idType,
                 uuid VARCHAR(36) NOT NULL UNIQUE,
                 username VARCHAR(16) NOT NULL,
+                chat_color VARCHAR(16) DEFAULT NULL,
+                social_spy INT NOT NULL DEFAULT 0,
                 first_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_login TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -160,6 +162,50 @@ class MigrationManager(
             }
         } catch (e: Exception) {
             logger.severe("Fallo al verificar/recrear la tabla market_transactions: ${e.message}")
+        }
+
+        // 1.5. Detectar y alterar tabla core_users si le faltan columnas chat_color o social_spy
+        try {
+            connectionProvider().use { conn ->
+                val meta = conn.metaData
+                var hasChatColor = false
+                var hasSocialSpy = false
+                meta.getColumns(null, null, null, null).use { rs ->
+                    while (rs.next()) {
+                        val tableName = rs.getString("TABLE_NAME")
+                        val columnName = rs.getString("COLUMN_NAME")
+                        if (tableName.equals("core_users", ignoreCase = true)) {
+                            if (columnName.equals("chat_color", ignoreCase = true)) {
+                                hasChatColor = true
+                            }
+                            if (columnName.equals("social_spy", ignoreCase = true)) {
+                                hasSocialSpy = true
+                            }
+                        }
+                    }
+                }
+
+                conn.createStatement().use { stmt ->
+                    if (!hasChatColor) {
+                        logger.info("Añadiendo columna chat_color a la tabla core_users...")
+                        try {
+                            stmt.execute("ALTER TABLE core_users ADD COLUMN chat_color VARCHAR(16) DEFAULT NULL")
+                        } catch (e: Exception) {
+                            logger.warning("No se pudo añadir columna chat_color (quizá ya existe): ${e.message}")
+                        }
+                    }
+                    if (!hasSocialSpy) {
+                        logger.info("Añadiendo columna social_spy a la tabla core_users...")
+                        try {
+                            stmt.execute("ALTER TABLE core_users ADD COLUMN social_spy INT NOT NULL DEFAULT 0")
+                        } catch (e: Exception) {
+                            logger.warning("No se pudo añadir columna social_spy (quizá ya existe): ${e.message}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.severe("Fallo al verificar/alterar la tabla core_users: ${e.message}")
         }
 
         try {

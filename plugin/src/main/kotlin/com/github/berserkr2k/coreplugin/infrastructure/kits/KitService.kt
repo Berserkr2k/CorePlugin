@@ -86,30 +86,12 @@ class KitService(
         }
     }
 
-    fun buildItemStack(config: KitConfig.KitItem): ItemStack? {
-        val mat = Material.matchMaterial(config.material.uppercase()) ?: return null
-        
-        val builder = com.github.berserkr2k.coreplugin.common.gui.ItemBuilder(mat, config.amount)
-        if (config.displayName != null && config.displayName.isNotEmpty()) {
-            builder.displayName(config.displayName)
+    fun buildItemStack(config: com.github.berserkr2k.coreplugin.common.gui.ItemConfig): ItemStack? {
+        return try {
+            config.toItemStack()
+        } catch (e: Exception) {
+            null
         }
-        if (config.lore.isNotEmpty()) {
-            builder.lore(config.lore)
-        }
-        config.enchantments.forEach { (enchantName, level) ->
-            @Suppress("DEPRECATION")
-            val enchant = Enchantment.getByName(enchantName.uppercase()) 
-                ?: Enchantment.getByKey(NamespacedKey.minecraft(enchantName.lowercase()))
-            if (enchant != null) {
-                builder.enchant(enchant, level)
-            }
-        }
-        builder.unbreakable(config.unbreakable)
-        if (config.customModelData != null) {
-            builder.customModelData(config.customModelData)
-        }
-        
-        return builder.build()
     }
 
     private fun calculateRequiredSlots(player: Player, items: List<ItemStack>): Int {

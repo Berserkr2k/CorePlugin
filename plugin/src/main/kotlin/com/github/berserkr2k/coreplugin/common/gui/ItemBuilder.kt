@@ -19,10 +19,14 @@ import java.util.UUID
 import com.destroystokyo.paper.profile.PlayerProfile
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 import net.kyori.adventure.text.Component
+import net.kyori.adventure.text.format.TextDecoration
 
 @ConfigSerializable
 data class ItemConfig(
     val material: String = "AIR",
+    val skullTexture: String? = null, // base64
+    val skullOwner: String? = null,   // player name
+    val skullUuid: String? = null,    // UUID
     val amount: Int = 1,
     val displayName: String? = null,
     val lore: List<String> = emptyList(),
@@ -30,9 +34,6 @@ data class ItemConfig(
     val itemFlags: List<String> = emptyList(),
     val unbreakable: Boolean = false,
     val customModelData: Int? = null,
-    val skullTexture: String? = null, // base64
-    val skullOwner: String? = null,   // player name
-    val skullUuid: String? = null,    // UUID
     val glow: Boolean = false,
     val potionType: String? = null,
     val leatherColor: String? = null, // HEX #rrggbb
@@ -58,13 +59,25 @@ class ItemBuilder(private var itemStack: ItemStack) {
         if (name == null) {
             meta?.displayName(null)
         } else {
-            meta?.displayName(ColorUtility.parse(name))
+            var comp = ColorUtility.parse(name)
+            if (comp.decoration(TextDecoration.ITALIC) == TextDecoration.State.NOT_SET) {
+                comp = comp.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+            }
+            meta?.displayName(comp)
         }
         return this
     }
 
     fun displayName(name: Component?): ItemBuilder {
-        meta?.displayName(name)
+        if (name != null) {
+            var comp = name
+            if (comp.decoration(TextDecoration.ITALIC) == TextDecoration.State.NOT_SET) {
+                comp = comp.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+            }
+            meta?.displayName(comp)
+        } else {
+            meta?.displayName(null)
+        }
         return this
     }
 
@@ -72,13 +85,25 @@ class ItemBuilder(private var itemStack: ItemStack) {
         if (loreLines.isEmpty()) {
             meta?.lore(null)
         } else {
-            meta?.lore(loreLines.map { ColorUtility.parse(it) })
+            meta?.lore(loreLines.map { line ->
+                var comp = ColorUtility.parse(line)
+                if (comp.decoration(TextDecoration.ITALIC) == TextDecoration.State.NOT_SET) {
+                    comp = comp.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+                }
+                comp
+            })
         }
         return this
     }
 
     fun loreComponents(loreLines: List<Component>): ItemBuilder {
-        meta?.lore(loreLines)
+        meta?.lore(loreLines.map { line ->
+            var comp = line
+            if (comp.decoration(TextDecoration.ITALIC) == TextDecoration.State.NOT_SET) {
+                comp = comp.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE)
+            }
+            comp
+        })
         return this
     }
 

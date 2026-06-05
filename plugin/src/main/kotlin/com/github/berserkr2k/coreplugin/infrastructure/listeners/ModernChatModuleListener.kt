@@ -17,7 +17,8 @@ import org.bukkit.event.Listener
 
 class ModernChatModuleListener(
     private val chatConfig: ChatConfig,
-    private val papiBridge: LegacyPlaceholderBridge
+    private val papiBridge: LegacyPlaceholderBridge,
+    private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 ) : Listener, ChatRenderer {
 
     private val systemParser = MiniMessage.miniMessage()
@@ -36,7 +37,14 @@ class ModernChatModuleListener(
         val format = resolveActiveFormat(source)
         val prefixComponent = papiBridge.parseLegacyStringSecurely(source, format.prefix)
 
-        val rawNameWithPapi = format.nameFormat.replace("<player>", source.name)
+        val profile = profileRegistry.getProfile(source.uniqueId)
+        val customColor = profile?.chatColor ?: ""
+        val nameReplacement = if (customColor.isNotEmpty()) {
+            "$customColor${source.name}"
+        } else {
+            source.name
+        }
+        val rawNameWithPapi = format.nameFormat.replace("<player>", nameReplacement)
         var nameComponent = papiBridge.parseLegacyStringSecurely(source, rawNameWithPapi)
 
         if (format.tooltipLines.isNotEmpty()) {

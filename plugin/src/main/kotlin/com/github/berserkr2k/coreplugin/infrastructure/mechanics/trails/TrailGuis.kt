@@ -49,10 +49,10 @@ class TrailGuis(
             val hasPerm = player.hasPermission(config.permission)
             val isActive = activeTrail == trailId
 
-            val displayMat = Material.matchMaterial(config.guiIcon) ?: Material.ARROW
+            val baseItem = config.item
 
             val loreLines = mutableListOf<String>()
-            config.guiLore.forEach { line ->
+            baseItem.lore.forEach { line ->
                 loreLines.add(line)
             }
             loreLines.add(" ")
@@ -71,8 +71,7 @@ class TrailGuis(
                 }
             }
 
-            val icon = ItemBuilder(displayMat)
-                .displayName(config.displayName)
+            val icon = ItemBuilder.fromConfig(baseItem)
                 .lore(loreLines)
                 .glow(isActive)
                 .build()

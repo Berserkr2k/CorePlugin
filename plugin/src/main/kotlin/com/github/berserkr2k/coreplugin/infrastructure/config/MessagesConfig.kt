@@ -119,6 +119,32 @@ data class MessagesConfig(
         "lore-volume" to "<gray>Volumen (24h): <gold><volume> uds.</gold>",
         "lore-trend" to "<gray>Tendencia:     <trend>",
         "lore-click" to "<yellow>▶ Haz clic para transaccionar</yellow>"
+    ),
+    val chat: Map<String, String> = mapOf(
+        "socialspy-enabled" to "<green>SocialSpy habilitado.</green>",
+        "socialspy-disabled" to "<red>SocialSpy deshabilitado.</red>",
+        "pm-usage" to "<red>Uso: /msg <jugador> <mensaje></red>",
+        "pm-player-not-found" to "<red>Jugador no encontrado o desconectado.</red>",
+        "pm-cannot-msg-self" to "<red>No puedes enviarte mensajes privados a ti mismo.</red>",
+        "reply-usage" to "<red>Uso: /reply <mensaje></red>",
+        "reply-no-target" to "<red>No tienes a nadie a quien responder.</red>",
+        "color-changed" to "<green>¡Tu color de chat ha sido cambiado a <color>!</green>",
+        "color-menu-title" to "<dark_gray><bold>Selecciona un Color</bold></dark_gray>",
+        "pm-sent-format" to "<gray>[Yo -> <target>]: <message></gray>",
+        "pm-received-format" to "<gray>[<sender> -> Yo]: <message></gray>",
+        "pm-socialspy-format" to "<dark_gray>[Spy] [<sender> -> <target>]: <message></dark_gray>"
+    ),
+    val warps: Map<String, String> = mapOf(
+        "set" to "<green>¡Warp '<name>' establecido correctamente en tu posición!</green>",
+        "deleted" to "<red>¡Warp '<name>' eliminado correctamente!</red>",
+        "not-found" to "<red>El warp '<name>' no existe.</red>",
+        "success" to "<green>¡Teletransportado al warp '<name>' con éxito!</green>",
+        "no-permission" to "<red>No tienes permiso para usar este warp.</red>",
+        "warmup" to "<yellow>Teletransportándote en <time> segundos... ¡No te muevas ni recibas daño!</yellow>",
+        "cooldown-active" to "<red>Debes esperar <time> segundos antes de volver a usar este warp.</red>",
+        "cancelled-movement" to "<red>Teletransportación cancelada por movimiento.</red>",
+        "cancelled-damage" to "<red>Teletransportación cancelada por daño recibido.</red>",
+        "menu-title" to "<dark_gray>Puntos de Teletransporte</dark_gray>"
     )
 )
 
@@ -154,4 +180,27 @@ fun MessagesConfig.getUtility(key: String, vararg placeholders: Pair<String, Any
     }
     return msg
 }
+
+/**
+ * Obtiene y formatea un mensaje del mapa de chat reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getChat(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.chat[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de warps reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getWarps(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.warps[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
 

@@ -11,19 +11,19 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 
-class InterfaceService(
+class TablistService(
     private val plugin: Plugin,
     private val papiBridge: LegacyPlaceholderBridge,
     private val configManager: ModularConfigManager
 ) {
     private val activeBossBars = ConcurrentHashMap<UUID, BossBar>()
-    private var uiConfig = UiConfig()
+    private var tablistConfig = TablistConfig()
 
     init {
         // Carga dinámica HOCON mapeada directamente a clases de Kotlin
-        configManager.loadModuleConfig("ui.conf", UiConfig::class.java, UiConfig())
+        configManager.loadModuleConfig("tablist.conf", TablistConfig::class.java, TablistConfig())
            .thenAccept { loadedConfig ->
-                this.uiConfig = loadedConfig
+                this.tablistConfig = loadedConfig
                 startTablistScheduler()
             }
     }
@@ -32,22 +32,28 @@ class InterfaceService(
         // Programación asíncrona robusta exenta de hilos bloqueantes (Paper/Folia compatible)
         Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
             for (player in Bukkit.getOnlinePlayers()) {
-                val priorityOrder = resolvePlayerPriority(player)
-                player.playerListOrder = priorityOrder // API nativa de Paper
+                val group = resolvePlayerPriorityGroup(player)
+                val priority = group?.priority ?: 100
+                player.playerListOrder = priority
 
-                val header = papiBridge.parseLegacyStringSecurely(player, uiConfig.tablistHeader)
-                val footer = papiBridge.parseLegacyStringSecurely(player, uiConfig.tablistFooter)
+                // Aplicar el color permanente en la tablist
+                val color = group?.color ?: "<white>"
+                val coloredName = com.github.berserkr2k.coreplugin.common.ColorUtility.parse("$color${player.name}")
+                player.playerListName(coloredName)
+
+                val header = papiBridge.parseLegacyStringSecurely(player, tablistConfig.tablistHeader)
+                val footer = papiBridge.parseLegacyStringSecurely(player, tablistConfig.tablistFooter)
 
                 player.sendPlayerListHeaderAndFooter(header, footer)
             }
         }, 0, 1, TimeUnit.SECONDS)
     }
 
-    private fun resolvePlayerPriority(player: Player): Int {
+    private fun resolvePlayerPriorityGroup(player: Player): TablistConfig.TablistPriorityGroup? {
         // Recorrido dinámico por permisos inyectados desde la configuración (Zero Hardcoding)
-        return uiConfig.tablistPriorities.asSequence()
+        return tablistConfig.tablistPriorities.asSequence()
            .filter { player.hasPermission(it.permission) }
-           .minByOrNull { it.priority }?.priority ?: 100
+           .minByOrNull { it.priority }
     }
 
     /**

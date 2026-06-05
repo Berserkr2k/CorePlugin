@@ -36,13 +36,17 @@ class ProfileRegistry(
                 conn.autoCommit = false
                 try {
                     var internalId = -1
+                    var chatColor: String? = null
+                    var socialSpy = false
                     // 1. Intentar obtener el id del usuario por su UUID
-                    conn.prepareStatement("SELECT id, username FROM core_users WHERE uuid = ?").use { stmt ->
+                    conn.prepareStatement("SELECT id, username, chat_color, social_spy FROM core_users WHERE uuid = ?").use { stmt ->
                         stmt.setString(1, uuid.toString())
                         stmt.executeQuery().use { rs ->
                             if (rs.next()) {
                                 internalId = rs.getInt("id")
                                 val dbUsername = rs.getString("username")
+                                chatColor = rs.getString("chat_color")
+                                socialSpy = rs.getInt("social_spy") == 1
                                 if (dbUsername != username) {
                                     // Actualizar nombre si cambió
                                     conn.prepareStatement("UPDATE core_users SET username = ?, last_login = CURRENT_TIMESTAMP WHERE id = ?").use { updateStmt ->
@@ -112,7 +116,7 @@ class ProfileRegistry(
 
                     conn.commit()
 
-                    val profile = UserProfile(internalId, uuid, username, economies, kitCooldowns, activeTrailId)
+                    val profile = UserProfile(internalId, uuid, username, economies, kitCooldowns, activeTrailId, chatColor, socialSpy)
                     profiles[uuid] = profile
                     profile
                 } catch (e: Exception) {
@@ -191,6 +195,7 @@ class ProfileRegistry(
     private fun flushProfiles(profilesToFlush: List<UserProfile>): CompletableFuture<Void> {
         return CompletableFuture.runAsync {
             // PostgreSQL y SQLite (3.24+) soportan ON CONFLICT DO UPDATE
+            val userUpdateSql = "UPDATE core_users SET chat_color = ?, social_spy = ? WHERE id = ?"
             val economySql = "INSERT INTO core_economies (user_id, currency_id, balance) VALUES (?, ?, ?) ON CONFLICT(user_id, currency_id) DO UPDATE SET balance = excluded.balance"
             val cooldownSql = "INSERT INTO core_kits_cooldowns (user_id, kit_id, last_claimed) VALUES (?, ?, ?) ON CONFLICT(user_id, kit_id) DO UPDATE SET last_claimed = excluded.last_claimed"
             val trailUpsertSql = "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET trail_id = excluded.trail_id"
@@ -201,6 +206,17 @@ class ProfileRegistry(
                 val originalAutoCommit = conn.autoCommit
                 conn.autoCommit = false
                 try {
+                    // 0. Guardar datos de usuario (chatColor, socialSpy)
+                    conn.prepareStatement(userUpdateSql).use { stmt ->
+                        for (profile in profilesToFlush) {
+                            stmt.setString(1, profile.chatColor)
+                            stmt.setInt(2, if (profile.socialSpy) 1 else 0)
+                            stmt.setInt(3, profile.internalId)
+                            stmt.addBatch()
+                        }
+                        stmt.executeBatch()
+                    }
+
                     // 1. Guardar balances
                     conn.prepareStatement(economySql).use { stmt ->
                         for (profile in profilesToFlush) {
