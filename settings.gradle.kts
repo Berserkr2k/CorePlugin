@@ -1,2 +1,17 @@
 rootProject.name = "CorePlugin"
-include("plugin")
+include(
+    "core-api",
+    "core-platform-api",
+    "core-platform-paper",
+    "core-infra",
+    "core-feature-economy",
+    "core-feature-warps",
+    "core-feature-holograms",
+    "core-feature-leaderboard",
+    "core-feature-kits",
+    "core-feature-trails",
+    "core-feature-shop",
+    "core-feature-utility",
+    "core-feature-chat",
+    "plugin"
+)

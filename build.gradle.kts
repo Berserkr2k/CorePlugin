@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.jvm) apply false
 }
 
+val rootLibs = libs
+
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
 
@@ -37,5 +39,10 @@ subprojects {
     tasks.withType<JavaCompile> {
         sourceCompatibility = javaTarget
         targetCompatibility = javaTarget
+    }
+
+    dependencies {
+        add("compileOnly", rootLibs.paper.modern)
+        add("compileOnly", rootLibs.configurate.hocon)
     }
 }
