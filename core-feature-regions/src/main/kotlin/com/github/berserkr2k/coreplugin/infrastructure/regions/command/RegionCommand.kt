@@ -161,22 +161,31 @@ class RegionCommand(
                     val updatedAllow = ArrayList(dto.allowFlags)
                     val updatedDeny = ArrayList(dto.denyFlags)
 
-                    when (valueStr) {
-                        "allow" -> {
-                            if (!updatedAllow.contains(flagStr)) updatedAllow.add(flagStr)
-                            updatedDeny.remove(flagStr)
-                        }
-                        "deny" -> {
-                            if (!updatedDeny.contains(flagStr)) updatedDeny.add(flagStr)
-                            updatedAllow.remove(flagStr)
-                        }
-                        "remove" -> {
-                            updatedAllow.remove(flagStr)
-                            updatedDeny.remove(flagStr)
-                        }
-                        else -> {
-                            sender.sendMessage(ColorUtility.parse(getMsg("invalid-value")))
-                            return@handler
+                    val isCategory = RegionFlags.isCategory(flagStr)
+                    val flagsToProcess = if (isCategory) {
+                        RegionFlags.getIndividualFlags(flagStr)
+                    } else {
+                        listOf(flagStr)
+                    }
+
+                    for (f in flagsToProcess) {
+                        when (valueStr) {
+                            "allow" -> {
+                                if (!updatedAllow.contains(f)) updatedAllow.add(f)
+                                updatedDeny.remove(f)
+                            }
+                            "deny" -> {
+                                if (!updatedDeny.contains(f)) updatedDeny.add(f)
+                                updatedAllow.remove(f)
+                            }
+                            "remove" -> {
+                                updatedAllow.remove(f)
+                                updatedDeny.remove(f)
+                            }
+                            else -> {
+                                sender.sendMessage(ColorUtility.parse(getMsg("invalid-value")))
+                                return@handler
+                            }
                         }
                     }
 
@@ -207,8 +216,13 @@ class RegionCommand(
             regionBuilder.literal("flags")
                 .handler { context ->
                     val sender = context.sender()
-                    sender.sendMessage("§eBanderas disponibles:")
+                    sender.sendMessage("§eBanderas individuales:")
                     sender.sendMessage("§7- PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT, CHEST_ACCESS, ENDERCHEST_ACCESS, ANVIL_USE, ENCHANTING_USE")
+                    sender.sendMessage("§7- USE_WITHOUT_BREAK, BLOCK_PHYSICS, ITEM_DROP, ITEM_PICKUP, PROJECTILE_DAMAGE, PLAYER_COLLISION, MOB_TARGETING")
+                    sender.sendMessage("§7- LIQUID_FLOW, FALL_DAMAGE, ELYTRA_USAGE, REDSTONE_INTERACTION, VEHICLE_USAGE, EXP_GAIN, HUNGER_LOSS, HOSTILE_SPAWN, PASSIVE_SPAWN")
+                    sender.sendMessage("§7- ARMOR_STAND_INTERACTION, ENTITY_INTERACTION, CONTAINER_INTERACTION, ITEM_FRAME_INTERACTION")
+                    sender.sendMessage("§eCategorías de Banderas:")
+                    sender.sendMessage("§7- COMBAT_FLAGS, WORLD_FLAGS, INTERACTION_FLAGS, PLAYER_FLAGS, ENTITY_FLAGS")
                 }
         )
 

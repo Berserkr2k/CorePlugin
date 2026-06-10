@@ -369,7 +369,7 @@ class CorePlugin(
             val resolver = RegionRuleResolver(rManager)
 
             server.pluginManager.registerEvents(SelectionListener(session, rManager), this)
-            server.pluginManager.registerEvents(ProtectionListener(resolver, rManager), this)
+            server.pluginManager.registerEvents(ProtectionListener(resolver, rManager, messagesConfig), this)
             server.pluginManager.registerEvents(RegionTrackingListener(resolver, stateService, eventBus), this)
 
             RegionCommand(this, commandManager, session, rManager, resolver, messagesConfig)

@@ -47,15 +47,39 @@ class SpawnService(
         return playerStateService.getContainer(uuid, SPAWN_STATE)
     }
 
-    fun getSpawnLocation(): Location? {
-        val pLoc = config.spawnLocation
+    fun getSpawnLocation(worldName: String? = null): Location? {
+        val targetWorld = worldName ?: Bukkit.getWorlds().firstOrNull()?.name ?: "world"
+        val settings = getWorldSettings(targetWorld)
+        return resolveLocation(settings.spawnLocation)
+    }
+
+    fun resolveLocation(pLoc: PersistedLocation): Location? {
         val world = Bukkit.getWorld(pLoc.world) ?: Bukkit.getWorlds().firstOrNull() ?: return null
         return Location(world, pLoc.x, pLoc.y, pLoc.z, pLoc.yaw, pLoc.pitch)
     }
 
+    fun getWorldSettings(worldName: String): com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings {
+        return config.worlds[worldName] ?: com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings(
+            voidTeleportEnabled = true,
+            spawnLocation = PersistedLocation(world = worldName),
+            voidThresholdY = -64,
+            safeFallbackLocation = PersistedLocation(world = worldName)
+        )
+    }
+
     fun setSpawnLocation(loc: Location) {
         val pLoc = PersistedLocation(loc.world.name, loc.x, loc.y, loc.z, loc.yaw, loc.pitch)
-        val newConfig = config.copy(spawnLocation = pLoc)
+        
+        val updatedWorlds = config.worlds.toMutableMap()
+        val currentWorldSettings = updatedWorlds[loc.world.name] ?: com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings(
+            voidTeleportEnabled = true,
+            spawnLocation = pLoc,
+            voidThresholdY = -64,
+            safeFallbackLocation = pLoc
+        )
+        updatedWorlds[loc.world.name] = currentWorldSettings.copy(spawnLocation = pLoc)
+
+        val newConfig = config.copy(worlds = updatedWorlds)
         config = newConfig
         configManager.saveModuleConfig("spawn.conf", SpawnConfig::class.java, newConfig)
         
@@ -64,7 +88,7 @@ class SpawnService(
     }
 
     fun teleportToSpawn(player: Player, bypassWarmup: Boolean = false) {
-        val destination = getSpawnLocation()
+        val destination = getSpawnLocation(player.world.name)
         if (destination == null) {
             player.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("not-configured")))
             return

@@ -28,7 +28,7 @@ class SpawnListener(
         
         // 1. Force spawn on first join check
         if (!player.hasPlayedBefore() && spawnService.config.forceSpawnOnFirstJoin) {
-            val spawnLoc = spawnService.getSpawnLocation()
+            val spawnLoc = spawnService.getSpawnLocation(player.world.name)
             if (spawnLoc != null) {
                 // Teleport safely regionalized
                 regionTaskScheduler.runAtLocation(spawnLoc) {
@@ -41,12 +41,17 @@ class SpawnListener(
         // 2. Limbo recovery check (if player coordinates are corrupted or in deep void)
         if (spawnService.config.limboRecoveryEnabled) {
             val loc = player.location
-            if (loc.blockY < spawnService.config.voidThresholdY || loc.world == null) {
-                val spawnLoc = spawnService.getSpawnLocation()
-                if (spawnLoc != null) {
-                    regionTaskScheduler.runAtLocation(spawnLoc) {
-                        player.teleport(spawnLoc)
-                        player.fallDistance = 0f
+            if (loc.world != null) {
+                val settings = spawnService.getWorldSettings(loc.world.name)
+                if (settings.voidTeleportEnabled && loc.blockY < settings.voidThresholdY) {
+                    val dest = spawnService.resolveLocation(settings.spawnLocation)
+                        ?: spawnService.resolveLocation(settings.safeFallbackLocation)
+                        ?: spawnService.getSpawnLocation(loc.world.name)
+                    if (dest != null) {
+                        regionTaskScheduler.runAtLocation(dest) {
+                            player.teleport(dest)
+                            player.fallDistance = 0f
+                        }
                     }
                 }
             }
@@ -55,7 +60,11 @@ class SpawnListener(
 
     @EventHandler(priority = EventPriority.HIGH)
     fun onPlayerRespawn(event: PlayerRespawnEvent) {
-        val spawnLoc = spawnService.getSpawnLocation()
+        val player = event.player
+        val settings = spawnService.getWorldSettings(player.world.name)
+        val spawnLoc = spawnService.resolveLocation(settings.spawnLocation)
+            ?: spawnService.resolveLocation(settings.safeFallbackLocation)
+            ?: spawnService.getSpawnLocation(player.world.name)
         if (spawnLoc != null) {
             event.respawnLocation = spawnLoc
         }
@@ -79,13 +88,21 @@ class SpawnListener(
         val cooldown = spawnService.config.voidTeleportTickCooldown.toLong()
         if (lastTeleportTickCache.getLong(uuid) >= currentServerTick - cooldown) return
 
-        if (event.to.blockY < spawnService.config.voidThresholdY) {
-            val destination = spawnService.getSpawnLocation() ?: player.world.spawnLocation
-            lastTeleportTickCache.put(uuid, currentServerTick)
+        val world = event.to.world
+        if (world != null) {
+            val settings = spawnService.getWorldSettings(world.name)
+            if (settings.voidTeleportEnabled && event.to.blockY < settings.voidThresholdY) {
+                val destination = spawnService.resolveLocation(settings.spawnLocation)
+                    ?: spawnService.resolveLocation(settings.safeFallbackLocation)
+                    ?: spawnService.getSpawnLocation(world.name)
+                    ?: player.world.spawnLocation
 
-            regionTaskScheduler.runAtLocation(destination) {
-                player.teleport(destination)
-                player.fallDistance = 0f
+                lastTeleportTickCache.put(uuid, currentServerTick)
+
+                regionTaskScheduler.runAtLocation(destination) {
+                    player.teleport(destination)
+                    player.fallDistance = 0f
+                }
             }
         }
     }

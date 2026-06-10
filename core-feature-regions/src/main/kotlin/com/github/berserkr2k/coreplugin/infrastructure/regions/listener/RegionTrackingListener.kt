@@ -1,6 +1,8 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.listener
 
 import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.api.regions.RegionQueryContext
 import com.github.berserkr2k.coreplugin.api.event.CoreEventBus
 import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.infrastructure.regions.event.PlayerRegionEnterEvent
@@ -11,6 +13,7 @@ import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import org.bukkit.event.player.PlayerJoinEvent
 
 class RegionTrackingListener(
     private val resolver: RegionRuleResolver,
@@ -64,6 +67,25 @@ class RegionTrackingListener(
         }
 
         state.currentRegions = newRegions
+
+        // Update PLAYER_COLLISION
+        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
+        val collidable = resolver.isActionAllowed(worldIndex, to.blockX, to.blockY, to.blockZ, RegionFlags.PLAYER_COLLISION, context)
+        if (player.isCollidable != collidable) {
+            player.isCollidable = collidable
+        }
+    }
+
+    @EventHandler
+    fun onPlayerJoin(event: PlayerJoinEvent) {
+        val player = event.player
+        val loc = player.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
+        val collidable = resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.PLAYER_COLLISION, context)
+        if (player.isCollidable != collidable) {
+            player.isCollidable = collidable
+        }
     }
 
     @EventHandler

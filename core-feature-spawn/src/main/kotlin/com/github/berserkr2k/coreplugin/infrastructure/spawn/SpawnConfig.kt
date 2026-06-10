@@ -14,11 +14,18 @@ data class PersistedLocation(
 )
 
 @ConfigSerializable
-data class SpawnConfig(
+data class WorldSpawnSettings(
+    @Setting("void-teleport-enabled") val voidTeleportEnabled: Boolean = true,
     @Setting("spawn-location") val spawnLocation: PersistedLocation = PersistedLocation(),
     @Setting("void-threshold-y") val voidThresholdY: Int = -64,
+    @Setting("safe-fallback-location") val safeFallbackLocation: PersistedLocation = PersistedLocation()
+)
+
+@ConfigSerializable
+data class SpawnConfig(
     @Setting("void-teleport-tick-cooldown") val voidTeleportTickCooldown: Int = 10,
     @Setting("warmup-seconds") val warmupSeconds: Int = 3,
     @Setting("limbo-recovery-enabled") val limboRecoveryEnabled: Boolean = true,
-    @Setting("force-spawn-on-first-join") val forceSpawnOnFirstJoin: Boolean = true
+    @Setting("force-spawn-on-first-join") val forceSpawnOnFirstJoin: Boolean = true,
+    @Setting("worlds") val worlds: Map<String, WorldSpawnSettings> = mapOf("world" to WorldSpawnSettings())
 )

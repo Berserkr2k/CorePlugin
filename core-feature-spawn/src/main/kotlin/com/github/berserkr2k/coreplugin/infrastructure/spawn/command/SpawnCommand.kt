@@ -40,7 +40,15 @@ class SpawnCommand(
                         sender.sendMessage("Solo jugadores pueden establecer el spawn.")
                         return@handler
                     }
-                    spawnService.setSpawnLocation(sender.location)
+                    val loc = sender.location
+                    val centeredX = loc.blockX + 0.5
+                    val centeredY = loc.blockY.toDouble()
+                    val centeredZ = loc.blockZ + 0.5
+                    val snappedYaw = (Math.round(loc.yaw / 45.0) * 45.0).toFloat()
+                    val snappedPitch = (Math.round(loc.pitch / 45.0) * 45.0).toFloat()
+                    
+                    val centeredLoc = org.bukkit.Location(loc.world, centeredX, centeredY, centeredZ, snappedYaw, snappedPitch)
+                    spawnService.setSpawnLocation(centeredLoc)
                     sender.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("set-success")))
                 }
         )
