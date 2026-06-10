@@ -36,6 +36,13 @@ import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardService
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardCommand
+import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
+import com.github.berserkr2k.coreplugin.infrastructure.regions.command.PlayerSelectionSession
+import com.github.berserkr2k.coreplugin.infrastructure.regions.command.RegionCommand
+import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
+import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.SelectionListener
+import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.ProtectionListener
+import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.VoidDropListener
 import org.bukkit.plugin.java.JavaPlugin
 import java.nio.file.Path
 import org.incendo.cloud.paper.LegacyPaperCommandManager
@@ -81,6 +88,7 @@ class CorePlugin(
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
     private var warpService: WarpService? = null
     private var scoreboardService: ScoreboardService? = null
+    private var regionManager: RegionManager? = null
 
     override fun onEnable() {
         val registry = SimpleServiceRegistry()
@@ -345,6 +353,25 @@ class CorePlugin(
             ScoreboardCommand(this, commandManager, sService, messagesConfig)
         }
 
+        // 15. Inicializar Módulo de Regiones y Protecciones
+        initModule("Regiones y Protecciones") {
+            val rManager = RegionManager(this, configManager)
+            regionManager = rManager
+            serviceRegistry.register(RegionManager::class.java, rManager)
+
+            val stateService = serviceRegistry.get(PlayerStateService::class.java)!!
+            val session = PlayerSelectionSession(stateService)
+            val resolver = RegionRuleResolver(rManager)
+
+            server.pluginManager.registerEvents(SelectionListener(session, rManager), this)
+            server.pluginManager.registerEvents(ProtectionListener(resolver, rManager), this)
+
+            val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
+            server.pluginManager.registerEvents(VoidDropListener(regionTaskScheduler, rManager), this)
+
+            RegionCommand(this, commandManager, session, rManager, messagesConfig)
+        }
+
         // Programar guardado por lotes cada 5 minutos asíncronamente si la DB / registry se cargó bien
         if (profileRegistry != null) {
             taskScheduler.runAsyncTimer({
@@ -380,7 +407,8 @@ class CorePlugin(
             "Estelas de Proyectil" to "Estelas de Proyectil",
             "Tiendas de Mercado" to "Tiendas de Mercado",
             "Puntos de Teletransporte" to "Puntos de Teletransporte",
-            "Scoreboard Modular" to "Scoreboard Modular"
+            "Scoreboard Modular" to "Scoreboard Modular",
+            "Regiones y Protecciones" to "Regiones y Protecciones"
         )
 
         for ((label, key) in keys) {

@@ -152,6 +152,16 @@ data class MessagesConfig(
         "toggle-on" to "<green>✔ Scoreboard activado.</green>",
         "toggle-off" to "<red>❌ Scoreboard desactivado.</red>",
         "reloaded" to "<green>✔ Configuración de scoreboard recargada con éxito.</green>"
+    ),
+    val regions: Map<String, String> = mapOf(
+        "selection-incomplete" to "<red>❌ Error: Selección incompleta. Usa la herramienta de selección.</red>",
+        "compiling" to "<yellow>⚡ Compilando datos geométricos y guardando configuración...</yellow>",
+        "created" to "<green>✔ Región '<id>' creada e inyectada con éxito.</green>",
+        "flag-updated" to "<green>✔ Bandera '<flag>' de la región '<id>' establecida en <value>.</green>",
+        "flag-removed" to "<green>✔ Bandera '<flag>' removida de la región '<id>'.</green>",
+        "region-not-found" to "<red>❌ La región '<id>' no existe.</red>",
+        "invalid-flag" to "<red>❌ La bandera '<flag>' es inválida. Banderas válidas: PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT</red>",
+        "invalid-value" to "<red>❌ Valor inválido. Usa: allow, deny o remove</red>"
     )
 )
 
@@ -215,6 +225,17 @@ fun MessagesConfig.getWarps(key: String, vararg placeholders: Pair<String, Any>)
  */
 fun MessagesConfig.getScoreboard(key: String, vararg placeholders: Pair<String, Any>): String {
     var msg = this.scoreboard[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de regiones reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getRegions(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.regions[key] ?: ""
     for (ph in placeholders) {
         msg = msg.replace("<${ph.first}>", ph.second.toString())
     }

@@ -68,7 +68,8 @@ class ArchitectureTest {
             "core-feature-shop",
             "core-feature-utility",
             "core-feature-chat",
-            "core-feature-scoreboard"
+            "core-feature-scoreboard",
+            "core-feature-regions"
         )
 
         for (feature in features) {
