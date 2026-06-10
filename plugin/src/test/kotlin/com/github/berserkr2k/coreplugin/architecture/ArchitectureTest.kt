@@ -67,7 +67,8 @@ class ArchitectureTest {
             "core-feature-trails",
             "core-feature-shop",
             "core-feature-utility",
-            "core-feature-chat"
+            "core-feature-chat",
+            "core-feature-scoreboard"
         )
 
         for (feature in features) {

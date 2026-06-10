@@ -13,5 +13,6 @@ include(
     "core-feature-shop",
     "core-feature-utility",
     "core-feature-chat",
+    "core-feature-scoreboard",
     "plugin"
 )

@@ -1,7 +1,17 @@
 package com.github.berserkr2k.coreplugin
 
-import com.github.berserkr2k.coreplugin.common.ThreadCoordinator
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.infra.di.SimpleServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.ThreadAssertion
+import com.github.berserkr2k.coreplugin.platform.paper.PaperTaskScheduler
+import com.github.berserkr2k.coreplugin.platform.paper.PaperRegionTaskScheduler
+import com.github.berserkr2k.coreplugin.platform.paper.PaperThreadAssertion
+import com.github.berserkr2k.coreplugin.api.event.CoreEventBus
+import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.infra.state.SimplePlayerStateService
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
@@ -24,6 +34,8 @@ import com.github.berserkr2k.coreplugin.infrastructure.ui.TablistService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
 import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
 import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
+import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardService
+import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardCommand
 import org.bukkit.plugin.java.JavaPlugin
 import java.nio.file.Path
 import org.incendo.cloud.paper.LegacyPaperCommandManager
@@ -47,7 +59,7 @@ class CorePlugin(
     private val dataFolderPath: Path
 ) : JavaPlugin() {
 
-    lateinit var threadCoordinator: ThreadCoordinator
+    lateinit var serviceRegistry: ServiceRegistry
         private set
     lateinit var configManager: ModularConfigManager
         private set
@@ -68,9 +80,28 @@ class CorePlugin(
     private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
     private var warpService: WarpService? = null
+    private var scoreboardService: ScoreboardService? = null
 
     override fun onEnable() {
-        threadCoordinator = ThreadCoordinator(this)
+        val registry = SimpleServiceRegistry()
+        serviceRegistry = registry
+
+        val taskScheduler = PaperTaskScheduler(this)
+        val regionTaskScheduler = PaperRegionTaskScheduler(this)
+        val threadAssertion = PaperThreadAssertion()
+        val eventBus = CoreEventBus()
+        val stateService = SimplePlayerStateService()
+
+        registry.register(ServiceRegistry::class.java, registry)
+        registry.register(TaskScheduler::class.java, taskScheduler)
+        registry.register(RegionTaskScheduler::class.java, regionTaskScheduler)
+        registry.register(ThreadAssertion::class.java, threadAssertion)
+        registry.register(CoreEventBus::class.java, eventBus)
+        registry.register(PlayerStateService::class.java, stateService)
+        registry.register(org.bukkit.plugin.Plugin::class.java, this)
+        registry.register(org.bukkit.plugin.java.JavaPlugin::class.java, this)
+        registry.register(CorePlugin::class.java, this)
+
         placeholderBridge = LegacyPlaceholderBridge()
         configManager = ModularConfigManager(this, dataFolderPath)
 
@@ -129,61 +160,76 @@ class CorePlugin(
             initDbDependentModule(name, block)
         }
 
+        val stateService = serviceRegistry.get(PlayerStateService::class.java)
+        val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
+
         // 1. Inicializar Base de Datos (Módulo SQL)
         initModule("Base de Datos") {
             val db = DatabaseService(this, configManager)
             databaseService = db
             val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
             profileRegistry = reg
+            
+            serviceRegistry.register(DatabaseService::class.java, db)
+            serviceRegistry.register(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java, reg)
+
             server.pluginManager.registerEvents(
-                com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, reg),
+                com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, reg, stateService),
                 this
             )
         }
 
         // 2. Inicializar Módulo de Interfaces (Tablist, Bossbars) sin NMS
         initModule("Tablist e Interfaces") {
-            tablistService = TablistService(this, placeholderBridge, configManager)
+            val service = TablistService(this, placeholderBridge, configManager, serviceRegistry)
+            tablistService = service
+            serviceRegistry.register(TablistService::class.java, service)
         }
 
         // 3. Inicializar Módulo de Chat Enriquecido (DeluxeChat Equivalence)
         initDbDependentModule("Chat y Mensajería") {
-            chatModule = ChatModule(this, configManager, placeholderBridge, profileRegistry!!)
+            val service = ChatModule(this, configManager, placeholderBridge, profileRegistry!!, serviceRegistry)
+            chatModule = service
+            serviceRegistry.register(ChatModule::class.java, service)
             PrivateMessageCommand(this, commandManager, profileRegistry!!, messagesConfig)
-            ColorCommand(this, commandManager, profileRegistry!!, configManager, messagesConfig)
+            ColorCommand(this, commandManager, profileRegistry!!, configManager, messagesConfig, serviceRegistry)
         }
 
         // 4. Inicializar Módulo de Yunques (Moderación y Permisos de Color)
         initModule("Yunques y Bloqueos") {
-            anvilModule = AnvilModule(this, configManager)
+            val service = AnvilModule(this, configManager, serviceRegistry)
+            anvilModule = service
+            serviceRegistry.register(AnvilModule::class.java, service)
         }
 
         // 5. Inicializar Módulo de Hologramas Interactivos Modernos
         initModule("Hologramas Virtuales") {
-            val holoService = HologramService(this, configManager, placeholderBridge)
+            val holoService = HologramService(this, configManager, placeholderBridge, serviceRegistry)
             hologramService = holoService
+            serviceRegistry.register(HologramService::class.java, holoService)
             HologramCommand(this, commandManager, holoService)
         }
 
         // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands
         initDbDependentModule("Podios y Clasificaciones") {
-            val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge, profileRegistry!!)
+            val lService = LeaderboardService(this, configManager, messagesConfig, databaseService!!, placeholderBridge, profileRegistry!!, serviceRegistry)
             leaderboardService = lService
+            serviceRegistry.register(LeaderboardService::class.java, lService)
             server.pluginManager.registerEvents(lService, this)
-            LeaderboardCommand(this, commandManager, lService)
+            LeaderboardCommand(this, commandManager, lService, serviceRegistry)
 
             val editorConfig = configManager.loadModuleConfig("editor.conf", EditorConfig::class.java, EditorConfig()).join()
-            ArmorStandEditorGui.init(this, configManager)
+            ArmorStandEditorGui.init(this, configManager, serviceRegistry)
             ArmorStandEditorCommand(this, commandManager, editorConfig)
             server.pluginManager.registerEvents(
-                ArmorStandEditorListener(this, lService, messagesConfig),
+                ArmorStandEditorListener(this, lService, messagesConfig, serviceRegistry),
                 this
             )
         }
 
         // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
         initModule("Mecánica Sillas") {
-            val cListener = ChairListener(this, messagesConfig)
+            val cListener = ChairListener(this, messagesConfig, serviceRegistry)
             chairListener = cListener
             server.pluginManager.registerEvents(cListener, this)
         }
@@ -192,6 +238,7 @@ class CorePlugin(
         initDbDependentModule("Economía Multi-Divisa") {
             val ecoService = EconomyService(this, configManager, databaseService!!, profileRegistry!!)
             economyService = ecoService
+            serviceRegistry.register(EconomyService::class.java, ecoService)
 
             val isVaultEnabled = server.pluginManager.isPluginEnabled("Vault")
             val isVaultUnlockedEnabled = server.pluginManager.isPluginEnabled("VaultUnlocked")
@@ -221,7 +268,7 @@ class CorePlugin(
                 }
             }
 
-            WalletCommand(this, commandManager, ecoService, messagesConfig)
+            WalletCommand(this, commandManager, ecoService, messagesConfig, serviceRegistry)
 
             if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
                 EconomyPlaceholderExpansion(ecoService).register()
@@ -229,19 +276,20 @@ class CorePlugin(
             }
 
             // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
-            threadCoordinator.runTimerAsync(72000, 1728000) {
+            taskScheduler.runAsyncTimer({
                 ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
                     if (deleted > 0) {
                         paperLogger.info("¡Purga de base de datos completada! ${deleted} cuentas inactivas eliminadas.")
                     }
                 }
-            }
+            }, 72000L, 1728000L)
         }
 
         // 9. Inicializar Módulo de Utilidades Modulares
         initModule("Utilidades Modulares") {
-            val uService = UtilityService(this, configManager, messagesConfig)
+            val uService = UtilityService(this, configManager, messagesConfig, serviceRegistry)
             utilityService = uService
+            serviceRegistry.register(UtilityService::class.java, uService)
             FlyCommand(this, commandManager, uService, messagesConfig)
             SpeedCommand(this, commandManager, messagesConfig)
             HatCommand(this, commandManager, messagesConfig)
@@ -256,7 +304,8 @@ class CorePlugin(
 
         // 10. Inicializar Módulo Premium de Kits
         initEconomyDependentModule("Kits Premium") {
-            val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, economyService!!, messagesConfig, profileRegistry!!)
+            val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, economyService!!, messagesConfig, profileRegistry!!, serviceRegistry)
+            serviceRegistry.register(com.github.berserkr2k.coreplugin.infrastructure.kits.KitService::class.java, kService)
             val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, configManager, kService)
             com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis)
         }
@@ -264,32 +313,43 @@ class CorePlugin(
         // 11. Inicializar Módulo Premium de Estelas de Partículas (Projectile Trails)
         initDbDependentModule("Estelas de Proyectil") {
             val trailManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager(this, databaseService!!, configManager, profileRegistry!!)
-            val trailGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailGuis(this, configManager, trailManager)
-            server.pluginManager.registerEvents(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailListener(this, trailManager), this)
+            serviceRegistry.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager::class.java, trailManager)
+            val trailGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailGuis(this, configManager, trailManager, serviceRegistry)
+            server.pluginManager.registerEvents(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailListener(this, trailManager, serviceRegistry), this)
             com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailCommand(this, commandManager, trailManager, trailGuis)
         }
 
         // 12. Inicializar Módulo Premium de Tiendas de Mercado Dinámico
         initEconomyDependentModule("Tiendas de Mercado") {
-            val sManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager(this, configManager, databaseService!!)
+            val sManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager(this, configManager, databaseService!!, serviceRegistry)
             shopManager = sManager
-            val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, economyService!!, messagesConfig)
+            serviceRegistry.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager::class.java, sManager)
+            val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, economyService!!, messagesConfig, serviceRegistry)
             com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopCommand(this, commandManager, sManager, sGuis, messagesConfig)
         }
 
         // 13. Inicializar Módulo de Teletransporte (Warps)
         initModule("Puntos de Teletransporte") {
-            val wService = WarpService(this, configManager, messagesConfig)
+            val wService = WarpService(this, configManager, messagesConfig, serviceRegistry)
             warpService = wService
+            serviceRegistry.register(WarpService::class.java, wService)
             server.pluginManager.registerEvents(wService, this)
             WarpCommand(this, commandManager, wService, messagesConfig)
         }
 
+        // 14. Inicializar Módulo de Scoreboard Modular
+        initModule("Scoreboard Modular") {
+            val sService = ScoreboardService(this, configManager, placeholderBridge, serviceRegistry)
+            scoreboardService = sService
+            serviceRegistry.register(ScoreboardService::class.java, sService)
+            ScoreboardCommand(this, commandManager, sService, messagesConfig)
+        }
+
         // Programar guardado por lotes cada 5 minutos asíncronamente si la DB / registry se cargó bien
         if (profileRegistry != null) {
-            Bukkit.getAsyncScheduler().runAtFixedRate(this, { _ ->
+            taskScheduler.runAsyncTimer({
                 profileRegistry?.flushAllActive()
-            }, 5, 5, java.util.concurrent.TimeUnit.MINUTES)
+            }, 6000L, 6000L)
         }
 
         // Imprimir Dashboard Visual Premium de Estado de Módulos
@@ -319,7 +379,8 @@ class CorePlugin(
             "Kits Premium" to "Kits Premium",
             "Estelas de Proyectil" to "Estelas de Proyectil",
             "Tiendas de Mercado" to "Tiendas de Mercado",
-            "Puntos de Teletransporte" to "Puntos de Teletransporte"
+            "Puntos de Teletransporte" to "Puntos de Teletransporte",
+            "Scoreboard Modular" to "Scoreboard Modular"
         )
 
         for ((label, key) in keys) {
@@ -360,6 +421,10 @@ class CorePlugin(
         if (chairListener != null) {
             chairListener?.shutdown()
             shutdownList.add(" <gray>🔌 <red>Sillas</red>          : <gold>[ DESACTIVADO ]</gold> (Desmontando jugadores...)</gray>")
+        }
+        if (scoreboardService != null) {
+            scoreboardService?.shutdown()
+            shutdownList.add(" <gray>🔌 <red>Scoreboards</red>     : <gold>[ DESACTIVADO ]</gold> (Limpiando sidebars...)</gray>")
         }
         if (profileRegistry != null) {
             profileRegistry?.flushAllActive()?.join()

@@ -20,6 +20,7 @@ dependencies {
     implementation(project(":core-feature-shop"))
     implementation(project(":core-feature-utility"))
     implementation(project(":core-feature-chat"))
+    implementation(project(":core-feature-scoreboard"))
 
     compileOnly(libs.paper.modern)
     implementation(libs.cloud.paper)

@@ -145,6 +145,11 @@ data class MessagesConfig(
         "cancelled-movement" to "<red>Teletransportación cancelada por movimiento.</red>",
         "cancelled-damage" to "<red>Teletransportación cancelada por daño recibido.</red>",
         "menu-title" to "<dark_gray>Puntos de Teletransporte</dark_gray>"
+    ),
+    val scoreboard: Map<String, String> = mapOf(
+        "toggle-on" to "<green>✔ Scoreboard activado.</green>",
+        "toggle-off" to "<red>❌ Scoreboard desactivado.</red>",
+        "reloaded" to "<green>✔ Configuración de scoreboard recargada con éxito.</green>"
     )
 )
 
@@ -197,6 +202,17 @@ fun MessagesConfig.getChat(key: String, vararg placeholders: Pair<String, Any>):
  */
 fun MessagesConfig.getWarps(key: String, vararg placeholders: Pair<String, Any>): String {
     var msg = this.warps[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de scoreboard reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getScoreboard(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.scoreboard[key] ?: ""
     for (ph in placeholders) {
         msg = msg.replace("<${ph.first}>", ph.second.toString())
     }
