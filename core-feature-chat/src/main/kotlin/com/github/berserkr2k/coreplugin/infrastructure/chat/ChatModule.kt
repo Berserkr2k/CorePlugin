@@ -8,13 +8,15 @@ import org.bukkit.plugin.Plugin
 
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 
 class ChatModule(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
     private val papiBridge: LegacyPlaceholderBridge,
     private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
-    private val serviceRegistry: ServiceRegistry
+    private val serviceRegistry: ServiceRegistry,
+    private val messagesConfig: MessagesConfig
 ) {
     lateinit var config: ChatConfig
         private set
@@ -28,7 +30,7 @@ class ChatModule(
                 
                 // Registro del listener en el planificador regional maestro
                 taskScheduler.runSync {
-                    val chatListener = ModernChatModuleListener(config, papiBridge, profileRegistry)
+                    val chatListener = ModernChatModuleListener(config, papiBridge, profileRegistry, serviceRegistry, messagesConfig)
                     plugin.server.pluginManager.registerEvents(chatListener, plugin)
                     listener = chatListener
                 }

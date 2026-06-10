@@ -132,7 +132,9 @@ data class MessagesConfig(
         "color-menu-title" to "<dark_gray><bold>Selecciona un Color</bold></dark_gray>",
         "pm-sent-format" to "<gray>[Yo -> <target>]: <message></gray>",
         "pm-received-format" to "<gray>[<sender> -> Yo]: <message></gray>",
-        "pm-socialspy-format" to "<dark_gray>[Spy] [<sender> -> <target>]: <message></dark_gray>"
+        "pm-socialspy-format" to "<dark_gray>[Spy] [<sender> -> <target>]: <message></dark_gray>",
+        "cooldown" to "<red>⚠️ Por favor espera <cooldown> segundos antes de enviar otro mensaje.</red>",
+        "link-blocked" to "<red>❌ No está permitido enviar enlaces o URLs en el chat.</red>"
     ),
     val warps: Map<String, String> = mapOf(
         "set" to "<green>¡Warp '<name>' establecido correctamente en tu posición!</green>",

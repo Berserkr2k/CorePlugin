@@ -188,7 +188,7 @@ class CorePlugin(
 
         // 3. Inicializar Módulo de Chat Enriquecido (DeluxeChat Equivalence)
         initDbDependentModule("Chat y Mensajería") {
-            val service = ChatModule(this, configManager, placeholderBridge, profileRegistry!!, serviceRegistry)
+            val service = ChatModule(this, configManager, placeholderBridge, profileRegistry!!, serviceRegistry, messagesConfig)
             chatModule = service
             serviceRegistry.register(ChatModule::class.java, service)
             PrivateMessageCommand(this, commandManager, profileRegistry!!, messagesConfig)
