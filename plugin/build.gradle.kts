@@ -22,6 +22,7 @@ dependencies {
     implementation(project(":core-feature-chat"))
     implementation(project(":core-feature-scoreboard"))
     implementation(project(":core-feature-regions"))
+    implementation(project(":core-feature-spawn"))
 
     compileOnly(libs.paper.modern)
     implementation(libs.cloud.paper)

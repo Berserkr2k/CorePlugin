@@ -42,7 +42,10 @@ import com.github.berserkr2k.coreplugin.infrastructure.regions.command.RegionCom
 import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
 import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.SelectionListener
 import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.ProtectionListener
-import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.VoidDropListener
+import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.RegionTrackingListener
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.service.SpawnService
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.command.SpawnCommand
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.listener.SpawnListener
 import org.bukkit.plugin.java.JavaPlugin
 import java.nio.file.Path
 import org.incendo.cloud.paper.LegacyPaperCommandManager
@@ -89,6 +92,7 @@ class CorePlugin(
     private var warpService: WarpService? = null
     private var scoreboardService: ScoreboardService? = null
     private var regionManager: RegionManager? = null
+    private var spawnService: SpawnService? = null
 
     override fun onEnable() {
         val registry = SimpleServiceRegistry()
@@ -360,16 +364,29 @@ class CorePlugin(
             serviceRegistry.register(RegionManager::class.java, rManager)
 
             val stateService = serviceRegistry.get(PlayerStateService::class.java)!!
+            val eventBus = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.event.CoreEventBus::class.java)!!
             val session = PlayerSelectionSession(stateService)
             val resolver = RegionRuleResolver(rManager)
 
             server.pluginManager.registerEvents(SelectionListener(session, rManager), this)
             server.pluginManager.registerEvents(ProtectionListener(resolver, rManager), this)
+            server.pluginManager.registerEvents(RegionTrackingListener(resolver, stateService, eventBus), this)
 
+            RegionCommand(this, commandManager, session, rManager, resolver, messagesConfig)
+        }
+
+        // 16. Inicializar Módulo de Punto de Aparición (Spawn)
+        initModule("Punto de Aparición (Spawn)") {
+            val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)!!
             val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
-            server.pluginManager.registerEvents(VoidDropListener(regionTaskScheduler, rManager), this)
+            val stateService = serviceRegistry.get(PlayerStateService::class.java)!!
+            
+            val sService = SpawnService(this, configManager, taskScheduler, regionTaskScheduler, stateService, messagesConfig)
+            spawnService = sService
+            serviceRegistry.register(SpawnService::class.java, sService)
 
-            RegionCommand(this, commandManager, session, rManager, messagesConfig)
+            server.pluginManager.registerEvents(SpawnListener(sService, regionTaskScheduler), this)
+            SpawnCommand(commandManager, sService, messagesConfig)
         }
 
         // Programar guardado por lotes cada 5 minutos asíncronamente si la DB / registry se cargó bien
@@ -408,7 +425,8 @@ class CorePlugin(
             "Tiendas de Mercado" to "Tiendas de Mercado",
             "Puntos de Teletransporte" to "Puntos de Teletransporte",
             "Scoreboard Modular" to "Scoreboard Modular",
-            "Regiones y Protecciones" to "Regiones y Protecciones"
+            "Regiones y Protecciones" to "Regiones y Protecciones",
+            "Punto de Aparición (Spawn)" to "Punto de Aparición (Spawn)"
         )
 
         for ((label, key) in keys) {

@@ -15,5 +15,6 @@ include(
     "core-feature-chat",
     "core-feature-scoreboard",
     "core-feature-regions",
+    "core-feature-spawn",
     "plugin"
 )

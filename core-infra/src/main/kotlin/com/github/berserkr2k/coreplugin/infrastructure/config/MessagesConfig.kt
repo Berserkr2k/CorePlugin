@@ -160,8 +160,16 @@ data class MessagesConfig(
         "flag-updated" to "<green>✔ Bandera '<flag>' de la región '<id>' establecida en <value>.</green>",
         "flag-removed" to "<green>✔ Bandera '<flag>' removida de la región '<id>'.</green>",
         "region-not-found" to "<red>❌ La región '<id>' no existe.</red>",
-        "invalid-flag" to "<red>❌ La bandera '<flag>' es inválida. Banderas válidas: PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT</red>",
+        "invalid-flag" to "<red>❌ La bandera '<flag>' es inválida. Banderas válidas: PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT, CHEST_ACCESS, ENDERCHEST_ACCESS, ANVIL_USE, ENCHANTING_USE</red>",
         "invalid-value" to "<red>❌ Valor inválido. Usa: allow, deny o remove</red>"
+    ),
+    val spawn: Map<String, String> = mapOf(
+        "not-configured" to "<red>❌ El spawn no está configurado o el mundo de destino no existe.</red>",
+        "set-success" to "<green>✔ Spawn del servidor establecido correctamente en tu ubicación y guardado en config.</green>",
+        "success" to "<green>✔ ¡Teletransportado al spawn con éxito!</green>",
+        "warmup" to "<yellow>⚡ Teletransportándote al spawn en <time> segundos... ¡No te muevas ni recibas daño!</yellow>",
+        "cancelled-movement" to "<red>❌ Teletransportación cancelada por movimiento.</red>",
+        "cancelled-damage" to "<red>❌ Teletransportación cancelada por daño recibido.</red>"
     )
 )
 
@@ -236,6 +244,17 @@ fun MessagesConfig.getScoreboard(key: String, vararg placeholders: Pair<String, 
  */
 fun MessagesConfig.getRegions(key: String, vararg placeholders: Pair<String, Any>): String {
     var msg = this.regions[key] ?: ""
+    for (ph in placeholders) {
+        msg = msg.replace("<${ph.first}>", ph.second.toString())
+    }
+    return msg
+}
+
+/**
+ * Obtiene y formatea un mensaje del mapa de spawn reemplazando marcadores <key>.
+ */
+fun MessagesConfig.getSpawn(key: String, vararg placeholders: Pair<String, Any>): String {
+    var msg = this.spawn[key] ?: ""
     for (ph in placeholders) {
         msg = msg.replace("<${ph.first}>", ph.second.toString())
     }

@@ -69,7 +69,8 @@ class ArchitectureTest {
             "core-feature-utility",
             "core-feature-chat",
             "core-feature-scoreboard",
-            "core-feature-regions"
+            "core-feature-regions",
+            "core-feature-spawn"
         )
 
         for (feature in features) {
