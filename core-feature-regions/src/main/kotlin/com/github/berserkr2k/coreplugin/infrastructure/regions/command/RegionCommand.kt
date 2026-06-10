@@ -1,8 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.command
 
-import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
 import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
+import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.getRegions
 import com.github.berserkr2k.coreplugin.common.ColorUtility
@@ -18,6 +20,7 @@ class RegionCommand(
     private val commandManager: CommandManager<CommandSender>,
     private val session: PlayerSelectionSession,
     private val regionManager: RegionManager,
+    private val resolver: RegionRuleResolver,
     private val messagesConfig: MessagesConfig
 ) {
 
@@ -33,7 +36,39 @@ class RegionCommand(
         val regionBuilder = commandManager.commandBuilder("region")
             .permission("core.region.setup")
 
-        // 1. /region create <id> <priority>
+        // 1. /region pos1
+        commandManager.command(
+            regionBuilder.literal("pos1")
+                .handler { context ->
+                    val sender = context.sender()
+                    if (sender !is Player) {
+                        sender.sendMessage("Solo jugadores pueden establecer selecciones.")
+                        return@handler
+                    }
+                    val block = sender.location.block
+                    val sel = session.getSelection(sender.uniqueId)
+                    sel.pos1 = block.location
+                    sender.sendMessage("§a[!] Posición 1 establecida en ${block.x}, ${block.y}, ${block.z}.")
+                }
+        )
+
+        // 2. /region pos2
+        commandManager.command(
+            regionBuilder.literal("pos2")
+                .handler { context ->
+                    val sender = context.sender()
+                    if (sender !is Player) {
+                        sender.sendMessage("Solo jugadores pueden establecer selecciones.")
+                        return@handler
+                    }
+                    val block = sender.location.block
+                    val sel = session.getSelection(sender.uniqueId)
+                    sel.pos2 = block.location
+                    sender.sendMessage("§a[!] Posición 2 establecida en ${block.x}, ${block.y}, ${block.z}.")
+                }
+        )
+
+        // 3. /region create <id> <priority>
         commandManager.command(
             regionBuilder.literal("create")
                 .required("id", StringParser.stringParser())
@@ -41,7 +76,7 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden ejecutar este comando.")
+                        sender.sendMessage("Solo jugadores pueden crear regiones.")
                         return@handler
                     }
 
@@ -65,23 +100,23 @@ class RegionCommand(
                     val maxY = maxOf(pos1.blockY, pos2.blockY)
                     val maxZ = maxOf(pos1.blockZ, pos2.blockZ)
 
-                    val region = CompiledRegion(
+                    val dto = RegionConfig(
                         id = id,
-                        worldId = pos1.world.uid,
+                        world = pos1.world.name,
                         priority = priority,
                         minX = minX, minY = minY, minZ = minZ,
                         maxX = maxX, maxY = maxY, maxZ = maxZ,
-                        definedFlags = 0,
-                        allowedFlags = 0
+                        allowFlags = emptyList(),
+                        denyFlags = emptyList()
                     )
 
-                    regionManager.createRegion(region).thenRun {
+                    regionManager.createRegion(dto).thenRun {
                         sender.sendMessage(ColorUtility.parse(getMsg("created", "id" to id)))
                     }
                 }
         )
 
-        // 2. /region delete <id>
+        // 4. /region delete <id>
         commandManager.command(
             regionBuilder.literal("delete")
                 .required("id", StringParser.stringParser())
@@ -99,7 +134,7 @@ class RegionCommand(
                 }
         )
 
-        // 3. /region flag <id> <flag> <allow/deny/remove>
+        // 5. /region flag <id> <flag> <allow/deny/remove>
         commandManager.command(
             regionBuilder.literal("flag")
                 .required("id", StringParser.stringParser())
@@ -111,33 +146,33 @@ class RegionCommand(
                     val flagStr = context.get<String>("flag").uppercase()
                     val valueStr = context.get<String>("value").lowercase()
 
-                    val flag = RegionFlags.parse(flagStr)
-                    if (flag == RegionFlags.NONE) {
+                    val flagValue = RegionFlags.parse(flagStr)
+                    if (flagValue == RegionFlags.NONE) {
                         sender.sendMessage(ColorUtility.parse(getMsg("invalid-flag", "flag" to flagStr)))
                         return@handler
                     }
 
-                    val region = regionManager.getRegion(id)
-                    if (region == null) {
+                    val dto = regionManager.getRegionDTO(id)
+                    if (dto == null) {
                         sender.sendMessage(ColorUtility.parse(getMsg("region-not-found", "id" to id)))
                         return@handler
                     }
 
-                    val updatedRegion = when (valueStr) {
+                    val updatedAllow = ArrayList(dto.allowFlags)
+                    val updatedDeny = ArrayList(dto.denyFlags)
+
+                    when (valueStr) {
                         "allow" -> {
-                            val newDefined = region.definedFlags or flag
-                            val newAllowed = region.allowedFlags or flag
-                            region.copy(definedFlags = newDefined, allowedFlags = newAllowed)
+                            if (!updatedAllow.contains(flagStr)) updatedAllow.add(flagStr)
+                            updatedDeny.remove(flagStr)
                         }
                         "deny" -> {
-                            val newDefined = region.definedFlags or flag
-                            val newAllowed = region.allowedFlags and flag.inv()
-                            region.copy(definedFlags = newDefined, allowedFlags = newAllowed)
+                            if (!updatedDeny.contains(flagStr)) updatedDeny.add(flagStr)
+                            updatedAllow.remove(flagStr)
                         }
                         "remove" -> {
-                            val newDefined = region.definedFlags and flag.inv()
-                            val newAllowed = region.allowedFlags and flag.inv()
-                            region.copy(definedFlags = newDefined, allowedFlags = newAllowed)
+                            updatedAllow.remove(flagStr)
+                            updatedDeny.remove(flagStr)
                         }
                         else -> {
                             sender.sendMessage(ColorUtility.parse(getMsg("invalid-value")))
@@ -145,7 +180,9 @@ class RegionCommand(
                         }
                     }
 
-                    regionManager.createRegion(updatedRegion).thenRun {
+                    val updatedDto = dto.copy(allowFlags = updatedAllow, denyFlags = updatedDeny)
+
+                    regionManager.createRegion(updatedDto).thenRun {
                         if (valueStr == "remove") {
                             sender.sendMessage(ColorUtility.parse(getMsg("flag-removed", "flag" to flagStr, "id" to id)))
                         } else {
@@ -155,30 +192,49 @@ class RegionCommand(
                 }
         )
 
-        // 4. /region info [id]
+        // 6. /region reload
+        commandManager.command(
+            regionBuilder.literal("reload")
+                .handler { context ->
+                    val sender = context.sender()
+                    regionManager.loadAllRegions()
+                    sender.sendMessage("§a[!] Configuración de regiones recargada de disco y Spatial Index reconstruido con éxito.")
+                }
+        )
+
+        // 7. /region flags
+        commandManager.command(
+            regionBuilder.literal("flags")
+                .handler { context ->
+                    val sender = context.sender()
+                    sender.sendMessage("§eBanderas disponibles:")
+                    sender.sendMessage("§7- PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT, CHEST_ACCESS, ENDERCHEST_ACCESS, ANVIL_USE, ENCHANTING_USE")
+                }
+        )
+
+        // 8. /region info [id]
         commandManager.command(
             regionBuilder.literal("info")
                 .optional("id", StringParser.stringParser())
                 .handler { context ->
                     val sender = context.sender()
                     val idOpt = context.optional<String>("id")
-                    
-                    val region = if (idOpt.isPresent) {
-                        regionManager.getRegion(idOpt.get().lowercase())
+
+                    val dto = if (idOpt.isPresent) {
+                        regionManager.getRegionDTO(idOpt.get().lowercase())
                     } else {
                         if (sender !is Player) {
                             sender.sendMessage("Debes especificar la id de la región desde la consola.")
                             return@handler
                         }
-                        val blockX = sender.location.blockX
-                        val blockY = sender.location.blockY
-                        val blockZ = sender.location.blockZ
-                        val candidates = regionManager.getCurrentIndex().getRegionsInChunk(blockX shr 4, blockZ shr 4)
-                        val active = candidates?.filter { it.worldId == sender.world.uid && it.contains(blockX, blockY, blockZ) }
-                        active?.maxByOrNull { it.priority }
+                        val loc = sender.location
+                        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+                        val active = resolver.resolveActiveRegions(worldIndex, loc.blockX, loc.blockY, loc.blockZ)
+                        val highest = active.maxByOrNull { it.priority }
+                        highest?.let { regionManager.getRegionDTO(it.id) }
                     }
 
-                    if (region == null) {
+                    if (dto == null) {
                         if (idOpt.isPresent) {
                             sender.sendMessage(ColorUtility.parse(getMsg("region-not-found", "id" to idOpt.get())))
                         } else {
@@ -187,26 +243,48 @@ class RegionCommand(
                         return@handler
                     }
 
-                    val flagsList = mutableListOf<String>()
-                    val allFlags = listOf(RegionFlags.PVP, RegionFlags.BLOCK_BREAK, RegionFlags.BLOCK_PLACE, RegionFlags.INTERACT)
-                    for (f in allFlags) {
-                        if (region.hasFlag(f)) {
-                            val allowedText = if (region.isAllowed(f)) "<green>ALLOW</green>" else "<red>DENY</red>"
-                            flagsList.add("<yellow>${RegionFlags.toString(f)}</yellow>: $allowedText")
-                        }
-                    }
-                    val flagsText = if (flagsList.isEmpty()) "<gray>Ninguna</gray>" else flagsList.joinToString(", ")
-
                     val msg = """
                         <dark_gray>===========================================</dark_gray>
-                        <gold><bold>Región:</bold></gold> <yellow>${region.id}</yellow>
-                        <gray>Prioridad:</gray> <white>${region.priority}</white>
-                        <gray>Mundo UUID:</gray> <white>${region.worldId}</white>
-                        <gray>Límites:</gray> <white>(${region.minX}, ${region.minY}, ${region.minZ}) -> (${region.maxX}, ${region.maxY}, ${region.maxZ})</white>
-                        <gray>Banderas:</gray> $flagsText
+                        <gold><bold>Región:</bold></gold> <yellow>${dto.id}</yellow>
+                        <gray>Prioridad:</gray> <white>${dto.priority}</white>
+                        <gray>Mundo:</gray> <white>${dto.world}</white>
+                        <gray>Límites:</gray> <white>(${dto.minX}, ${dto.minY}, ${dto.minZ}) -> (${dto.maxX}, ${dto.maxY}, ${dto.maxZ})</white>
+                        <gray>Banderas Permitidas:</gray> <green>${dto.allowFlags.joinToString(", ").ifEmpty { "Ninguna" }}</green>
+                        <gray>Banderas Denegadas:</gray> <red>${dto.denyFlags.joinToString(", ").ifEmpty { "Ninguna" }}</red>
                         <dark_gray>===========================================</dark_gray>
                     """.trimIndent()
                     sender.sendMessage(ColorUtility.parse(msg))
+                }
+        )
+
+        // 9. /region debug ...
+        commandManager.command(
+            regionBuilder.literal("debug")
+                .literal("here")
+                .handler { context ->
+                    val sender = context.sender()
+                    if (sender !is Player) {
+                        sender.sendMessage("Solo jugadores.")
+                        return@handler
+                    }
+                    val loc = sender.location
+                    val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+                    val active = resolver.resolveActiveRegions(worldIndex, loc.blockX, loc.blockY, loc.blockZ)
+                    sender.sendMessage("§eRegiones activas aquí (Count: ${active.size}):")
+                    for (reg in active) {
+                        sender.sendMessage("§7- ${reg.id} (Prio: ${reg.priority})")
+                    }
+                }
+        )
+
+        commandManager.command(
+            regionBuilder.literal("debug")
+                .literal("flags")
+                .handler { context ->
+                    val sender = context.sender()
+                    if (sender !is Player) return@handler
+                    sender.sendMessage("§eBypass general: ${sender.hasPermission("core.region.bypass")}")
+                    sender.sendMessage("§eGameMode: ${sender.gameMode}")
                 }
         )
     }

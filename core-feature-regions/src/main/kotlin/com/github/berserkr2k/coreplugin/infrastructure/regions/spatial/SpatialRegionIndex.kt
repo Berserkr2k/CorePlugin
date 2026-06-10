@@ -2,11 +2,10 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions.spatial
 
 import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
-import java.util.Collections
 
 class SpatialRegionIndex {
 
-    private val chunkMap = Long2ObjectOpenHashMap<List<CompiledRegion>>()
+    private val chunkMap = Long2ObjectOpenHashMap<Array<CompiledRegion>>()
 
     fun buildFrom(rawRegions: Collection<CompiledRegion>) {
         val temporaryMap = Long2ObjectOpenHashMap<MutableList<CompiledRegion>>()
@@ -26,11 +25,12 @@ class SpatialRegionIndex {
         }
 
         for (entry in temporaryMap.long2ObjectEntrySet()) {
-            chunkMap.put(entry.longKey, Collections.unmodifiableList(entry.value))
+            val sortedList = entry.value.sortedBy { it.priority }
+            chunkMap.put(entry.longKey, sortedList.toTypedArray())
         }
     }
 
-    fun getRegionsInChunk(chunkX: Int, chunkZ: Int): List<CompiledRegion>? {
+    fun getRegionsInChunk(chunkX: Int, chunkZ: Int): Array<CompiledRegion>? {
         val chunkKey = (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xffffffffL)
         return chunkMap.get(chunkKey)
     }

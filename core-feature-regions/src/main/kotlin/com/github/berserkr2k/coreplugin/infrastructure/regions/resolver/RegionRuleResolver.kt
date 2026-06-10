@@ -3,39 +3,32 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions.resolver
 import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
 import com.github.berserkr2k.coreplugin.api.regions.RegionQueryContext
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
-import org.bukkit.Location
 import org.bukkit.GameMode
 import java.util.ArrayList
 
 class RegionRuleResolver(private val regionManager: RegionManager) {
 
-    fun resolveActiveRegions(loc: Location): List<CompiledRegion> {
-        val blockX = loc.blockX
-        val blockY = loc.blockY
-        val blockZ = loc.blockZ
-        
-        val candidates = regionManager.getCurrentIndex().getRegionsInChunk(blockX shr 4, blockZ shr 4) ?: return emptyList()
+    fun resolveActiveRegions(worldIndex: Int, x: Int, y: Int, z: Int): Array<CompiledRegion> {
+        val candidates = regionManager.getCurrentIndex().getRegionsInChunk(x shr 4, z shr 4) ?: return emptyArray()
         val activeRegions = ArrayList<CompiledRegion>()
-        val worldId = loc.world.uid 
 
         for (i in 0 until candidates.size) {
             val region = candidates[i]
-            if (region.worldId == worldId && region.contains(blockX, blockY, blockZ)) {
+            if (region.worldIndex == worldIndex && region.contains(x, y, z)) {
                 activeRegions.add(region)
             }
         }
         
-        activeRegions.sortBy { it.priority }
-        return activeRegions
+        return activeRegions.toTypedArray()
     }
 
-    fun isActionAllowed(loc: Location, flag: Int, context: RegionQueryContext): Boolean {
+    fun isActionAllowed(worldIndex: Int, x: Int, y: Int, z: Int, flag: Int, context: RegionQueryContext): Boolean {
         if (context.bypassPermission || context.gameMode == GameMode.CREATIVE) return true
 
-        val regions = resolveActiveRegions(loc)
-        if (regions.isEmpty()) return true 
+        val regions = resolveActiveRegions(worldIndex, x, y, z)
+        if (regions.isEmpty()) return true
 
-        var allowed = true 
+        var allowed = true
         for (i in 0 until regions.size) {
             val region = regions[i]
             if (region.hasFlag(flag)) {

@@ -1,7 +1,9 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.service
 
 import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
+import com.github.berserkr2k.coreplugin.infrastructure.regions.GlobalRegionConfig
 import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
+import com.github.berserkr2k.coreplugin.infrastructure.regions.compiler.RegionCompiler
 import com.github.berserkr2k.coreplugin.infrastructure.regions.spatial.SpatialRegionIndex
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader
@@ -17,19 +19,18 @@ class RegionManager(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager
 ) {
-    lateinit var config: RegionConfig
+    lateinit var config: GlobalRegionConfig
         private set
 
     private val currentIndex = AtomicReference(SpatialRegionIndex())
-    private val regionsMap = ConcurrentHashMap<String, CompiledRegion>()
+    private val regionsMap = ConcurrentHashMap<String, RegionConfig>()
 
     private val mapperFactory = ObjectMapper.factoryBuilder()
         .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
         .build()
 
     init {
-        // Cargar la configuración principal del módulo de regiones
-        configManager.loadModuleConfig("regions.conf", RegionConfig::class.java, RegionConfig())
+        configManager.loadModuleConfig("regions.conf", GlobalRegionConfig::class.java, GlobalRegionConfig())
             .thenAccept { loadedConfig ->
                 this.config = loadedConfig
                 loadAllRegions()
@@ -42,15 +43,15 @@ class RegionManager(
         currentIndex.set(newIndex)
     }
 
-    fun getRegion(id: String): CompiledRegion? {
+    fun getRegionDTO(id: String): RegionConfig? {
         return regionsMap[id.lowercase()]
     }
 
-    fun getRegions(): Collection<CompiledRegion> {
+    fun getRegionsDTOs(): Collection<RegionConfig> {
         return regionsMap.values
     }
 
-    fun createRegion(region: CompiledRegion): CompletableFuture<Void> {
+    fun createRegion(region: RegionConfig): CompletableFuture<Void> {
         return CompletableFuture.runAsync {
             regionsMap[region.id.lowercase()] = region
             saveRegionToFile(region)
@@ -69,9 +70,18 @@ class RegionManager(
         }
     }
 
-    private fun rebuildIndex() {
+    fun rebuildIndex() {
         val newIndex = SpatialRegionIndex()
-        newIndex.buildFrom(regionsMap.values)
+        val compiledRegions = ArrayList<CompiledRegion>()
+        for (dto in regionsMap.values) {
+            try {
+                val compiled = RegionCompiler.compile(dto)
+                compiledRegions.add(compiled)
+            } catch (e: Exception) {
+                plugin.logger.warning("No se pudo compilar la región '${dto.id}': ${e.message}")
+            }
+        }
+        newIndex.buildFrom(compiledRegions)
         swapIndex(newIndex)
     }
 
@@ -103,7 +113,7 @@ class RegionManager(
                     }
                     .build()
                 val root = loader.load()
-                val mapper = mapperFactory.get(CompiledRegion::class.java)
+                val mapper = mapperFactory.get(RegionConfig::class.java)
                 val region = mapper.load(root)
                 if (region != null && region.id.isNotEmpty()) {
                     regionsMap[region.id.lowercase()] = region
@@ -116,7 +126,7 @@ class RegionManager(
         plugin.logger.info("¡Se cargaron con éxito ${regionsMap.size} regiones desde la carpeta regions/!")
     }
 
-    private fun saveRegionToFile(region: CompiledRegion) {
+    private fun saveRegionToFile(region: RegionConfig) {
         val file = getRegionFile(region.id)
         try {
             val loader = HoconConfigurationLoader.builder()
@@ -128,7 +138,7 @@ class RegionManager(
                 }
                 .build()
             val root = loader.load()
-            val mapper = mapperFactory.get(CompiledRegion::class.java)
+            val mapper = mapperFactory.get(RegionConfig::class.java)
             mapper.save(region, root)
             loader.save(root)
         } catch (e: Exception) {
