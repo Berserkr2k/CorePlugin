@@ -19,12 +19,17 @@ import org.bukkit.plugin.Plugin
 import java.math.BigDecimal
 import java.math.RoundingMode
 
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+
 class ShopGuis(
     private val plugin: Plugin,
     private val shopManager: ShopManager,
     private val economyService: EconomyService,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val serviceRegistry: ServiceRegistry
 ) {
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
 
     init {
         // Registrar acciones dinámicas para abrir las tiendas de forma local al instanciar el menú
@@ -71,7 +76,7 @@ class ShopGuis(
         }
 
         shopManager.getPlayerTransactionHistory(player.uniqueId).thenAccept { history ->
-            Bukkit.getScheduler().runTask(plugin, Runnable {
+            regionTaskScheduler.runAtEntity(player, Runnable {
                 if (!player.isOnline) return@Runnable
 
                 val config = shopManager.marketConfig.historyMenu
@@ -527,7 +532,7 @@ class ShopGuis(
             .thenAccept { success ->
                 if (success) {
                     // 4. SQL Commit Exitoso -> Entregar ítems físicos de forma segura (Main Thread)
-                    Bukkit.getScheduler().runTask(plugin, Runnable {
+                    regionTaskScheduler.runAtEntity(player, Runnable {
                         try {
                             val itemStack = baseItem.clone()
                             itemStack.amount = actualQty
@@ -552,7 +557,7 @@ class ShopGuis(
                     })
                 } else {
                     // 5. SQL Commit Fallido -> Reversión automática hecha por EconomyService.kt
-                    Bukkit.getScheduler().runTask(plugin, Runnable {
+                    regionTaskScheduler.runAtEntity(player, Runnable {
                         player.sendMessage(ColorUtility.parse(getMsg("error-db")))
                         TransactionLockManager.release(uuid)
                     })
@@ -639,7 +644,7 @@ class ShopGuis(
             .thenAccept { success ->
                 if (success) {
                     // 4. SQL Commit Exitoso -> Remover físicamente los ítems del inventario (Main Thread)
-                    Bukkit.getScheduler().runTask(plugin, Runnable {
+                    regionTaskScheduler.runAtEntity(player, Runnable {
                         try {
                             removePlan.forEach { (slot, amount) ->
                                 val item = inv.getItem(slot)
@@ -671,7 +676,7 @@ class ShopGuis(
                     })
                 } else {
                     // 5. SQL Commit Fallido -> Reversión automática hecha por EconomyService.kt
-                    Bukkit.getScheduler().runTask(plugin, Runnable {
+                    regionTaskScheduler.runAtEntity(player, Runnable {
                         player.sendMessage(ColorUtility.parse(getMsg("error-db")))
                         TransactionLockManager.release(uuid)
                     })

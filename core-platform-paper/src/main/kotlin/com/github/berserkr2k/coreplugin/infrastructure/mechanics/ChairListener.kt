@@ -2,6 +2,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics
 
 import org.bukkit.Bukkit
 import org.bukkit.Location
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
 import org.bukkit.NamespacedKey
 import org.bukkit.block.data.type.Stairs
 import org.bukkit.entity.ArmorStand
@@ -24,11 +27,14 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.getUtility
 
 class ChairListener(
     private val plugin: Plugin,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val serviceRegistry: ServiceRegistry
 ) : Listener {
 
     private val chairKey = NamespacedKey(plugin, "chair_entity")
     val activeChairs = ConcurrentHashMap.newKeySet<UUID>()
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
 
     private fun getMsg(key: String): String {
         return messagesConfig.getUtility(key)
@@ -78,7 +84,7 @@ class ChairListener(
         loc.yaw = yaw
 
         // Ejecutar de forma segura en el programador de la región de Folia
-        Bukkit.getRegionScheduler().execute(plugin, block.location) {
+        regionTaskScheduler.runAtLocation(block.location) {
             // Verificar si el bloque ya está ocupado por una silla activa
             val alreadyOccupied = block.world.getNearbyEntities(loc, 0.5, 0.5, 0.5) { entity ->
                 entity is ArmorStand && entity.persistentDataContainer.has(chairKey, PersistentDataType.BOOLEAN)
@@ -86,7 +92,7 @@ class ChairListener(
 
             if (alreadyOccupied) {
                 player.sendMessage(ColorUtility.parse(getMsg("chair-occupied")))
-                return@execute
+                return@runAtLocation
             }
 
             // Spawnear el ArmorStand silla
@@ -114,21 +120,20 @@ class ChairListener(
         if (!chair.persistentDataContainer.has(chairKey, PersistentDataType.BOOLEAN)) return
 
         val loc = chair.location
-        // Ejecutar de forma Folia-safe en la región del ArmorStand
-        Bukkit.getRegionScheduler().execute(plugin, loc) {
+        regionTaskScheduler.runAtLocation(loc) {
             activeChairs.remove(chair.uniqueId)
             chair.remove()
             
             // Teletransportar al jugador 1 tick después para que el dismount por defecto de Minecraft no sobrescriba su posición
             // Elevación del exitLoc a 1.2 bloques por encima de la base real de la escalera para asegurar que el jugador aparezca libremente y caiga de pie
-            Bukkit.getRegionScheduler().runDelayed(plugin, loc, { _ ->
+            taskScheduler.runSyncLater(Runnable {
                 val exitLoc = loc.clone()
                 exitLoc.x = Math.floor(loc.x) + 0.5
                 exitLoc.y = Math.floor(loc.y - (-0.55)) + 1.2
                 exitLoc.z = Math.floor(loc.z) + 0.5
                 exitLoc.yaw = player.location.yaw
                 exitLoc.pitch = player.location.pitch
-                player.teleport(exitLoc)
+                player.teleportAsync(exitLoc)
             }, 1L)
         }
     }
@@ -138,7 +143,7 @@ class ChairListener(
         val player = event.player
         val chair = player.vehicle as? ArmorStand ?: return
         if (chair.persistentDataContainer.has(chairKey, PersistentDataType.BOOLEAN)) {
-            Bukkit.getRegionScheduler().execute(plugin, chair.location) {
+            regionTaskScheduler.runAtLocation(chair.location) {
                 activeChairs.remove(chair.uniqueId)
                 chair.remove()
             }

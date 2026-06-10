@@ -3,6 +3,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.config.UtilityConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -18,8 +21,12 @@ import java.util.concurrent.CompletableFuture
 class UtilityService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val serviceRegistry: ServiceRegistry
 ) : Listener {
+
+    val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
+    val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
 
     lateinit var config: UtilityConfig
         private set
@@ -68,8 +75,10 @@ class UtilityService(
     @EventHandler
     fun onPlayerTeleport(event: PlayerTeleportEvent) {
         // Retrasamos la comprobación 1 tick para que el jugador se encuentre en la posición destino
-        Bukkit.getRegionScheduler().runDelayed(plugin, event.to, { _ ->
-            checkFlightSecurity(event.player)
+        taskScheduler.runSyncLater({
+            regionTaskScheduler.runAtLocation(event.to) {
+                checkFlightSecurity(event.player)
+            }
         }, 1L)
     }
 
@@ -96,7 +105,7 @@ class UtilityService(
         if (isFlyAllowed(player)) return
 
         // Ejecutar de forma segura en la región del jugador
-        Bukkit.getRegionScheduler().execute(plugin, player.location) {
+        regionTaskScheduler.runAtLocation(player.location) {
             player.allowFlight = false
             player.isFlying = false
             

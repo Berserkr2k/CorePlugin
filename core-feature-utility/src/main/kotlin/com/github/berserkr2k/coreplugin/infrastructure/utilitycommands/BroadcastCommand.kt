@@ -181,7 +181,7 @@ class BroadcastCommand(
         }
 
         // Destrucción asíncrona segura de la BossBar (Folia-ready)
-        Bukkit.getGlobalRegionScheduler().runDelayed(plugin, { _ ->
+        utilityService.taskScheduler.runSyncLater({
             Bukkit.getOnlinePlayers().forEach { player ->
                 player.hideBossBar(bossBar)
             }

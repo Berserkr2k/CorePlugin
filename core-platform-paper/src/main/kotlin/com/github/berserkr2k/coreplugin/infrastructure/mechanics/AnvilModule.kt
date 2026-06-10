@@ -4,10 +4,18 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManag
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 
-class AnvilModule(private val plugin: Plugin, private val configManager: ModularConfigManager) {
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+
+class AnvilModule(
+    private val plugin: Plugin,
+    private val configManager: ModularConfigManager,
+    private val serviceRegistry: ServiceRegistry
+) {
     lateinit var config: AnvilConfig
         private set
     private var listener: AnvilListener? = null
+    private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
 
     init {
         configManager.loadModuleConfig("anvil.conf", AnvilConfig::class.java, AnvilConfig())
@@ -15,7 +23,7 @@ class AnvilModule(private val plugin: Plugin, private val configManager: Modular
                 this.config = loadedConfig
                 
                 // Registro del listener en el planificador regional maestro
-                Bukkit.getGlobalRegionScheduler().execute(plugin) {
+                taskScheduler.runSync {
                     val anvilListener = AnvilListener(config)
                     plugin.server.pluginManager.registerEvents(anvilListener, plugin)
                     listener = anvilListener

@@ -30,6 +30,10 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
 
 data class ActivePodium(val uuid: UUID, val location: Location)
 
@@ -39,12 +43,16 @@ class LeaderboardService(
     private val messagesConfig: MessagesConfig,
     private val databaseService: DatabaseService,
     private val placeholderBridge: LegacyPlaceholderBridge,
-    private val profileRegistry: ProfileRegistry
+    private val profileRegistry: ProfileRegistry,
+    private val registry: ServiceRegistry
 ) : Listener {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
     private val miniMessage = MiniMessage.miniMessage()
     
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()
     
@@ -57,17 +65,17 @@ class LeaderboardService(
         
         databaseService.initFuture.thenAccept {
             // Spawn de podios persistidos
-            Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+            taskScheduler.runAsync {
                 spawnAllPersistedLeaderboards()
             }
 
             // Tarea de actualización y refresco de podios (cada 60s)
-            Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+            taskScheduler.runAsyncTimer({
                 for (player in Bukkit.getOnlinePlayers()) {
                     updatePlayerStats(player)
                 }
                 refreshAllLeaderboards()
-            }, 5, 60, java.util.concurrent.TimeUnit.SECONDS)
+            }, 100L, 1200L)
         }
 
         Bukkit.getPluginManager().registerEvents(this, plugin)
@@ -129,7 +137,7 @@ class LeaderboardService(
     fun spawnOrFindLeaderboard(location: Location, leaderboardId: String, rank: Int) {
         val key = "${leaderboardId}_$rank"
         
-        Bukkit.getRegionScheduler().execute(plugin, location) {
+        regionTaskScheduler.runAtLocation(location) {
             val existingStand = location.world.getNearbyEntities(location, 1.5, 1.5, 1.5) { entity ->
                 entity is ArmorStand &&
                 entity.persistentDataContainer.get(leaderboardKey, PersistentDataType.STRING) == leaderboardId &&
@@ -249,7 +257,7 @@ class LeaderboardService(
             }
 
             spawnOrFindLeaderboard(loc, leaderboardId, rank)
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }, { command -> taskScheduler.runAsync(command) })
     }
 
     fun unregisterLeaderboard(id: String, rank: Int): CompletableFuture<Boolean> {
@@ -274,7 +282,7 @@ class LeaderboardService(
             }
 
             if (activePodium != null) {
-                Bukkit.getRegionScheduler().execute(plugin, activePodium.location) {
+                regionTaskScheduler.runAtLocation(activePodium.location) {
                     val stand = Bukkit.getEntity(activePodium.uuid) as? ArmorStand
                     if (stand != null) {
                         stand.passengers.forEach { it.remove() }
@@ -290,7 +298,7 @@ class LeaderboardService(
                 }
             }
             true
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }, { command -> taskScheduler.runAsync(command) })
     }
 
     fun updatePlayerStats(player: Player) {
@@ -406,8 +414,8 @@ class LeaderboardService(
                 } else null
 
                 // Actualizar la entidad con seguridad asíncrona Folia-ready en el hilo de su región
-                Bukkit.getRegionScheduler().execute(plugin, activePodium.location) {
-                    val stand = Bukkit.getEntity(activePodium.uuid) as? ArmorStand ?: return@execute
+                regionTaskScheduler.runAtLocation(activePodium.location) {
+                    val stand = Bukkit.getEntity(activePodium.uuid) as? ArmorStand ?: return@runAtLocation
                     
                     // Actualizar cabeza usando ItemBuilder
                     if (profile != null) {
@@ -495,7 +503,7 @@ class LeaderboardService(
                         headerDisplays.forEach { it.remove() }
                     }
                 }
-            }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+            }, { command -> taskScheduler.runAsync(command) })
             
             futures.add(future)
         }
@@ -535,7 +543,7 @@ class LeaderboardService(
                     
                     val future = CompletableFuture.runAsync({
                         val p = CompletableFuture<Void>()
-                        Bukkit.getRegionScheduler().execute(plugin, active.location) {
+                        regionTaskScheduler.runAtLocation(active.location) {
                             val stand = Bukkit.getEntity(active.uuid) as? ArmorStand
                             if (stand != null) {
                                 stand.passengers.forEach { it.remove() }
@@ -551,7 +559,7 @@ class LeaderboardService(
                             p.complete(null)
                         }
                         p.join()
-                    }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+                    }, { command -> taskScheduler.runAsync(command) })
                     futures.add(future)
                 }
             }
@@ -575,7 +583,7 @@ class LeaderboardService(
                             if (locationChanged) {
                                 val p1 = CompletableFuture<Void>()
                                 // Regional en la vieja localización para teleportar stand y limpiar displays viejos
-                                Bukkit.getRegionScheduler().execute(plugin, oldLoc) {
+                                regionTaskScheduler.runAtLocation(oldLoc) {
                                     val stand = Bukkit.getEntity(active.uuid) as? ArmorStand
                                     if (stand != null) {
                                         stand.teleport(newLoc)
@@ -592,14 +600,14 @@ class LeaderboardService(
                                 
                                 p1.thenRun {
                                     // Regional en la NUEVA localización para configurar displays y registrar en memoria
-                                    Bukkit.getRegionScheduler().execute(plugin, newLoc) {
+                                    regionTaskScheduler.runAtLocation(newLoc) {
                                         spawnOrFindLeaderboard(newLoc, id, rank)
                                     }
                                 }.join()
                             } else {
                                 // No cambió localización, refrescar displays y configuración regionalmente
                                 val p2 = CompletableFuture<Void>()
-                                Bukkit.getRegionScheduler().execute(plugin, newLoc) {
+                                regionTaskScheduler.runAtLocation(newLoc) {
                                     spawnOrFindLeaderboard(newLoc, id, rank)
                                     p2.complete(null)
                                 }
@@ -607,24 +615,24 @@ class LeaderboardService(
                             }
                         } else {
                             // Nuevo podio añadido a mano, spawnear directamente regionalmente
-                            val p3 = CompletableFuture<Void>()
-                            Bukkit.getRegionScheduler().execute(plugin, newLoc) {
-                                spawnOrFindLeaderboard(newLoc, id, rank)
-                                p3.complete(null)
-                            }
-                            p3.join()
+                             val p3 = CompletableFuture<Void>()
+                             regionTaskScheduler.runAtLocation(newLoc) {
+                                 spawnOrFindLeaderboard(newLoc, id, rank)
+                                 p3.complete(null)
+                             }
+                             p3.join()
                         }
-                    }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+                     }, { command -> taskScheduler.runAsync(command) })
                     
                     futures.add(future)
                 }
             }
-
+ 
             // 3. Esperar a que se procesen todas las tareas regionales y refrescar stats
             CompletableFuture.allOf(*futures.toTypedArray()).thenRun {
                 refreshAllLeaderboards()
             }.join()
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }, { command -> taskScheduler.runAsync(command) })
     }
 
     fun shutdown() {

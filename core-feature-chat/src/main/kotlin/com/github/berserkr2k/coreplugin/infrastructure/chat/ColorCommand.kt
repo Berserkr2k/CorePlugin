@@ -16,14 +16,18 @@ import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
 
 class ColorCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val profileRegistry: ProfileRegistry,
     private val configManager: ModularConfigManager,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val serviceRegistry: ServiceRegistry
 ) {
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
     private var menuConfig = ColorMenuConfig()
 
     init {
@@ -109,9 +113,9 @@ class ColorCommand(
                         p.sendMessage(ColorUtility.parse(colorMsg))
                         
                         // Reabrir regionalmente para refrescar estado en el mismo tick regional
-                        Bukkit.getRegionScheduler().execute(plugin, p.location) {
+                        regionTaskScheduler.runAtLocation(p.location, Runnable {
                             openColorMenu(p)
-                        }
+                        })
                     } else {
                         p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
                         p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar este color.</red>"))
@@ -142,9 +146,9 @@ class ColorCommand(
                 p.playSound(p.location, Sound.BLOCK_LAVA_EXTINGUISH, 1.0f, 1.5f)
                 p.sendMessage(ColorUtility.parse("<yellow>Has restablecido tu color de chat al valor por defecto.</yellow>"))
                 
-                Bukkit.getRegionScheduler().execute(plugin, p.location) {
+                regionTaskScheduler.runAtLocation(p.location, Runnable {
                     openColorMenu(p)
-                }
+                })
             }
         }
 

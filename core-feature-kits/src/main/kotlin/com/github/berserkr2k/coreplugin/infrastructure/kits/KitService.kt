@@ -22,6 +22,10 @@ import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
 
 sealed class ClaimResult {
     data class Success(val message: String) : ClaimResult()
@@ -34,10 +38,14 @@ class KitService(
     private val databaseService: DatabaseService,
     private val economyService: EconomyService,
     private val messagesConfig: MessagesConfig,
-    private val profileRegistry: ProfileRegistry
+    private val profileRegistry: ProfileRegistry,
+    private val registry: ServiceRegistry
 ) {
     val kits = ConcurrentHashMap<String, KitConfig>()
     private val kitsFolder = plugin.dataFolder.resolve("kits")
+    
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
 
     init {
         loadAllKits()
@@ -166,12 +174,12 @@ class KitService(
             // Actualizar cooldown en caché (isDirty se marcará a true automáticamente)
             val now = System.currentTimeMillis()
             profile.setCooldown(kitId, now)
-
-            Bukkit.getRegionScheduler().run(plugin, player.location) { _ ->
+ 
+            regionTaskScheduler.runAtLocation(player.location, Runnable {
                 itemStacks.forEach { item ->
                     player.inventory.addItem(item)
                 }
-
+ 
                 config.commands.forEach { cmdTemplate ->
                     val resolvedCmd = cmdTemplate.replace("%player_name%", player.name)
                     if (resolvedCmd.startsWith("console:", ignoreCase = true)) {
@@ -182,21 +190,21 @@ class KitService(
                         player.performCommand(command)
                     }
                 }
-
+ 
                 try {
                     val sound = Sound.valueOf(config.effects.sound.uppercase())
                     player.playSound(player.location, sound, 1.0f, 1.0f)
                 } catch (e: Exception) {
                 }
-
+ 
                 try {
                     val particle = Particle.valueOf(config.effects.particle.uppercase())
                     player.spawnParticle(particle, player.location.add(0.0, 1.0, 0.0), 15, 0.5, 0.5, 0.5, 0.05)
                 } catch (e: Exception) {
                 }
-            }
-
+            })
+ 
             ClaimResult.Success(messagesConfig.utility["kit-claimed"] ?: "<green>¡Has reclamado tu kit con éxito!</green>")
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }, { command -> taskScheduler.runAsync(command) })
     }
 }

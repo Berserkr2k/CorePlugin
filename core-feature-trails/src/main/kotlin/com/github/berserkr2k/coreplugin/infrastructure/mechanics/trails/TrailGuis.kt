@@ -8,16 +8,21 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+
 class TrailGuis(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val trailManager: ProjectileTrailManager
+    private val trailManager: ProjectileTrailManager,
+    private val serviceRegistry: ServiceRegistry
 ) {
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
     fun openTrailSelector(player: Player) {
         val selectorConfig = trailManager.selectorConfig
         val menu = CustomMenu(
@@ -90,9 +95,9 @@ class TrailGuis(
                         p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
                         p.sendMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
                         // Reabrir regionalmente en sincronismo
-                        Bukkit.getRegionScheduler().execute(plugin, p.location) {
+                        regionTaskScheduler.runAtLocation(p.location, Runnable {
                             openTrailSelector(p)
-                        }
+                        })
                     }
                 } else {
                     p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
@@ -157,9 +162,9 @@ class TrailGuis(
                 p.playSound(p.location, soundEnum, 1.0f, 1.5f)
                 p.sendMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
                 // Reabrir regionalmente
-                Bukkit.getRegionScheduler().execute(plugin, p.location) {
+                regionTaskScheduler.runAtLocation(p.location, Runnable {
                     openTrailSelector(p)
-                }
+                })
             }
         }
 

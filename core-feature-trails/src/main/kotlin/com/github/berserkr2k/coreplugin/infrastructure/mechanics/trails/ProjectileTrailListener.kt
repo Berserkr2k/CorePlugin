@@ -16,11 +16,16 @@ import org.bukkit.util.Vector
 
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
 
 class ProjectileTrailListener(
     private val plugin: Plugin,
-    private val trailManager: ProjectileTrailManager
+    private val trailManager: ProjectileTrailManager,
+    private val registry: ServiceRegistry
 ) : Listener {
+ 
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
 
     private val trailKey = NamespacedKey(plugin, "projectile_trail_id")
 
@@ -104,7 +109,7 @@ class ProjectileTrailListener(
             angleState += velLength * config.spiralSpeed
 
             // 3. Delegar los cálculos trigonométricos pesados y la creación de paquetes al hilo asíncrono
-            Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+            taskScheduler.runAsync {
                 val dist = pPrev.distance(pCurr)
                 if (dist < 0.05) {
                     spawnParticleAt(pCurr, config, currentAngle, dir, activeBurstCount, velLength)

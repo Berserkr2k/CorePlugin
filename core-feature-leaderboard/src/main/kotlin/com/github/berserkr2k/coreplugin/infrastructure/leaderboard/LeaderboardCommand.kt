@@ -14,15 +14,20 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
 import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 class LeaderboardCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val leaderboardService: LeaderboardService
+    private val leaderboardService: LeaderboardService,
+    private val serviceRegistry: ServiceRegistry
 ) {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
     private val miniMessage = MiniMessage.miniMessage()
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
 
     init {
         manager.command(
@@ -41,7 +46,7 @@ class LeaderboardCommand(
                     val target = player.getTargetEntity(5)
                     
                     if (target is ArmorStand) {
-                        Bukkit.getRegionScheduler().execute(plugin, target.location) {
+                        regionTaskScheduler.runAtLocation(target.location, Runnable {
                             target.persistentDataContainer.set(leaderboardKey, PersistentDataType.STRING, id)
                             target.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
                             
@@ -52,10 +57,10 @@ class LeaderboardCommand(
                                 player.sendMessage(miniMessage.deserialize("<green>¡ArmorStand registrado con éxito como podio para '$id' (Top $rank)!</green>"))
                                 leaderboardService.refreshAllLeaderboards()
                             }
-                        }
+                        })
                     } else {
                         val loc = player.location.clone()
-                        Bukkit.getRegionScheduler().execute(plugin, loc) {
+                        regionTaskScheduler.runAtLocation(loc, Runnable {
                             val stand = loc.world.spawnEntity(loc, EntityType.ARMOR_STAND) as ArmorStand
                             stand.setArms(true)
                             stand.setBasePlate(true)
@@ -68,7 +73,7 @@ class LeaderboardCommand(
                                 player.sendMessage(miniMessage.deserialize("<green>¡Nuevo ArmorStand de podio creado para '$id' (Top $rank)!</green>"))
                                 leaderboardService.refreshAllLeaderboards()
                             }
-                        }
+                        })
                     }
                 }
         )

@@ -11,12 +11,17 @@ import java.math.RoundingMode
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
 
 class ShopManager(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val databaseService: DatabaseService
+    private val databaseService: DatabaseService,
+    private val registry: ServiceRegistry
 ) {
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
     lateinit var marketConfig: MarketConfig
         private set
     
@@ -206,14 +211,14 @@ $itemsStr
 
     private fun startSchedulers() {
         // Programar actualización de volumen activo (cada 1 hora)
-        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+        taskScheduler.runAsyncTimer({
             refreshMarketCache()
-        }, 1, 1, TimeUnit.HOURS)
+        }, 72000L, 72000L)
 
         // Programar purga de 7 días (cada 24 horas)
-        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+        taskScheduler.runAsyncTimer({
             purgeOldMarketTransactions()
-        }, 24, 24, TimeUnit.HOURS)
+        }, 1728000L, 1728000L)
     }
 
     fun recordTransaction(player: org.bukkit.entity.Player, shopId: String, itemId: String, type: String, quantity: Int, totalPrice: BigDecimal): CompletableFuture<Void> {

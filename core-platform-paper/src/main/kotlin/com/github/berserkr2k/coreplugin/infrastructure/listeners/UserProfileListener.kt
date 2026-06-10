@@ -10,7 +10,8 @@ import org.bukkit.plugin.Plugin
 
 class UserProfileListener(
     private val plugin: Plugin,
-    private val profileRegistry: ProfileRegistry
+    private val profileRegistry: ProfileRegistry,
+    private val stateService: com.github.berserkr2k.coreplugin.api.state.PlayerStateService
 ) : Listener {
 
     @EventHandler
@@ -56,6 +57,8 @@ class UserProfileListener(
             profileRegistry.unloadAndSave(uuid).join()
         } catch (e: Exception) {
             plugin.logger.severe("❌ Error al guardar perfil de salida para ${player.name}: ${e.message}")
+        } finally {
+            stateService.removeContainers(uuid)
         }
     }
 }

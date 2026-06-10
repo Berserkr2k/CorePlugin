@@ -24,31 +24,44 @@ import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.state.StateContainerType
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 
+class ArmorStandEditorStateContainer(
+    var editingStandUuid: UUID? = null,
+    var scaleMode: ScaleMode = ScaleMode.COARSE,
+    var copiedSettings: CopiedSettings? = null,
+    var renamingStandUuid: UUID? = null,
+    var originalHandItem: ItemStack? = null
+) : StateContainer
+
 class ArmorStandEditorListener(
     private val plugin: Plugin,
     private val leaderboardService: LeaderboardService,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val registry: ServiceRegistry
 ) : Listener {
 
     private val editorKey = NamespacedKey(plugin, "stand_editor_tool")
     private val miniMessage = MiniMessage.miniMessage()
     
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+    private val stateService = registry.get(PlayerStateService::class.java)
+
+    private fun getEditorState(uuid: UUID): ArmorStandEditorStateContainer {
+        return stateService.getContainer(uuid, ARMOR_STAND_EDITOR_STATE)
+    }
+    
     companion object {
-        // Almacenamiento seguro multihilo para seguir el objetivo editado de cada jugador en Folia
-        val playerEditingSessions = ConcurrentHashMap<UUID, UUID>()
-        val playerScale = ConcurrentHashMap<UUID, ScaleMode>()
-        val copiedSettings = ConcurrentHashMap<UUID, CopiedSettings>()
-        val renamingSessions = ConcurrentHashMap<UUID, UUID>()
-        
-        // Mapeo para almacenar el ítem original de la mano
-        val originalHands = ConcurrentHashMap<UUID, ItemStack>()
-        
+        val ARMOR_STAND_EDITOR_STATE = StateContainerType { ArmorStandEditorStateContainer() }
         lateinit var poseToolKey: NamespacedKey
     }
 
@@ -78,7 +91,8 @@ class ArmorStandEditorListener(
         // 1. Validación atómica de la Vara de Edición mediante PDC
         if (meta.persistentDataContainer.has(editorKey, PersistentDataType.BOOLEAN)) {
             event.isCancelled = true
-            playerEditingSessions[player.uniqueId] = target.uniqueId
+            val state = getEditorState(player.uniqueId)
+            state.editingStandUuid = target.uniqueId
             
             // Abrir la GUI nativa del editor
             ArmorStandEditorGui.open(plugin, player, target)
@@ -212,7 +226,9 @@ class ArmorStandEditorListener(
     }
 
     private fun cleanupPoseTool(player: Player) {
-        val backup = originalHands.remove(player.uniqueId)
+        val state = getEditorState(player.uniqueId)
+        val backup = state.originalHandItem
+        state.originalHandItem = null
         val mainHand = player.inventory.itemInMainHand
         if (mainHand.type != Material.AIR) {
             val meta = mainHand.itemMeta
@@ -227,17 +243,13 @@ class ArmorStandEditorListener(
     }
 
     private fun applyPoseChange(player: Player, standUuid: UUID, part: String, axis: String, isIncrease: Boolean) {
-        val stand = Bukkit.getEntity(standUuid) as? ArmorStand
-        if (stand == null) {
-            player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
-            return
-        }
-
-        val scale = playerScale[player.uniqueId] ?: ScaleMode.COARSE
+        val stand = Bukkit.getEntity(standUuid) as? ArmorStand ?: return
+        val state = getEditorState(player.uniqueId)
+        val scale = state.scaleMode
         val angleRad = Math.toRadians(scale.rotationAngle)
 
         // Mutar la postura de forma segura en la región del ArmorStand
-        Bukkit.getRegionScheduler().execute(plugin, stand.location) {
+        regionTaskScheduler.runAtLocation(stand.location) {
             val currentPose = getPartPose(stand, part)
             val delta = if (isIncrease) angleRad else -angleRad
             val newPose = when (axis.uppercase()) {
@@ -303,7 +315,10 @@ class ArmorStandEditorListener(
     @EventHandler
     fun onPlayerChat(event: AsyncChatEvent) {
         val player = event.player
-        val targetStandUuid = renamingSessions.remove(player.uniqueId) ?: return
+        val state = getEditorState(player.uniqueId)
+        val targetStandUuid = state.renamingStandUuid
+        state.renamingStandUuid = null
+        if (targetStandUuid == null) return
         
         event.isCancelled = true
         
@@ -316,7 +331,7 @@ class ArmorStandEditorListener(
             return
         }
         
-        Bukkit.getRegionScheduler().execute(plugin, stand.location) {
+        regionTaskScheduler.runAtLocation(stand.location) {
             stand.customName(deserialized)
             stand.isCustomNameVisible = true
             player.sendMessage(miniMessage.deserialize("<green>¡Nombre asignado con éxito!</green>"))

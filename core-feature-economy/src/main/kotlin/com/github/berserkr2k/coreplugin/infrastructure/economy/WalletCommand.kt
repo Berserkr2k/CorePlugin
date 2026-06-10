@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.economy
 
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
@@ -15,12 +16,16 @@ import com.github.berserkr2k.coreplugin.common.TransactionLockManager
 import java.math.BigDecimal
 import java.util.UUID
 
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+
 class WalletCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val economyService: EconomyService,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val serviceRegistry: ServiceRegistry
 ) {
+    private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
 
     init {
         registerWalletCommands()
@@ -77,7 +82,7 @@ class WalletCommand(
 
     private fun showWallet(sender: CommandSender, uuid: UUID, targetName: String) {
         // Ejecutar en segundo plano de forma no bloqueante
-        Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+        taskScheduler.runAsync {
             // Cargar el formato del header de messages.conf
             val headerTemplate = messagesConfig.leaderboards["header"] ?: "<gold><bold>★ BILLETERA DE <top_id> ★</bold></gold>\n"
             val builder = StringBuilder(headerTemplate.replace("<top_id>", targetName))
@@ -322,7 +327,7 @@ class WalletCommand(
                     }
 
                     // Para ejecutar SET en modifyBalance calculamos la diferencia
-                    Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+                    taskScheduler.runAsync {
                         val current = economyService.getBalance(uuid, currency.id)
                         val diff = amount.subtract(current)
                         economyService.modifyBalance(uuid, currency.id, diff, "ADMIN_SET").thenAccept { success ->
@@ -381,7 +386,7 @@ class WalletCommand(
             sender.sendMessage(ColorUtility.parse(getMsg("no-permission-currency")))
             return
         }
-        Bukkit.getAsyncScheduler().runNow(plugin) { _ ->
+        taskScheduler.runAsync {
             val bal = economyService.getBalance(uuid, currency.id)
             val formatted = economyService.formatBalance(currency.id, bal)
             sender.sendMessage(ColorUtility.parse(getMsg("balance-display", "player" to targetName, "currency" to currency.displayName, "amount" to formatted)))

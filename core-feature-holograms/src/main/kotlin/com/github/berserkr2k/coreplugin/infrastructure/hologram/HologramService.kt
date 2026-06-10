@@ -14,19 +14,25 @@ import com.comphenix.protocol.PacketType
 import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.events.ListenerPriority
-import org.spongepowered.configurate.objectmapping.ConfigSerializable
-import java.io.File
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
 
 
 class HologramService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val placeholderBridge: LegacyPlaceholderBridge
+    private val placeholderBridge: LegacyPlaceholderBridge,
+    private val registry: ServiceRegistry
 ) {
     private val activeHolograms = ConcurrentHashMap<String, ModernHologram>()
-    private val refreshTasks = ConcurrentHashMap<String, io.papermc.paper.threadedregions.scheduler.ScheduledTask>()
+    private val refreshTasks = ConcurrentHashMap<String, Task>()
     private val configs = ConcurrentHashMap<String, HologramConfig>()
     private val hologramsFolder = plugin.dataFolder.resolve("holograms")
+    
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
 
     init {
         // 1. Crear carpeta de hologramas si no existe, y poblar con default si está vacía
@@ -36,15 +42,15 @@ class HologramService(
         loadAllHolograms()
 
         // 4. Tarea repetitiva asíncrona de seguimiento de rango de visión (cada 1 segundo)
-        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+        taskScheduler.runAsyncTimer({
             updateTracking()
-        }, 1, 1, java.util.concurrent.TimeUnit.SECONDS)
+        }, 20L, 20L)
 
         // 5. Registro del receptor de clics en la hitbox del cliente usando ProtocolLib
         registerPacketListener()
 
         // 6. Registro del listener de desconexión del jugador en el programador global
-        Bukkit.getGlobalRegionScheduler().execute(plugin) {
+        taskScheduler.runSync {
             plugin.server.pluginManager.registerEvents(HologramListener(plugin, this), plugin)
         }
     }
@@ -76,7 +82,7 @@ class HologramService(
                         val loc = Location(world, loadedConfig.x, loadedConfig.y, loadedConfig.z)
 
                         // Limpieza de entidades físicas remanentes de versiones anteriores
-                        Bukkit.getRegionScheduler().execute(plugin, loc) {
+                        regionTaskScheduler.runAtLocation(loc) {
                             world.getNearbyEntities(loc, 3.0, 5.0, 3.0) { entity ->
                                 entity is TextDisplay || entity is Interaction
                             }.forEach { it.remove() }
@@ -129,7 +135,7 @@ class HologramService(
                 val holo = getHologramByInteractionId(targetId) ?: return
 
                 // Ejecución segura en el programador de la región del jugador
-                Bukkit.getRegionScheduler().execute(plugin, player.location) {
+                regionTaskScheduler.runAtLocation(player.location) {
                     holo.clickCommand?.let { cmd ->
                         val parsedCmd = cmd.replace("%player%", player.name)
                         player.performCommand(parsedCmd)
@@ -277,17 +283,17 @@ class HologramService(
         return java.util.concurrent.CompletableFuture.runAsync({
             loadAllHolograms()
             plugin.logger.info("¡Se han recargado con éxito ${activeHolograms.size} hologramas desde la carpeta holograms/!")
-        }, { command -> Bukkit.getAsyncScheduler().runNow(plugin) { _ -> command.run() } })
+        }, { command -> taskScheduler.runAsync(command) })
     }
 
     private fun scheduleHologramUpdate(holo: ModernHologram, intervalMinutes: Int) {
         refreshTasks.remove(holo.id)?.cancel()
-        val intervalSeconds = (intervalMinutes * 60).toLong()
-        val task = Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+        val intervalTicks = (intervalMinutes * 60 * 20).toLong()
+        val task = taskScheduler.runAsyncTimer({
             if (activeHolograms.containsKey(holo.id)) {
                 holo.refreshForViewers()
             }
-        }, intervalSeconds, intervalSeconds, java.util.concurrent.TimeUnit.SECONDS)
+        }, intervalTicks, intervalTicks)
         refreshTasks[holo.id] = task
     }
 

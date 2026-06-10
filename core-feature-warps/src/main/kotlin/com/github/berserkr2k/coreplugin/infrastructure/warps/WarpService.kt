@@ -7,7 +7,13 @@ import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.getWarps
-import io.papermc.paper.threadedregions.scheduler.ScheduledTask
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.state.StateContainerType
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Sound
@@ -22,20 +28,30 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
+class WarpStateContainer(
+    val cooldowns: ConcurrentHashMap<String, Long> = ConcurrentHashMap(),
+    var activeWarmup: Task? = null
+) : StateContainer
+
+val WARP_STATE = StateContainerType { WarpStateContainer() }
+
 class WarpService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val messagesConfig: MessagesConfig
+    private val messagesConfig: MessagesConfig,
+    private val registry: ServiceRegistry
 ) : Listener {
+
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+    private val stateService = registry.get(PlayerStateService::class.java)
 
     private val warpsDir = plugin.dataFolder.resolve("warps")
     private val warps = ConcurrentHashMap<String, WarpConfig>()
-    
-    // UUID -> Warp Name -> Cooldown Expiration Timestamp (ms)
-    private val cooldowns = ConcurrentHashMap<UUID, ConcurrentHashMap<String, Long>>()
-    
-    // UUID -> Active Warmup Task
-    private val activeWarmups = ConcurrentHashMap<UUID, ScheduledTask>()
+
+    private fun getWarpState(uuid: UUID): WarpStateContainer {
+        return stateService.getContainer(uuid, WARP_STATE)
+    }
 
     var menuConfig = MenuConfig(
         title = "<dark_gray>Puntos de Teletransporte</dark_gray>",
@@ -137,15 +153,14 @@ class WarpService(
 
         // 2. Validar Cooldown (salvo bypass)
         val now = System.currentTimeMillis()
+        val warpState = getWarpState(player.uniqueId)
         if (!player.hasPermission("core.warps.bypass.cooldown")) {
-            val userCooldowns = cooldowns[player.uniqueId]
-            if (userCooldowns != null) {
-                val exp = userCooldowns[warp.name.lowercase()]
-                if (exp != null && exp > now) {
-                    val remaining = (exp - now + 999) / 1000
-                    player.sendMessage(ColorUtility.parse(messagesConfig.getWarps("cooldown-active", "time" to remaining)))
-                    return
-                }
+            val userCooldowns = warpState.cooldowns
+            val exp = userCooldowns[warp.name.lowercase()]
+            if (exp != null && exp > now) {
+                val remaining = (exp - now + 999) / 1000
+                player.sendMessage(ColorUtility.parse(messagesConfig.getWarps("cooldown-active", "time" to remaining)))
+                return
             }
         }
 
@@ -153,17 +168,21 @@ class WarpService(
         val warmup = warp.warmupSeconds
         if (warmup > 0 && !player.hasPermission("core.warps.bypass.warmup")) {
             // Cancelar warmup anterior si hay
-            activeWarmups.remove(player.uniqueId)?.cancel()
+            warpState.activeWarmup?.cancel()
+            warpState.activeWarmup = null
 
             player.sendMessage(ColorUtility.parse(messagesConfig.getWarps("warmup", "time" to warmup)))
             
             // Iniciar tarea regional segura
-            val task = Bukkit.getRegionScheduler().runDelayed(plugin, player.location, { _ ->
-                activeWarmups.remove(player.uniqueId)
-                performTeleport(player, warp)
+            val task = taskScheduler.runSyncLater(Runnable {
+                regionTaskScheduler.runAtLocation(player.location, Runnable {
+                    val st = getWarpState(player.uniqueId)
+                    st.activeWarmup = null
+                    performTeleport(player, warp)
+                })
             }, warmup * 20L)
             
-            activeWarmups[player.uniqueId] = task
+            warpState.activeWarmup = task
         } else {
             performTeleport(player, warp)
         }
@@ -186,7 +205,8 @@ class WarpService(
                 // Aplicar Cooldown si es > 0
                 if (warp.cooldownSeconds > 0) {
                     val expireTime = System.currentTimeMillis() + (warp.cooldownSeconds * 1000L)
-                    cooldowns.computeIfAbsent(player.uniqueId) { ConcurrentHashMap() }[warp.name.lowercase()] = expireTime
+                    val warpState = getWarpState(player.uniqueId)
+                    warpState.cooldowns[warp.name.lowercase()] = expireTime
                 }
             } else {
                 player.sendMessage(ColorUtility.parse("<red>No se pudo realizar la teletransportación.</red>"))
@@ -195,9 +215,11 @@ class WarpService(
     }
 
     private fun cancelWarmup(player: Player, messageKey: String) {
-        val task = activeWarmups.remove(player.uniqueId)
+        val warpState = getWarpState(player.uniqueId)
+        val task = warpState.activeWarmup
         if (task != null) {
             task.cancel()
+            warpState.activeWarmup = null
             player.sendMessage(ColorUtility.parse(messagesConfig.getWarps(messageKey)))
         }
     }
@@ -205,7 +227,8 @@ class WarpService(
     @EventHandler
     fun onPlayerMove(event: PlayerMoveEvent) {
         val player = event.player
-        if (activeWarmups.containsKey(player.uniqueId)) {
+        val warpState = getWarpState(player.uniqueId)
+        if (warpState.activeWarmup != null) {
             // Verificar si hubo un cambio de bloque real
             val from = event.from
             val to = event.to
@@ -218,14 +241,16 @@ class WarpService(
     @EventHandler
     fun onPlayerDamage(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
-        if (activeWarmups.containsKey(player.uniqueId)) {
+        val warpState = getWarpState(player.uniqueId)
+        if (warpState.activeWarmup != null) {
             cancelWarmup(player, "cancelled-damage")
         }
     }
 
     @EventHandler
     fun onPlayerQuit(event: PlayerQuitEvent) {
-        activeWarmups.remove(event.player.uniqueId)?.cancel()
-        cooldowns.remove(event.player.uniqueId)
+        val warpState = getWarpState(event.player.uniqueId)
+        warpState.activeWarmup?.cancel()
+        warpState.activeWarmup = null
     }
 }

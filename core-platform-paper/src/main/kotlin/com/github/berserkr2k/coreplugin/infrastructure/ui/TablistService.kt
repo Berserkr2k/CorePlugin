@@ -10,12 +10,17 @@ import net.kyori.adventure.bossbar.BossBar
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.UUID
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.scheduler.Task
 
 class TablistService(
     private val plugin: Plugin,
     private val papiBridge: LegacyPlaceholderBridge,
-    private val configManager: ModularConfigManager
+    private val configManager: ModularConfigManager,
+    private val registry: ServiceRegistry
 ) {
+    private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val activeBossBars = ConcurrentHashMap<UUID, BossBar>()
     private var tablistConfig = TablistConfig()
 
@@ -30,23 +35,23 @@ class TablistService(
 
     private fun startTablistScheduler() {
         // Programación asíncrona robusta exenta de hilos bloqueantes (Paper/Folia compatible)
-        Bukkit.getAsyncScheduler().runAtFixedRate(plugin, { _ ->
+        taskScheduler.runAsyncTimer({
             for (player in Bukkit.getOnlinePlayers()) {
                 val group = resolvePlayerPriorityGroup(player)
                 val priority = group?.priority ?: 100
                 player.playerListOrder = priority
-
+ 
                 // Aplicar el color permanente en la tablist
                 val color = group?.color ?: "<white>"
                 val coloredName = com.github.berserkr2k.coreplugin.common.ColorUtility.parse("$color${player.name}")
                 player.playerListName(coloredName)
-
+ 
                 val header = papiBridge.parseLegacyStringSecurely(player, tablistConfig.tablistHeader)
                 val footer = papiBridge.parseLegacyStringSecurely(player, tablistConfig.tablistFooter)
-
+ 
                 player.sendPlayerListHeaderAndFooter(header, footer)
             }
-        }, 0, 1, TimeUnit.SECONDS)
+        }, 0L, 20L)
     }
 
     private fun resolvePlayerPriorityGroup(player: Player): TablistConfig.TablistPriorityGroup? {

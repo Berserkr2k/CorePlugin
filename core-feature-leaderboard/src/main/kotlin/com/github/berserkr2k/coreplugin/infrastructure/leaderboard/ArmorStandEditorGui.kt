@@ -16,6 +16,8 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.EulerAngle
 import org.bukkit.Bukkit
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
+import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 @ConfigSerializable
 data class ArmorStandEditorGuiConfig(
@@ -31,12 +33,14 @@ object ArmorStandEditorGui {
 
     private lateinit var plugin: Plugin
     private lateinit var configManager: ModularConfigManager
+    private lateinit var playerStateService: PlayerStateService
 
     lateinit var guiConfig: ArmorStandEditorGuiConfig
 
-    fun init(plugin: Plugin, configManager: ModularConfigManager) {
+    fun init(plugin: Plugin, configManager: ModularConfigManager, serviceRegistry: ServiceRegistry) {
         this.plugin = plugin
         this.configManager = configManager
+        this.playerStateService = serviceRegistry.get(PlayerStateService::class.java)
         reloadConfigs()
     }
 
@@ -48,11 +52,16 @@ object ArmorStandEditorGui {
         ).join()
     }
 
+    private fun getEditorState(player: Player): ArmorStandEditorStateContainer {
+        return playerStateService.getContainer(player.uniqueId, ArmorStandEditorListener.ARMOR_STAND_EDITOR_STATE)
+    }
+
     /**
      * Menú Principal del Editor
      */
     fun open(plugin: Plugin, player: Player, stand: ArmorStand) {
-        val scale = ArmorStandEditorListener.playerScale.computeIfAbsent(player.uniqueId) { ScaleMode.COARSE }
+        val state = getEditorState(player)
+        val scale = state.scaleMode
         
         val scaleLore = if (scale == ScaleMode.COARSE) {
             "<yellow>Modo actual: <bold>GRUESO</bold></yellow> (<gray>15° / 0.5m</gray>)"
@@ -79,7 +88,8 @@ object ArmorStandEditorGui {
             for (slot in EquipmentSlot.values()) {
                 equipMap[slot] = stand.equipment.getItem(slot)
             }
-            ArmorStandEditorListener.copiedSettings[p.uniqueId] = CopiedSettings(
+            val st = getEditorState(p)
+            st.copiedSettings = CopiedSettings(
                 headPose = stand.headPose,
                 bodyPose = stand.bodyPose,
                 leftArmPose = stand.leftArmPose,
@@ -98,7 +108,8 @@ object ArmorStandEditorGui {
         }
 
         menu.registerLocalAction("paste") { p, _ ->
-            val copied = ArmorStandEditorListener.copiedSettings[p.uniqueId]
+            val st = getEditorState(p)
+            val copied = st.copiedSettings
             if (copied == null) {
                 p.sendMessage(ColorUtility.parse("<red>❌ No tienes ajustes copiados en el portapapeles.</red>"))
                 return@registerLocalAction
@@ -128,13 +139,15 @@ object ArmorStandEditorGui {
 
         menu.registerLocalAction("rename") { p, _ ->
             p.closeInventory()
-            ArmorStandEditorListener.renamingSessions[p.uniqueId] = stand.uniqueId
+            val st = getEditorState(p)
+            st.renamingStandUuid = stand.uniqueId
             p.sendMessage(ColorUtility.parse("<gold>✏ Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>"))
         }
 
         menu.registerLocalAction("scale") { p, _ ->
             val nextScale = if (scale == ScaleMode.COARSE) ScaleMode.FINE else ScaleMode.COARSE
-            ArmorStandEditorListener.playerScale[p.uniqueId] = nextScale
+            val st = getEditorState(p)
+            st.scaleMode = nextScale
             p.sendMessage(ColorUtility.parse("<green>✔ Escala de ajuste cambiada a ${nextScale.name}.</green>"))
             open(plugin, p, stand)
         }
@@ -201,7 +214,8 @@ object ArmorStandEditorGui {
 
         // 1. Guardar backup de la mano actual del jugador
         val currentItem = player.inventory.itemInMainHand
-        ArmorStandEditorListener.originalHands[player.uniqueId] = currentItem.clone()
+        val st = getEditorState(player)
+        st.originalHandItem = currentItem.clone()
 
         // 2. Crear la herramienta de pose (Palanca)
         val tool = ItemStack(Material.LEVER)
@@ -244,7 +258,8 @@ object ArmorStandEditorGui {
      * Sub-Menú: Trasladación Física y Yaw
      */
     private fun openPositionMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
-        val scale = ArmorStandEditorListener.playerScale[player.uniqueId] ?: ScaleMode.COARSE
+        val st = getEditorState(player)
+        val scale = st.scaleMode
         val dist = scale.moveDistance
         val deg = scale.rotationAngle
 
