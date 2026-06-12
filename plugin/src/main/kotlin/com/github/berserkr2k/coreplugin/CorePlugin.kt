@@ -23,12 +23,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.warps.WarpCommand
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.AnvilModule
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramService
 import com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramCommand
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardService
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardCommand
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorListener
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorCommand
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
-import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorGui
+// Leaderboard imports removed
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.TablistService
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardService
@@ -82,7 +77,6 @@ class CorePlugin(
     private var profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry? = null
     private var anvilModule: AnvilModule? = null
     private var hologramService: HologramService? = null
-    private var leaderboardService: LeaderboardService? = null
     private var chairListener: ChairListener? = null
     private var tablistService: TablistService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
@@ -191,6 +185,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.UtilityFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -279,23 +274,7 @@ class CorePlugin(
             HologramCommand(this, commandManager, holoService, messageRegistry)
         }
 
-        // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands
-        initDbDependentModule("Podios y Clasificaciones") {
-            val lService = LeaderboardService(this, configManager, messageRegistry, databaseService!!, placeholderBridge, profileRegistry!!, serviceRegistry)
-            leaderboardService = lService
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService::class.java, lService)
-            server.pluginManager.registerEvents(lService, this)
-            LeaderboardCommand(this, commandManager, lService, serviceRegistry, messageRegistry)
-
-            val editorConfig = configManager.loadModuleConfig("core/editor.conf", EditorConfig::class.java, EditorConfig()).join()
-            // Eliminado del ServiceRegistry público
-            ArmorStandEditorGui.init(this, configManager, serviceRegistry)
-            ArmorStandEditorCommand(this, commandManager, editorConfig, messageRegistry)
-            server.pluginManager.registerEvents(
-                ArmorStandEditorListener(this, lService, messageRegistry, serviceRegistry),
-                this
-            )
-        }
+        // 6. Inicializar Módulo de Podios Físicos e Editor de ArmorStands (Lógica migrada a LeaderboardFeature)
 
         // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
         initModule("Mecánica Sillas") {
@@ -363,12 +342,7 @@ class CorePlugin(
         }
         reloadCoordinator.register("core", coreReloadable)
 
-        val leaderboardReloadable = object : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
-            override suspend fun reload() {
-                leaderboardService?.reload()
-            }
-        }
-        reloadCoordinator.register("leaderboards", leaderboardReloadable)
+        // Leaderboard reload coordinator registered via LeaderboardFeature
 
         regionManager?.let { reloadCoordinator.register("regions", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }
@@ -453,10 +427,7 @@ class CorePlugin(
             hologramService?.shutdown()
             shutdownList.add(" <gray>🔌 <red>Hologramas</red>      : <gold>[ DESACTIVADO ]</gold> (Cerrando visores...)</gray>")
         }
-        if (leaderboardService != null) {
-            leaderboardService?.shutdown()
-            shutdownList.add(" <gray>🔌 <red>Podios</red>          : <gold>[ DESACTIVADO ]</gold> (Limpiando ArmorStands...)</gray>")
-        }
+        // Leaderboard service shutdown handled via LeaderboardFeature
         if (chairListener != null) {
             chairListener?.shutdown()
             shutdownList.add(" <gray>🔌 <red>Sillas</red>          : <gold>[ DESACTIVADO ]</gold> (Desmontando jugadores...)</gray>")

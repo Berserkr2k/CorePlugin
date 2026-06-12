@@ -1,6 +1,9 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
@@ -42,27 +45,72 @@ import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 data class ActivePodium(val uuid: UUID, val location: Location)
 
 class LeaderboardService(
-    private val plugin: Plugin,
-    private val configManager: com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager,
-    private val messageService: MessageService,
-    private val databaseService: DatabaseService,
-    private val placeholderBridge: LegacyPlaceholderBridge,
-    private val profileRegistry: ProfileRegistry,
-    private val registry: ServiceRegistry
+    val plugin: Plugin,
+    private val featureConfig: com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig,
+    private val taskScheduler: TaskScheduler,
+    private val databaseService: DatabaseService
 ) : Listener, com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
     private val miniMessage = MiniMessage.miniMessage()
     
-    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
     private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
+    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
+    private val messageService = registry.get(MessageService::class.java)!!
+    private val profileRegistry = registry.get(ProfileRegistry::class.java)!!
+    private val placeholderBridge = registry.get(LegacyPlaceholderBridge::class.java)!!
 
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()
     
-    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
     private val leaderboardsFolder = folderProvider.getFeatureFolder("economy").resolve("leaderboards").toFile()
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
+    }
+
+    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        mapper.save(instance, root)
+        loader.save(root)
+    }
 
     init {
         // Inicializar directorio e cargar clasificacións
@@ -86,6 +134,7 @@ class LeaderboardService(
     }
 
     override suspend fun reload() {
+        featureConfig.reload()
         loadAllLeaderboards()
         refreshAllLeaderboards()
     }
@@ -98,20 +147,28 @@ class LeaderboardService(
         // Crear clasificaciones por defecto si está vacía
         val defaultCreditsFile = leaderboardsFolder.resolve("credits.conf")
         if (!defaultCreditsFile.exists()) {
-            configManager.loadModuleConfig("economy/leaderboards/credits.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
-                id = "credits",
-                placeholder = "%coreplugin_balance_credits%",
-                displayName = "<gold><bold>TOP CRÉDITOS</bold></gold>"
-            )).join()
+            loadHoconFile(
+                defaultCreditsFile,
+                CustomLeaderboardConfig::class.java,
+                CustomLeaderboardConfig(
+                    id = "credits",
+                    placeholder = "%coreplugin_balance_credits%",
+                    displayName = "<gold><bold>TOP CRÉDITOS</bold></gold>"
+                )
+            )
         }
 
         val defaultKillsFile = leaderboardsFolder.resolve("kills.conf")
         if (!defaultKillsFile.exists()) {
-            configManager.loadModuleConfig("economy/leaderboards/kills.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
-                id = "kills",
-                placeholder = "%statistic_player_kills%",
-                displayName = "<red><bold>TOP KILLS</bold></gold>"
-            )).join()
+            loadHoconFile(
+                defaultKillsFile,
+                CustomLeaderboardConfig::class.java,
+                CustomLeaderboardConfig(
+                    id = "kills",
+                    placeholder = "%statistic_player_kills%",
+                    displayName = "<red><bold>TOP KILLS</bold></gold>"
+                )
+            )
         }
     }
 
@@ -122,7 +179,7 @@ class LeaderboardService(
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val config = configManager.loadModuleConfig("economy/leaderboards/${file.name}", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id)).join()
+                val config = loadHoconFile(file, CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id))
                 leaderboards[id] = config
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la clasificación desde ${file.name}: ${e.message}")
@@ -260,7 +317,8 @@ class LeaderboardService(
             leaderboards[leaderboardId] = updatedConfig
 
             try {
-                configManager.saveModuleConfig("economy/leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+                val file = leaderboardsFolder.resolve("$leaderboardId.conf")
+                saveHoconFile(file, CustomLeaderboardConfig::class.java, updatedConfig)
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId: ${e.message}")
             }
@@ -285,7 +343,8 @@ class LeaderboardService(
             leaderboards[leaderboardId] = updatedConfig
 
             try {
-                configManager.saveModuleConfig("economy/leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+                val file = leaderboardsFolder.resolve("$leaderboardId.conf")
+                saveHoconFile(file, CustomLeaderboardConfig::class.java, updatedConfig)
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId tras remover podio: ${e.message}")
             }
@@ -532,6 +591,7 @@ class LeaderboardService(
 
     override fun reloadLeaderboards(): CompletableFuture<Void> {
         return CompletableFuture.runAsync({
+            featureConfig.reload()
             loadAllLeaderboards()
             
             val configuredKeys = mutableSetOf<String>()

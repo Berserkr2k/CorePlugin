@@ -1,6 +1,8 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuService
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.NamespacedKey
 import org.bukkit.Material
@@ -48,17 +50,21 @@ class ArmorStandEditorStateContainer(
 ) : StateContainer
 
 class ArmorStandEditorListener(
-    private val plugin: Plugin,
     private val leaderboardService: LeaderboardService,
-    private val messageService: MessageService,
-    private val registry: ServiceRegistry
+    private val menuService: MenuService,
+    private val itemBuilderFactory: ItemBuilderFactory
 ) : Listener {
 
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    private val plugin = registry.get(Plugin::class.java)
     private val editorKey = NamespacedKey(plugin, "stand_editor_tool")
     private val miniMessage = MiniMessage.miniMessage()
     
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
     private val stateService = registry.get(PlayerStateService::class.java)
+    private val messageService = registry.get(MessageService::class.java)
 
     private fun getEditorState(uuid: UUID): ArmorStandEditorStateContainer {
         return stateService.getContainer(uuid, ARMOR_STAND_EDITOR_STATE)

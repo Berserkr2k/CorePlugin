@@ -11,13 +11,17 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuService
 
 class ArmorStandEditorCommand(
-    private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val editorConfig: EditorConfig,
-    private val messageService: MessageService
+    private val leaderboardService: LeaderboardService,
+    private val messageService: MessageService,
+    private val menuService: MenuService,
+    private val itemBuilderFactory: ItemBuilderFactory
 ) {
+    private val plugin = leaderboardService.plugin
+    private val editorConfig = ArmorStandEditorGui.editorConfig
 
     init {
         manager.command(
@@ -27,9 +31,8 @@ class ArmorStandEditorCommand(
                .handler { context ->
                     val player = context.sender() as? Player ?: return@handler
                     
-                    val factory = org.bukkit.Bukkit.getServicesManager().load(ItemBuilderFactory::class.java)!!
                     val key = NamespacedKey(plugin, "stand_editor_tool")
-                    val item = factory.create(Material.valueOf(editorConfig.editorItemMaterial))
+                    val item = itemBuilderFactory.create(Material.valueOf(editorConfig.editorItemMaterial))
                         .displayName(editorConfig.editorItemName)
                         .lore(editorConfig.editorItemLore)
                         .writeNBT(key, PersistentDataType.BOOLEAN, true)

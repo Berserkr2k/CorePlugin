@@ -18,15 +18,16 @@ import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.api.protection.permissions.Permissions
 
 class LeaderboardCommand(
-    private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val leaderboardService: LeaderboardService,
-    private val serviceRegistry: ServiceRegistry,
     private val messageService: MessageService
 ) {
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+    private val plugin = registry.get(Plugin::class.java)
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
 
     init {
         manager.command(
