@@ -31,9 +31,6 @@ import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.EditorConfig
 import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.ArmorStandEditorGui
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.ChairListener
 import com.github.berserkr2k.coreplugin.infrastructure.ui.TablistService
-import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyService
-import com.github.berserkr2k.coreplugin.infrastructure.economy.WalletCommand
-import com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyPlaceholderExpansion
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardService
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardCommand
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
@@ -88,7 +85,6 @@ class CorePlugin(
     private var leaderboardService: LeaderboardService? = null
     private var chairListener: ChairListener? = null
     private var tablistService: TablistService? = null
-    private var economyService: EconomyService? = null
     private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
     private var scoreboardService: ScoreboardService? = null
@@ -193,6 +189,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.warps.WarpFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.kits.KitFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.chat.ChatFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -231,10 +228,6 @@ class CorePlugin(
         }
 
         fun initEconomyDependentModule(name: String, block: () -> Unit) {
-            if (economyService == null) {
-                statuses[name] = "<yellow>[ DESACTIVADO (No Eco) ]</yellow>"
-                return
-            }
             initDbDependentModule(name, block)
         }
 
@@ -310,56 +303,7 @@ class CorePlugin(
             server.pluginManager.registerEvents(cListener, this)
         }
 
-        // 8. Inicializar Módulo de Economía Multi-Divisa Altamente Seguro
-        initDbDependentModule("Economía Multi-Divisa") {
-            val ecoService = EconomyService(this, configManager, databaseService!!, profileRegistry!!, folderProvider)
-            economyService = ecoService
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService::class.java, ecoService)
-
-            val isVaultEnabled = server.pluginManager.isPluginEnabled("Vault")
-            val isVaultUnlockedEnabled = server.pluginManager.isPluginEnabled("VaultUnlocked")
-
-            if (isVaultEnabled || isVaultUnlockedEnabled) {
-                var registeredLegacy = false
-                var registeredVault2 = false
-
-                try {
-                    Class.forName("net.milkbowl.vault.economy.Economy")
-                    com.github.berserkr2k.coreplugin.infrastructure.economy.LegacyVaultRegisterHelper.register(this, ecoService)
-                    registeredLegacy = true
-                } catch (e: Throwable) {}
-
-                try {
-                    Class.forName("net.milkbowl.vault2.economy.Economy")
-                    com.github.berserkr2k.coreplugin.infrastructure.economy.Vault2RegisterHelper.register(this, ecoService)
-                    registeredVault2 = true
-                } catch (e: Throwable) {}
-
-                if (registeredLegacy && registeredVault2) {
-                    paperLogger.info("¡Wrappers seguros de Vault (Legacy) y Vault2 (VaultUnlocked) registrados con prioridad Máxima!")
-                } else if (registeredLegacy) {
-                    paperLogger.info("¡Wrapper seguro de Vault (Legacy) registrado con prioridad Máxima!")
-                } else if (registeredVault2) {
-                    paperLogger.info("¡Wrapper seguro de Vault2 (VaultUnlocked) registrado con prioridad Máxima!")
-                }
-            }
-
-            WalletCommand(this, commandManager, ecoService, messageRegistry, serviceRegistry)
-
-            if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
-                EconomyPlaceholderExpansion(ecoService).register()
-                paperLogger.info("¡Expansión de economía de PlaceholderAPI registrada con éxito!")
-            }
-
-            // Programar purga automática de 90 días en segundo plano cada 24 horas (delay 1h)
-            taskScheduler.runAsyncTimer({
-                ecoService.purgeInactiveRecords(90).thenAccept { deleted ->
-                    if (deleted > 0) {
-                        paperLogger.info("¡Purga de base de datos completada! ${deleted} cuentas inactivas eliminadas.")
-                    }
-                }
-            }, 72000L, 1728000L)
-        }
+        // 8. Módulo de Economía Multi-Divisa migrado a EconomyFeature
 
         // 9. Inicializar Módulo de Utilidades Modulares
         initModule("Utilidades Modulares") {
@@ -396,7 +340,7 @@ class CorePlugin(
             val sManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager(this, configManager, databaseService!!, serviceRegistry)
             shopManager = sManager
             // Eliminado del ServiceRegistry público por ser feature interna
-            val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, economyService!!, messageRegistry, serviceRegistry)
+            val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, messageRegistry, serviceRegistry)
             com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopCommand(this, commandManager, sManager, sGuis, messageRegistry)
         }
 
@@ -448,13 +392,12 @@ class CorePlugin(
         }
         reloadCoordinator.register("core", coreReloadable)
 
-        val economyReloadable = object : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
+        val leaderboardReloadable = object : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
             override suspend fun reload() {
-                economyService?.reload()
                 leaderboardService?.reload()
             }
         }
-        reloadCoordinator.register("economy", economyReloadable)
+        reloadCoordinator.register("leaderboards", leaderboardReloadable)
 
         regionManager?.let { reloadCoordinator.register("regions", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }

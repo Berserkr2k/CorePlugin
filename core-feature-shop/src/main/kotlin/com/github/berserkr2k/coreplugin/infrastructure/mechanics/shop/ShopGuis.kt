@@ -25,10 +25,12 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 class ShopGuis(
     private val plugin: Plugin,
     private val shopManager: ShopManager,
-    private val economyService: EconomyService,
     private val messageService: MessageService,
     private val serviceRegistry: ServiceRegistry
 ) {
+    private val economyService by lazy {
+        serviceRegistry.get(EconomyService::class.java)
+    }
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
     private val menuService = serviceRegistry.get(MenuService::class.java)!!
     private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!

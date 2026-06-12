@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.economy
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import org.bukkit.plugin.Plugin
@@ -17,13 +17,41 @@ import java.util.concurrent.ConcurrentHashMap
 
 class EconomyService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
+    private val configService: ConfigService,
     private val databaseService: DatabaseService,
     private val profileRegistry: ProfileRegistry,
     private val folderProvider: com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
 ) : com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     override val currencies = ConcurrentHashMap<String, CurrencyConfig>()
     val initFuture = CompletableFuture<Void>()
+
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
+    }
 
     init {
         try {
@@ -51,9 +79,8 @@ class EconomyService(
         currencies.clear()
         val configFiles = currenciesFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
         for (file in configFiles) {
-            val relativePath = "economy/currencies/${file.name}"
             try {
-                val loadedConfig = configManager.loadModuleConfig(relativePath, CurrencyConfig::class.java, CurrencyConfig()).join()
+                val loadedConfig = loadHoconFile(file, CurrencyConfig::class.java, CurrencyConfig())
                 currencies[loadedConfig.id] = loadedConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la divisa desde ${file.name}: ${e.message}")

@@ -65,10 +65,6 @@ class Vault2EconomyHook(private val economyService: EconomyService) : Economy {
         return format(pluginName, amount)
     }
 
-    // ==========================================
-    // METODOS NATIVOS DE VAULT2 (UUID & BigDecimal)
-    // ==========================================
-
     override fun getBalance(pluginName: String, accountID: UUID): BigDecimal {
         return economyService.getBalance(accountID, primaryCurrencyId)
     }

@@ -49,7 +49,6 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
         val future = economyService.withdrawCacheBehind(uuid, primaryCurrencyId, amount, "VAULT_LEGACY_WITHDRAW")
 
         return if (isOnline) {
-            // Write-Behind: si ya falló en memoria (completado con false), retornamos falla
             val success = !future.isDone || future.getNow(true) == true
             val currentBalance = economyService.getBalance(uuid, primaryCurrencyId)
             if (success) {
@@ -58,7 +57,6 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
                 EconomyResponse(0.0, currentBalance.toDouble(), EconomyResponse.ResponseType.FAILURE, "Fondos insuficientes.")
             }
         } else {
-            // Offline: bloqueo seguro en base de datos
             val success = future.join()
             val currentBalance = economyService.getBalance(uuid, primaryCurrencyId)
             if (success) {
@@ -85,7 +83,6 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
         val future = economyService.depositCacheBehind(uuid, primaryCurrencyId, amount, "VAULT_LEGACY_DEPOSIT")
 
         return if (isOnline) {
-            // Write-Behind: si ya falló en memoria (completado con false), retornamos falla
             val success = !future.isDone || future.getNow(true) == true
             val newBalance = economyService.getBalance(uuid, primaryCurrencyId)
             if (success) {
@@ -94,7 +91,6 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
                 EconomyResponse(0.0, currentBalance.toDouble(), EconomyResponse.ResponseType.FAILURE, "Fallo al realizar el depósito.")
             }
         } else {
-            // Offline: bloqueo seguro en base de datos
             val success = future.join()
             val newBalance = economyService.getBalance(uuid, primaryCurrencyId)
             if (success) {
@@ -105,16 +101,9 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
         }
     }
 
-    // ==========================================
-    // METODOS DE COMPATIBILIDAD HEREDADOS (DOUBLE & NAMES)
-    // ==========================================
-
     override fun hasAccount(playerName: String): Boolean = true
-
     override fun hasAccount(offlinePlayer: OfflinePlayer): Boolean = true
-
     override fun hasAccount(playerName: String, worldName: String?): Boolean = true
-
     override fun hasAccount(offlinePlayer: OfflinePlayer, worldName: String?): Boolean = true
 
     override fun getBalance(playerName: String): Double {
@@ -126,15 +115,11 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
     }
 
     override fun getBalance(playerName: String, world: String?): Double = getBalance(playerName)
-
     override fun getBalance(offlinePlayer: OfflinePlayer, world: String?): Double = getBalance(offlinePlayer)
 
     override fun has(playerName: String, amount: Double): Boolean = getBalance(playerName) >= amount
-
     override fun has(offlinePlayer: OfflinePlayer, amount: Double): Boolean = getBalance(offlinePlayer) >= amount
-
     override fun has(playerName: String, worldName: String?, amount: Double): Boolean = has(playerName, amount)
-
     override fun has(offlinePlayer: OfflinePlayer, worldName: String?, amount: Double): Boolean = has(offlinePlayer, amount)
 
     override fun withdrawPlayer(playerName: String, amount: Double): EconomyResponse {
@@ -146,7 +131,6 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
     }
 
     override fun withdrawPlayer(playerName: String, worldName: String?, amount: Double): EconomyResponse = withdrawPlayer(playerName, amount)
-
     override fun withdrawPlayer(offlinePlayer: OfflinePlayer, worldName: String?, amount: Double): EconomyResponse = withdrawPlayer(offlinePlayer, amount)
 
     override fun depositPlayer(playerName: String, amount: Double): EconomyResponse {
@@ -158,10 +142,8 @@ class VaultEconomyHook(private val economyService: EconomyService) : Economy {
     }
 
     override fun depositPlayer(playerName: String, worldName: String?, amount: Double): EconomyResponse = depositPlayer(playerName, amount)
-
     override fun depositPlayer(offlinePlayer: OfflinePlayer, worldName: String?, amount: Double): EconomyResponse = depositPlayer(offlinePlayer, amount)
 
-    // Bancos no están soportados (Legacy Vault feature)
     override fun createBank(name: String?, player: String?): EconomyResponse = EconomyResponse(0.0, 0.0, EconomyResponse.ResponseType.NOT_IMPLEMENTED, "Bancos no soportados.")
     override fun createBank(name: String?, player: OfflinePlayer?): EconomyResponse = EconomyResponse(0.0, 0.0, EconomyResponse.ResponseType.NOT_IMPLEMENTED, "Bancos no soportados.")
     override fun deleteBank(name: String?): EconomyResponse = EconomyResponse(0.0, 0.0, EconomyResponse.ResponseType.NOT_IMPLEMENTED, "Bancos no soportados.")
