@@ -1,6 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
@@ -12,7 +16,8 @@ class KitCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val kitService: KitService,
-    private val guis: KitGuis
+    private val guis: KitGuis,
+    private val messageService: MessageService
 ) {
 
     init {
@@ -23,7 +28,7 @@ class KitCommand(
             kitBuilder.handler { context ->
                 val sender = context.sender()
                 if (sender !is Player) {
-                    sender.sendMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de kits. Usa /kit <kit> <player></red>"))
+                    messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                     return@handler
                 }
                 guis.openKitSelector(sender)
@@ -37,7 +42,7 @@ class KitCommand(
                 .handler { context ->
                     val sender = context.sender()
                     kitService.loadAllKits()
-                    sender.sendMessage(ColorUtility.parse("<green>¡Configuraciones de Kits recargadas con éxito en tiempo real!</green>"))
+                    messageService.send(sender, KitMessages.RELOADED)
                 }
         )
 
@@ -49,7 +54,7 @@ class KitCommand(
                     val kitId = context.get<String>("kitId")
 
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse("<red>Solo jugadores pueden reclamar kits directamente. Usa /kit <kit> <player></red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -75,8 +80,8 @@ class KitCommand(
                     kitService.claimKit(target, kitId, true).thenAccept { result ->
                         when (result) {
                             is ClaimResult.Success -> {
-                                sender.sendMessage(ColorUtility.parse("<green>¡Has entregado con éxito el kit '$kitId' a ${target.name}!</green>"))
-                                target.sendMessage(ColorUtility.parse("<green>¡Has recibido el kit '$kitId' de parte de un administrador!</green>"))
+                                messageService.send(sender, KitMessages.GIVE_SUCCESS_SENDER, PlaceholderContext.of("kit" to kitId, "target" to target.name))
+                                messageService.send(target, KitMessages.GIVE_SUCCESS_RECEIVER, PlaceholderContext.of("kit" to kitId))
                             }
                             is ClaimResult.Failure -> {
                                 sender.sendMessage(ColorUtility.parse("<red>Error al entregar kit: ${result.reason}</red>"))
@@ -95,13 +100,13 @@ class KitCommand(
                     val kitId = context.get<String>("kitId")
 
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse("<red>Solo jugadores pueden previsualizar los kits en la interfaz gráfica.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
                     val config = kitService.kits[kitId.lowercase()]
                     if (config == null) {
-                        sender.sendMessage(ColorUtility.parse("<red>El kit especificado no existe.</red>"))
+                        messageService.send(sender, KitMessages.NOT_FOUND)
                         return@handler
                     }
 

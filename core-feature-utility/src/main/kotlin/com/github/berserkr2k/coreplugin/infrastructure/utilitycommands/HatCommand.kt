@@ -1,17 +1,16 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.Material
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
-import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class HatCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {
@@ -21,8 +20,7 @@ class HatCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                        sender.sendMessage(ColorUtility.parse(msg))
+                        messageService.send(sender, UtilityMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -31,8 +29,7 @@ class HatCommand(
 
                     // Comprobar que el item en la mano no sea nulo o aire
                     if (handItem.type == Material.AIR) {
-                        val msg = messagesConfig.utility["hat-empty"] ?: "<red>Debes tener un ítem en la mano para usarlo de sombrero.</red>"
-                        sender.sendMessage(ColorUtility.parse(msg))
+                        messageService.send(sender, UtilityMessages.HAT_EMPTY)
                         return@handler
                     }
 
@@ -46,8 +43,7 @@ class HatCommand(
                         inventory.setItemInMainHand(currentHelmet.clone())
                     }
 
-                    val msg = messagesConfig.utility["hat-equipped"] ?: "<green>¡Te has puesto el ítem en la cabeza!</green>"
-                    sender.sendMessage(ColorUtility.parse(msg))
+                    messageService.send(sender, UtilityMessages.HAT_EQUIPPED)
                 }
         )
     }

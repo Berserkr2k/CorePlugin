@@ -1,5 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -7,20 +9,13 @@ import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getShops
-
 class ShopCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val shopManager: ShopManager,
     private val shopGuis: ShopGuis,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
-
-    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
-        return messagesConfig.getShops(key, *placeholders)
-    }
 
     init {
         registerShopCommand()
@@ -52,7 +47,7 @@ class ShopCommand(
             .handler { context ->
                 val sender = context.sender()
                 if (sender !is Player) {
-                    sender.sendMessage(ColorUtility.parse(getMsg("only-players")))
+                    messageService.send(sender, ShopMessages.ONLY_PLAYERS)
                     return@handler
                 }
 
@@ -64,8 +59,8 @@ class ShopCommand(
                     } else if (shopManager.categories.containsKey(catId)) {
                         shopGuis.openCategoryMenu(sender, catId)
                     } else {
-                        sender.sendMessage(ColorUtility.parse(getMsg("category-not-found", "category" to category)))
-                        sender.sendMessage(ColorUtility.parse(getMsg("category-usage")))
+                        messageService.send(sender, ShopMessages.CATEGORY_NOT_FOUND, PlaceholderContext.of("category" to category))
+                        messageService.send(sender, ShopMessages.CATEGORY_USAGE)
                     }
                 } else {
                     shopGuis.openCategoriesMenu(sender)
@@ -82,17 +77,17 @@ class ShopCommand(
             .permission("core.shop.admin")
             .handler { context ->
                 val sender = context.sender()
-                sender.sendMessage(ColorUtility.parse("<yellow>⏳ Recargando la configuración de tiendas...</yellow>"))
+                messageService.send(sender, ShopMessages.RELOAD_STARTING)
                 
                 shopManager.loadConfigurations()
                     .thenCompose { shopManager.loadMarketVolumes() }
                     .thenRun {
-                        sender.sendMessage(ColorUtility.parse("<green>✔ ¡Configuración de tiendas recargada con éxito!</green>"))
+                        messageService.send(sender, ShopMessages.RELOAD_SUCCESS)
                         // Re-registrar acciones dinámicas si cambian
                         registerGlobalActions()
                     }
                     .exceptionally { ex ->
-                        sender.sendMessage(ColorUtility.parse("<red>❌ Falló la recarga de tiendas: ${ex.message}</red>"))
+                        messageService.send(sender, ShopMessages.RELOAD_FAILED, PlaceholderContext.of("error" to (ex.message ?: ex.toString())))
                         ex.printStackTrace()
                         null
                     }

@@ -13,11 +13,13 @@ import net.kyori.adventure.title.Title
 import net.kyori.adventure.util.Ticks
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+
 class BroadcastCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val utilityService: UtilityService,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {

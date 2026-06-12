@@ -1,19 +1,22 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.command
 
-import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
-import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistry
 import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
 import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getRegions
-import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionMessages
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.protection.permissions.Permissions
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.IntegerParser
 import org.incendo.cloud.parser.standard.StringParser
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 class RegionCommand(
     private val plugin: Plugin,
@@ -21,20 +24,17 @@ class RegionCommand(
     private val session: PlayerSelectionSession,
     private val regionManager: RegionManager,
     private val resolver: RegionRuleResolver,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService,
+    private val serviceRegistry: ServiceRegistry
 ) {
 
     init {
         registerCommands()
     }
 
-    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
-        return messagesConfig.getRegions(key, *placeholders)
-    }
-
     private fun registerCommands() {
         val regionBuilder = commandManager.commandBuilder("region")
-            .permission("core.region.setup")
+            .permission(Permissions.REGION_SETUP)
 
         // 1. /region pos1
         commandManager.command(
@@ -42,13 +42,21 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden establecer selecciones.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     val block = sender.location.block
                     val sel = session.getSelection(sender.uniqueId)
                     sel.pos1 = block.location
-                    sender.sendMessage("§a[!] Posición 1 establecida en ${block.x}, ${block.y}, ${block.z}.")
+                    messageService.send(
+                        sender,
+                        RegionMessages.SELECTION_POS1,
+                        PlaceholderContext.of(
+                            "x" to block.x.toString(),
+                            "y" to block.y.toString(),
+                            "z" to block.z.toString()
+                        )
+                    )
                 }
         )
 
@@ -58,13 +66,21 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden establecer selecciones.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     val block = sender.location.block
                     val sel = session.getSelection(sender.uniqueId)
                     sel.pos2 = block.location
-                    sender.sendMessage("§a[!] Posición 2 establecida en ${block.x}, ${block.y}, ${block.z}.")
+                    messageService.send(
+                        sender,
+                        RegionMessages.SELECTION_POS2,
+                        PlaceholderContext.of(
+                            "x" to block.x.toString(),
+                            "y" to block.y.toString(),
+                            "z" to block.z.toString()
+                        )
+                    )
                 }
         )
 
@@ -76,7 +92,7 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden crear regiones.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -87,11 +103,11 @@ class RegionCommand(
                     val pos1 = selection.pos1
                     val pos2 = selection.pos2
                     if (pos1 == null || pos2 == null) {
-                        sender.sendMessage(ColorUtility.parse(getMsg("selection-incomplete")))
+                        messageService.send(sender, RegionMessages.SELECTION_INCOMPLETE)
                         return@handler
                     }
 
-                    sender.sendMessage(ColorUtility.parse(getMsg("compiling")))
+                    messageService.send(sender, RegionMessages.COMPILING)
 
                     val minX = minOf(pos1.blockX, pos2.blockX)
                     val minY = minOf(pos1.blockY, pos2.blockY)
@@ -107,11 +123,15 @@ class RegionCommand(
                         minX = minX, minY = minY, minZ = minZ,
                         maxX = maxX, maxY = maxY, maxZ = maxZ,
                         allowFlags = emptyList(),
-                        denyFlags = emptyList()
+                        denyFlags = listOf(
+                            "build", "use", "interact", "pvp", "vehicle-place", "vehicle-destroy",
+                            "tnt", "creeper-explosion", "ghast-fireball", "other-explosion",
+                            "enderman-grief", "fire-spread", "lava-fire"
+                        )
                     )
 
                     regionManager.createRegion(dto).thenRun {
-                        sender.sendMessage(ColorUtility.parse(getMsg("created", "id" to id)))
+                        messageService.send(sender, RegionMessages.CREATED, PlaceholderContext.of("id" to id))
                     }
                 }
         )
@@ -126,79 +146,41 @@ class RegionCommand(
 
                     regionManager.removeRegion(id).thenAccept { success ->
                         if (success) {
-                            sender.sendMessage(ColorUtility.parse("<green>✔ Región '$id' eliminada de forma permanente.</green>"))
+                            messageService.send(sender, RegionMessages.DELETED, PlaceholderContext.of("id" to id))
                         } else {
-                            sender.sendMessage(ColorUtility.parse(getMsg("region-not-found", "id" to id)))
+                            messageService.send(sender, RegionMessages.REGION_NOT_FOUND, PlaceholderContext.of("id" to id))
                         }
                     }
                 }
         )
 
-        // 5. /region flag <id> <flag> <allow/deny/remove>
+        // 5. /region flag <id> & /region edit <id>
+        val editHandler = { context: org.incendo.cloud.context.CommandContext<CommandSender> ->
+            val sender = context.sender()
+            if (sender !is Player) {
+                messageService.send(sender, CoreMessages.ONLY_PLAYERS)
+            } else {
+                val id = context.get<String>("id").lowercase()
+                val dto = regionManager.getRegionDTO(id)
+                if (dto == null) {
+                    messageService.send(sender, RegionMessages.REGION_NOT_FOUND, PlaceholderContext.of("id" to id))
+                } else {
+                    val gui = com.github.berserkr2k.coreplugin.infrastructure.regions.gui.RegionFlagEditorGui(plugin, regionManager, serviceRegistry)
+                    gui.openCategorySelection(sender, id)
+                }
+            }
+        }
+
         commandManager.command(
             regionBuilder.literal("flag")
                 .required("id", StringParser.stringParser())
-                .required("flag", StringParser.stringParser())
-                .required("value", StringParser.stringParser())
-                .handler { context ->
-                    val sender = context.sender()
-                    val id = context.get<String>("id").lowercase()
-                    val flagStr = context.get<String>("flag").uppercase()
-                    val valueStr = context.get<String>("value").lowercase()
+                .handler { editHandler(it) }
+        )
 
-                    val flagValue = RegionFlags.parse(flagStr)
-                    if (flagValue == RegionFlags.NONE) {
-                        sender.sendMessage(ColorUtility.parse(getMsg("invalid-flag", "flag" to flagStr)))
-                        return@handler
-                    }
-
-                    val dto = regionManager.getRegionDTO(id)
-                    if (dto == null) {
-                        sender.sendMessage(ColorUtility.parse(getMsg("region-not-found", "id" to id)))
-                        return@handler
-                    }
-
-                    val updatedAllow = ArrayList(dto.allowFlags)
-                    val updatedDeny = ArrayList(dto.denyFlags)
-
-                    val isCategory = RegionFlags.isCategory(flagStr)
-                    val flagsToProcess = if (isCategory) {
-                        RegionFlags.getIndividualFlags(flagStr)
-                    } else {
-                        listOf(flagStr)
-                    }
-
-                    for (f in flagsToProcess) {
-                        when (valueStr) {
-                            "allow" -> {
-                                if (!updatedAllow.contains(f)) updatedAllow.add(f)
-                                updatedDeny.remove(f)
-                            }
-                            "deny" -> {
-                                if (!updatedDeny.contains(f)) updatedDeny.add(f)
-                                updatedAllow.remove(f)
-                            }
-                            "remove" -> {
-                                updatedAllow.remove(f)
-                                updatedDeny.remove(f)
-                            }
-                            else -> {
-                                sender.sendMessage(ColorUtility.parse(getMsg("invalid-value")))
-                                return@handler
-                            }
-                        }
-                    }
-
-                    val updatedDto = dto.copy(allowFlags = updatedAllow, denyFlags = updatedDeny)
-
-                    regionManager.createRegion(updatedDto).thenRun {
-                        if (valueStr == "remove") {
-                            sender.sendMessage(ColorUtility.parse(getMsg("flag-removed", "flag" to flagStr, "id" to id)))
-                        } else {
-                            sender.sendMessage(ColorUtility.parse(getMsg("flag-updated", "flag" to flagStr, "id" to id, "value" to valueStr.uppercase())))
-                        }
-                    }
-                }
+        commandManager.command(
+            regionBuilder.literal("edit")
+                .required("id", StringParser.stringParser())
+                .handler { editHandler(it) }
         )
 
         // 6. /region reload
@@ -207,22 +189,7 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     regionManager.loadAllRegions()
-                    sender.sendMessage("§a[!] Configuración de regiones recargada de disco y Spatial Index reconstruido con éxito.")
-                }
-        )
-
-        // 7. /region flags
-        commandManager.command(
-            regionBuilder.literal("flags")
-                .handler { context ->
-                    val sender = context.sender()
-                    sender.sendMessage("§eBanderas individuales:")
-                    sender.sendMessage("§7- PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT, CHEST_ACCESS, ENDERCHEST_ACCESS, ANVIL_USE, ENCHANTING_USE")
-                    sender.sendMessage("§7- USE_WITHOUT_BREAK, BLOCK_PHYSICS, ITEM_DROP, ITEM_PICKUP, PROJECTILE_DAMAGE, PLAYER_COLLISION, MOB_TARGETING")
-                    sender.sendMessage("§7- LIQUID_FLOW, FALL_DAMAGE, ELYTRA_USAGE, REDSTONE_INTERACTION, VEHICLE_USAGE, EXP_GAIN, HUNGER_LOSS, HOSTILE_SPAWN, PASSIVE_SPAWN")
-                    sender.sendMessage("§7- ARMOR_STAND_INTERACTION, ENTITY_INTERACTION, CONTAINER_INTERACTION, ITEM_FRAME_INTERACTION")
-                    sender.sendMessage("§eCategorías de Banderas:")
-                    sender.sendMessage("§7- COMBAT_FLAGS, WORLD_FLAGS, INTERACTION_FLAGS, PLAYER_FLAGS, ENTITY_FLAGS")
+                    messageService.send(sender, RegionMessages.RELOADED)
                 }
         )
 
@@ -238,7 +205,7 @@ class RegionCommand(
                         regionManager.getRegionDTO(idOpt.get().lowercase())
                     } else {
                         if (sender !is Player) {
-                            sender.sendMessage("Debes especificar la id de la región desde la consola.")
+                            messageService.send(sender, RegionMessages.CONSOLE_ONLY_ID)
                             return@handler
                         }
                         val loc = sender.location
@@ -250,24 +217,30 @@ class RegionCommand(
 
                     if (dto == null) {
                         if (idOpt.isPresent) {
-                            sender.sendMessage(ColorUtility.parse(getMsg("region-not-found", "id" to idOpt.get())))
+                            messageService.send(sender, RegionMessages.REGION_NOT_FOUND, PlaceholderContext.of("id" to idOpt.get()))
                         } else {
-                            sender.sendMessage(ColorUtility.parse("<red>❌ No te encuentras dentro de ninguna región registrada.</red>"))
+                            messageService.send(sender, RegionMessages.NOT_IN_REGION)
                         }
                         return@handler
                     }
 
-                    val msg = """
-                        <dark_gray>===========================================</dark_gray>
-                        <gold><bold>Región:</bold></gold> <yellow>${dto.id}</yellow>
-                        <gray>Prioridad:</gray> <white>${dto.priority}</white>
-                        <gray>Mundo:</gray> <white>${dto.world}</white>
-                        <gray>Límites:</gray> <white>(${dto.minX}, ${dto.minY}, ${dto.minZ}) -> (${dto.maxX}, ${dto.maxY}, ${dto.maxZ})</white>
-                        <gray>Banderas Permitidas:</gray> <green>${dto.allowFlags.joinToString(", ").ifEmpty { "Ninguna" }}</green>
-                        <gray>Banderas Denegadas:</gray> <red>${dto.denyFlags.joinToString(", ").ifEmpty { "Ninguna" }}</red>
-                        <dark_gray>===========================================</dark_gray>
-                    """.trimIndent()
-                    sender.sendMessage(ColorUtility.parse(msg))
+                    messageService.send(
+                        sender,
+                        RegionMessages.REGION_INFO,
+                        PlaceholderContext.of(
+                            "id" to dto.id,
+                            "priority" to dto.priority.toString(),
+                            "world" to dto.world,
+                            "min_x" to dto.minX.toString(),
+                            "min_y" to dto.minY.toString(),
+                            "min_z" to dto.minZ.toString(),
+                            "max_x" to dto.maxX.toString(),
+                            "max_y" to dto.maxY.toString(),
+                            "max_z" to dto.maxZ.toString(),
+                            "allow_flags" to dto.allowFlags.joinToString(", ").ifEmpty { "Ninguna" },
+                            "deny_flags" to dto.denyFlags.joinToString(", ").ifEmpty { "Ninguna" }
+                        )
+                    )
                 }
         )
 
@@ -278,15 +251,19 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     val loc = sender.location
                     val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
                     val active = resolver.resolveActiveRegions(worldIndex, loc.blockX, loc.blockY, loc.blockZ)
-                    sender.sendMessage("§eRegiones activas aquí (Count: ${active.size}):")
+                    messageService.send(sender, RegionMessages.DEBUG_HERE_HEADER, PlaceholderContext.of("count" to active.size.toString()))
                     for (reg in active) {
-                        sender.sendMessage("§7- ${reg.id} (Prio: ${reg.priority})")
+                        messageService.send(
+                            sender,
+                            RegionMessages.DEBUG_HERE_ITEM,
+                            PlaceholderContext.of("id" to reg.id, "priority" to reg.priority.toString())
+                        )
                     }
                 }
         )
@@ -297,8 +274,14 @@ class RegionCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) return@handler
-                    sender.sendMessage("§eBypass general: ${sender.hasPermission("core.region.bypass")}")
-                    sender.sendMessage("§eGameMode: ${sender.gameMode}")
+                    messageService.send(
+                        sender,
+                        RegionMessages.DEBUG_FLAGS,
+                        PlaceholderContext.of(
+                            "bypass" to sender.hasPermission(Permissions.REGION_BYPASS).toString(),
+                            "gamemode" to sender.gameMode.name
+                        )
+                    )
                 }
         )
     }

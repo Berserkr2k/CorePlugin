@@ -1,14 +1,15 @@
 package com.github.berserkr2k.coreplugin.infrastructure.chat
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
-import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
-import com.github.berserkr2k.coreplugin.common.gui.toItemStack
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.framework.item.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getChat
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -17,17 +18,19 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 
 class ColorCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val profileRegistry: ProfileRegistry,
     private val configManager: ModularConfigManager,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val serviceRegistry: ServiceRegistry
 ) {
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
+    private val menuService = serviceRegistry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
     private var menuConfig = ColorMenuConfig()
 
     init {
@@ -40,7 +43,7 @@ class ColorCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -57,19 +60,20 @@ class ColorCommand(
     private fun openColorMenu(player: Player) {
         val profile = profileRegistry.getProfile(player.uniqueId)
         if (profile == null) {
-            player.sendMessage(ColorUtility.parse("<red>Error al cargar tu perfil de usuario.</red>"))
+            messageService.send(player, CoreMessages.CHAT_PROFILE_ERROR)
             return
         }
 
         val menuTitle = ColorUtility.parse(menuConfig.title)
-        val menu = CustomMenu(menuTitle, menuConfig.size, plugin)
+        val builder = menuService.createBuilder()
+            .title(menuTitle)
+            .slots(menuConfig.size)
 
         // 1. Relleno de fondo si está activo
         if (menuConfig.filler.enabled) {
-            val fillerItem = menuConfig.filler.item.toItemStack()
-            for (i in 0 until menuConfig.size) {
-                menu.setItem(i, fillerItem.clone())
-            }
+            val fillerItem = itemBuilderFactory.builder(menuConfig.filler.item).build()
+            val fillerButton = Button.builder().icon(fillerItem).build()
+            builder.fill(fillerButton)
         }
 
         // 2. Registrar ítems de color
@@ -91,36 +95,43 @@ class ColorCommand(
                 loreLines.add("<gray>Requiere permiso: <red>core.chat.color.${option.id}</red></gray>")
             }
 
-            val item = ItemBuilder(materialEnum)
+            val item = itemBuilderFactory.builder(materialEnum)
                 .displayName(option.displayName)
                 .lore(loreLines)
                 .glow(isActive)
                 .build()
 
             if (option.slot in 0 until menuConfig.size) {
-                menu.setItem(option.slot, item) { p, _ ->
-                    if (isActive) {
-                        p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
-                        return@setItem
-                    }
+                val btn = Button.builder()
+                    .icon(item)
+                    .onClick { p ->
+                        if (isActive) {
+                            p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
+                            return@onClick
+                        }
 
-                    if (hasPerm) {
-                        profile.chatColor = option.format
-                        profile.markDirty()
-                        p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
-                        
-                        val colorMsg = messagesConfig.getChat("color-changed", "color" to option.displayName)
-                        p.sendMessage(ColorUtility.parse(colorMsg))
-                        
-                        // Reabrir regionalmente para refrescar estado en el mismo tick regional
-                        regionTaskScheduler.runAtLocation(p.location, Runnable {
-                            openColorMenu(p)
-                        })
-                    } else {
-                        p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                        p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar este color.</red>"))
+                        if (hasPerm) {
+                            profile.chatColor = option.format
+                            profile.markDirty()
+                            p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
+                            
+                            messageService.send(
+                                p,
+                                CoreMessages.CHAT_COLOR_CHANGED,
+                                PlaceholderContext.of(Placeholder.parsed("color", option.displayName))
+                            )
+                            
+                            // Reabrir regionalmente para refrescar estado en el mismo tick regional
+                            regionTaskScheduler.runAtLocation(p.location, Runnable {
+                                openColorMenu(p)
+                            })
+                        } else {
+                            p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
+                            messageService.send(p, CoreMessages.CHAT_COLOR_NO_PERMISSION)
+                        }
                     }
-                }
+                    .build()
+                builder.button(option.slot, btn)
             }
         }
 
@@ -132,26 +143,30 @@ class ColorCommand(
         if (finalLore.isNotEmpty()) {
             finalLore.add(if (isResetActive) "<green>⭐ Ya restablecido</green>" else "<yellow>⚡ Click para restablecer</yellow>")
         }
-        val finalResetItem = ItemBuilder.fromConfig(menuConfig.resetItem).lore(finalLore).build()
+        val finalResetItem = itemBuilderFactory.builder(menuConfig.resetItem).lore(finalLore).build()
 
         if (resetSlot in 0 until menuConfig.size) {
-            menu.setItem(resetSlot, finalResetItem) { p, _ ->
-                if (isResetActive) {
-                    p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
-                    return@setItem
-                }
+            val resetBtn = Button.builder()
+                .icon(finalResetItem)
+                .onClick { p ->
+                    if (isResetActive) {
+                        p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
+                        return@onClick
+                    }
 
-                profile.chatColor = null
-                profile.markDirty()
-                p.playSound(p.location, Sound.BLOCK_LAVA_EXTINGUISH, 1.0f, 1.5f)
-                p.sendMessage(ColorUtility.parse("<yellow>Has restablecido tu color de chat al valor por defecto.</yellow>"))
-                
-                regionTaskScheduler.runAtLocation(p.location, Runnable {
-                    openColorMenu(p)
-                })
-            }
+                    profile.chatColor = null
+                    profile.markDirty()
+                    p.playSound(p.location, Sound.BLOCK_LAVA_EXTINGUISH, 1.0f, 1.5f)
+                    messageService.send(p, CoreMessages.CHAT_COLOR_RESET)
+                    
+                    regionTaskScheduler.runAtLocation(p.location, Runnable {
+                        openColorMenu(p)
+                    })
+                }
+                .build()
+            builder.button(resetSlot, resetBtn)
         }
 
-        menu.open(player)
+        builder.build().open(player)
     }
 }

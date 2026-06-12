@@ -1,18 +1,20 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class ExpCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {
@@ -29,28 +31,30 @@ class ExpCommand(
 
                     val target = if (targetOpt.isPresent) {
                         if (!sender.hasPermission("core.utility.exp.others")) {
-                            val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                            sender.sendMessage(ColorUtility.parse(msg))
+                            messageService.send(sender, UtilityMessages.NO_PERMISSION_OTHER)
                             return@handler
                         }
                         targetOpt.get()
                     } else {
                         if (sender !is Player) {
-                            val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                            sender.sendMessage(ColorUtility.parse(msg))
+                            messageService.send(sender, UtilityMessages.ONLY_PLAYERS)
                             return@handler
                         }
                         sender
                     }
 
                     val totalXp = ExperienceMath.getPlayerXp(target)
-                    val key = "exp-get"
-                    val defaultMsg = "<gray>Experiencia de <white><player></white>: </gray><green><level> niveles</green> <gray>(<xp> XP totales)</gray>"
-                    val msg = (messagesConfig.utility[key] ?: defaultMsg)
-                        .replace("<player>", target.name)
-                        .replace("<level>", target.level.toString())
-                        .replace("<xp>", totalXp.toString())
-                    sender.sendMessage(ColorUtility.parse(msg))
+                    messageService.send(
+                        sender,
+                        UtilityMessages.EXP_GET,
+                        PlaceholderContext.of(
+                            TagResolver.resolver(
+                                Placeholder.parsed("player", target.name),
+                                Placeholder.parsed("level", target.level.toString()),
+                                Placeholder.parsed("xp", totalXp.toString())
+                            )
+                        )
+                    )
                 }
         )
 
@@ -68,20 +72,24 @@ class ExpCommand(
                     ExperienceMath.setPlayerXp(target, amount)
 
                     // Mensaje para el emisor
-                    val keySender = "exp-set"
-                    val defaultSender = "<green>Has establecido la experiencia de <player> en <amount> XP.</green>"
-                    val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
-                        .replace("<player>", target.name)
-                        .replace("<amount>", amount.toString())
-                    sender.sendMessage(ColorUtility.parse(msgSender))
+                    messageService.send(
+                        sender,
+                        UtilityMessages.EXP_SET,
+                        PlaceholderContext.of(
+                            TagResolver.resolver(
+                                Placeholder.parsed("player", target.name),
+                                Placeholder.parsed("amount", amount.toString())
+                            )
+                        )
+                    )
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
-                        val keyReceiver = "exp-set-by-admin"
-                        val defaultReceiver = "<green>Tu experiencia ha sido establecida en <amount> XP.</green>"
-                        val msgReceiver = (messagesConfig.utility[keyReceiver] ?: defaultReceiver)
-                            .replace("<amount>", amount.toString())
-                        target.sendMessage(ColorUtility.parse(msgReceiver))
+                        messageService.send(
+                            target,
+                            UtilityMessages.EXP_SET_BY_ADMIN,
+                            PlaceholderContext.of(Placeholder.parsed("amount", amount.toString()))
+                        )
                     }
                 }
         )
@@ -102,20 +110,24 @@ class ExpCommand(
                     ExperienceMath.setPlayerXp(target, newXp)
 
                     // Mensaje para el emisor
-                    val keySender = "exp-give"
-                    val defaultSender = "<green>Has dado <amount> XP a <player>.</green>"
-                    val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
-                        .replace("<player>", target.name)
-                        .replace("<amount>", amount.toString())
-                    sender.sendMessage(ColorUtility.parse(msgSender))
+                    messageService.send(
+                        sender,
+                        UtilityMessages.EXP_GIVE,
+                        PlaceholderContext.of(
+                            TagResolver.resolver(
+                                Placeholder.parsed("player", target.name),
+                                Placeholder.parsed("amount", amount.toString())
+                            )
+                        )
+                    )
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
-                        val keyReceiver = "exp-give-by-admin"
-                        val defaultReceiver = "<green>Has recibido <amount> XP.</green>"
-                        val msgReceiver = (messagesConfig.utility[keyReceiver] ?: defaultReceiver)
-                            .replace("<amount>", amount.toString())
-                        target.sendMessage(ColorUtility.parse(msgReceiver))
+                        messageService.send(
+                            target,
+                            UtilityMessages.EXP_GIVE_BY_ADMIN,
+                            PlaceholderContext.of(Placeholder.parsed("amount", amount.toString()))
+                        )
                     }
                 }
         )
@@ -132,18 +144,15 @@ class ExpCommand(
                     ExperienceMath.setPlayerXp(target, 0)
 
                     // Mensaje para el emisor
-                    val keySender = "exp-reset"
-                    val defaultSender = "<green>Has restablecido la experiencia de <player> a 0.</green>"
-                    val msgSender = (messagesConfig.utility[keySender] ?: defaultSender)
-                        .replace("<player>", target.name)
-                    sender.sendMessage(ColorUtility.parse(msgSender))
+                    messageService.send(
+                        sender,
+                        UtilityMessages.EXP_RESET,
+                        PlaceholderContext.of(Placeholder.parsed("player", target.name))
+                    )
 
                     // Mensaje para el receptor (si es diferente)
                     if (sender != target) {
-                        val keyReceiver = "exp-reset-by-admin"
-                        val defaultReceiver = "<red>Tu experiencia ha sido restablecida a 0.</red>"
-                        val msgReceiver = messagesConfig.utility[keyReceiver] ?: defaultReceiver
-                        target.sendMessage(ColorUtility.parse(msgReceiver))
+                        messageService.send(target, UtilityMessages.EXP_RESET_BY_ADMIN)
                     }
                 }
         )

@@ -1,18 +1,18 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import org.bukkit.attribute.Attribute
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
-import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class HealCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {
@@ -27,8 +27,7 @@ class HealCommand(
                     if (targetOpt.isPresent) {
                         // Curar a otro jugador
                         if (!sender.hasPermission("core.utility.heal.others")) {
-                            val msg = messagesConfig.utility["no-permission-other"] ?: "<red>No tienes permiso para aplicar esto a otros jugadores.</red>"
-                            sender.sendMessage(ColorUtility.parse(msg))
+                            messageService.send(sender, UtilityMessages.NO_PERMISSION_OTHER)
                             return@handler
                         }
                         val target = targetOpt.get()
@@ -36,8 +35,7 @@ class HealCommand(
                     } else {
                         // Curarse a sí mismo
                         if (sender !is Player) {
-                            val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                            sender.sendMessage(ColorUtility.parse(msg))
+                            messageService.send(sender, UtilityMessages.ONLY_PLAYERS)
                             return@handler
                         }
                         healPlayer(sender, sender, false)
@@ -65,20 +63,10 @@ class HealCommand(
         target.saturation = 20.0f
 
         if (isOther) {
-            val senderKey = "heal-success-other"
-            val senderDefault = "<green>¡Has curado y purificado a <player>!</green>"
-            val senderMsg = (messagesConfig.utility[senderKey] ?: senderDefault).replace("<player>", target.name)
-            sender.sendMessage(ColorUtility.parse(senderMsg))
-
-            val targetKey = "heal-success-by-admin"
-            val targetDefault = "<green>¡Un administrador te ha curado y purificado!</green>"
-            val targetMsg = messagesConfig.utility[targetKey] ?: targetDefault
-            target.sendMessage(ColorUtility.parse(targetMsg))
+            messageService.send(sender, UtilityMessages.HEAL_SUCCESS_OTHER, PlaceholderContext.of("player" to target.name))
+            messageService.send(target, UtilityMessages.HEAL_SUCCESS_BY_ADMIN)
         } else {
-            val key = "heal-success"
-            val defaultMsg = "<green>¡Has sido curado y purificado!</green>"
-            val msg = messagesConfig.utility[key] ?: defaultMsg
-            target.sendMessage(ColorUtility.parse(msg))
+            messageService.send(target, UtilityMessages.HEAL_SUCCESS)
         }
     }
 }

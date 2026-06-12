@@ -1,9 +1,11 @@
 package com.github.berserkr2k.coreplugin.infrastructure.chat
 
-import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getChat
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
+import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Bukkit
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -18,7 +20,7 @@ class PrivateMessageCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val profileRegistry: ProfileRegistry,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
     private val lastMessagedTarget = ConcurrentHashMap<UUID, UUID>()
 
@@ -37,7 +39,7 @@ class PrivateMessageCommand(
                         val message = context.get<String>("message")
 
                         if (sender is Player && sender.uniqueId == target.uniqueId) {
-                            sender.sendMessage(ColorUtility.parse(messagesConfig.getChat("pm-cannot-msg-self")))
+                            messageService.send(sender, CoreMessages.CHAT_PM_CANNOT_MSG_SELF)
                             return@handler
                         }
 
@@ -56,19 +58,19 @@ class PrivateMessageCommand(
                     .handler { context ->
                         val sender = context.sender()
                         if (sender !is Player) {
-                            sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                            messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                             return@handler
                         }
 
                         val targetUuid = lastMessagedTarget[sender.uniqueId]
                         if (targetUuid == null) {
-                            sender.sendMessage(ColorUtility.parse(messagesConfig.getChat("reply-no-target")))
+                            messageService.send(sender, CoreMessages.CHAT_REPLY_NO_TARGET)
                             return@handler
                         }
 
                         val target = Bukkit.getPlayer(targetUuid)
                         if (target == null || !target.isOnline) {
-                            sender.sendMessage(ColorUtility.parse(messagesConfig.getChat("pm-player-not-found")))
+                            messageService.send(sender, CoreMessages.CHAT_PM_PLAYER_NOT_FOUND)
                             return@handler
                         }
 
@@ -85,23 +87,21 @@ class PrivateMessageCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
                     val profile = profileRegistry.getProfile(sender.uniqueId)
                     if (profile == null) {
-                        sender.sendMessage(ColorUtility.parse("<red>Error al cargar tu perfil de usuario.</red>"))
+                        messageService.send(sender, CoreMessages.CHAT_PROFILE_ERROR)
                         return@handler
                     }
 
                     profile.socialSpy = !profile.socialSpy
                     profile.markDirty()
 
-                    val key = if (profile.socialSpy) "socialspy-enabled" else "socialspy-disabled"
-                    val defaultMsg = if (profile.socialSpy) "<green>SocialSpy habilitado.</green>" else "<red>SocialSpy deshabilitado.</red>"
-                    val msg = messagesConfig.chat[key] ?: defaultMsg
-                    sender.sendMessage(ColorUtility.parse(msg))
+                    val msgKey = if (profile.socialSpy) CoreMessages.CHAT_SOCIALSPY_ENABLED else CoreMessages.CHAT_SOCIALSPY_DISABLED
+                    messageService.send(sender, msgKey)
                 }
         )
     }
@@ -120,12 +120,28 @@ class PrivateMessageCommand(
         val targetName = if (targetCustomColor.isNotEmpty()) "$targetCustomColor${target.name}" else target.name
 
         // Enviar al emisor
-        val sentMsg = messagesConfig.getChat("pm-sent-format", "target" to targetName, "message" to message)
-        sender.sendMessage(ColorUtility.parse(sentMsg))
+        messageService.send(
+            sender,
+            CoreMessages.CHAT_PM_SENT_FORMAT,
+            PlaceholderContext.of(
+                TagResolver.resolver(
+                    Placeholder.parsed("target", targetName),
+                    Placeholder.parsed("message", message)
+                )
+            )
+        )
 
         // Enviar al receptor
-        val receivedMsg = messagesConfig.getChat("pm-received-format", "sender" to senderName, "message" to message)
-        target.sendMessage(ColorUtility.parse(receivedMsg))
+        messageService.send(
+            target,
+            CoreMessages.CHAT_PM_RECEIVED_FORMAT,
+            PlaceholderContext.of(
+                TagResolver.resolver(
+                    Placeholder.parsed("sender", senderName),
+                    Placeholder.parsed("message", message)
+                )
+            )
+        )
 
         // Actualizar el mapa de respuesta rápida si el emisor es un jugador
         if (sender is Player) {
@@ -140,8 +156,17 @@ class PrivateMessageCommand(
 
             val spyProfile = profileRegistry.getProfile(spyPlayer.uniqueId)
             if (spyProfile != null && spyProfile.socialSpy) {
-                val spyMsg = messagesConfig.getChat("pm-socialspy-format", "sender" to sender.name, "target" to target.name, "message" to message)
-                spyPlayer.sendMessage(ColorUtility.parse(spyMsg))
+                messageService.send(
+                    spyPlayer,
+                    CoreMessages.CHAT_PM_SOCIALSPY_FORMAT,
+                    PlaceholderContext.of(
+                        TagResolver.resolver(
+                            Placeholder.parsed("sender", sender.name),
+                            Placeholder.parsed("target", target.name),
+                            Placeholder.parsed("message", message)
+                        )
+                    )
+                )
             }
         }
     }

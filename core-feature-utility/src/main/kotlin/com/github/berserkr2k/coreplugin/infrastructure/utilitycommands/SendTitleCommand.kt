@@ -11,10 +11,13 @@ import net.kyori.adventure.title.Title
 import net.kyori.adventure.util.Ticks
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+
 class SendTitleCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
-    private val messagesConfig: MessagesConfig
+    private val utilityService: UtilityService,
+    private val messageService: MessageService
 ) {
 
     init {
@@ -34,10 +37,14 @@ class SendTitleCommand(
                     val mainTitleComp = ColorUtility.parse(mainTitleText)
                     val subtitleComp = if (subtitleText.isNotEmpty()) ColorUtility.parse(subtitleText) else net.kyori.adventure.text.Component.empty()
 
+                    val fadeIn = utilityService.config.title.fadeInTicks.toLong()
+                    val stay = utilityService.config.title.stayTicks.toLong()
+                    val fadeOut = utilityService.config.title.fadeOutTicks.toLong()
+
                     val times = Title.Times.times(
-                        Ticks.duration(10L),
-                        Ticks.duration(70L),
-                        Ticks.duration(20L)
+                        Ticks.duration(fadeIn),
+                        Ticks.duration(stay),
+                        Ticks.duration(fadeOut)
                     )
                     val title = Title.title(mainTitleComp, subtitleComp, times)
 

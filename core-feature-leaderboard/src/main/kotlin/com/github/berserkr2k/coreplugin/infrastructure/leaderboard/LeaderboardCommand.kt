@@ -4,29 +4,28 @@ import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.EntityType
-import org.bukkit.entity.TextDisplay
-import org.bukkit.entity.Display
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.NamespacedKey
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
-import net.kyori.adventure.text.minimessage.MiniMessage
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 import org.incendo.cloud.parser.standard.IntegerParser.integerParser
-import org.bukkit.Bukkit
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.api.protection.permissions.Permissions
 
 class LeaderboardCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val leaderboardService: LeaderboardService,
-    private val serviceRegistry: ServiceRegistry
+    private val serviceRegistry: ServiceRegistry,
+    private val messageService: MessageService
 ) {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
-    private val miniMessage = MiniMessage.miniMessage()
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
 
     init {
@@ -36,7 +35,7 @@ class LeaderboardCommand(
                 .literal("setup")
                 .required("id", stringParser())
                 .optional("rank", integerParser())
-                .permission("core.leaderboard.setup")
+                .permission(Permissions.LEADERBOARD_SETUP)
                 .handler { context ->
                     val player = context.sender() as? Player ?: return@handler
                     val id = context.get<String>("id")
@@ -54,7 +53,11 @@ class LeaderboardCommand(
                             target.passengers.forEach { it.remove() }
                             
                             leaderboardService.registerLeaderboard(id, rank, target.location).thenRun {
-                                player.sendMessage(miniMessage.deserialize("<green>¡ArmorStand registrado con éxito como podio para '$id' (Top $rank)!</green>"))
+                                messageService.send(
+                                    player,
+                                    LeaderboardMessages.REGISTERED,
+                                    PlaceholderContext.of("id" to id, "rank" to rank.toString())
+                                )
                                 leaderboardService.refreshAllLeaderboards()
                             }
                         })
@@ -70,7 +73,11 @@ class LeaderboardCommand(
                             stand.persistentDataContainer.set(rankKey, PersistentDataType.INTEGER, rank)
                             
                             leaderboardService.registerLeaderboard(id, rank, loc).thenRun {
-                                player.sendMessage(miniMessage.deserialize("<green>¡Nuevo ArmorStand de podio creado para '$id' (Top $rank)!</green>"))
+                                messageService.send(
+                                    player,
+                                    LeaderboardMessages.CREATED,
+                                    PlaceholderContext.of("id" to id, "rank" to rank.toString())
+                                )
                                 leaderboardService.refreshAllLeaderboards()
                             }
                         })
@@ -84,7 +91,7 @@ class LeaderboardCommand(
                 .literal("remove")
                 .required("id", stringParser())
                 .required("rank", integerParser())
-                .permission("core.leaderboard.setup")
+                .permission(Permissions.LEADERBOARD_SETUP)
                 .handler { context ->
                     val player = context.sender() as? Player ?: return@handler
                     val id = context.get<String>("id")
@@ -92,9 +99,17 @@ class LeaderboardCommand(
 
                     leaderboardService.unregisterLeaderboard(id, rank).thenAccept { success ->
                         if (success) {
-                            player.sendMessage(miniMessage.deserialize("<green>¡Podio para '$id' (Top $rank) eliminado con éxito!</green>"))
+                            messageService.send(
+                                player,
+                                LeaderboardMessages.DELETED,
+                                PlaceholderContext.of("id" to id, "rank" to rank.toString())
+                            )
                         } else {
-                            player.sendMessage(miniMessage.deserialize("<red>No se encontró ningún podio para la clasificación '$id' con Rank $rank.</red>"))
+                            messageService.send(
+                                player,
+                                LeaderboardMessages.NOT_FOUND,
+                                PlaceholderContext.of("id" to id, "rank" to rank.toString())
+                            )
                         }
                     }
                 }
@@ -104,10 +119,10 @@ class LeaderboardCommand(
             manager.commandBuilder("core")
                 .literal("leaderboard")
                 .literal("reload")
-                .permission("core.leaderboard.setup")
+                .permission(Permissions.LEADERBOARD_SETUP)
                 .handler { context ->
                     leaderboardService.reloadLeaderboards().thenRun {
-                        context.sender().sendMessage(miniMessage.deserialize("<green>✔ ¡Configuraciones de clasificaciones recargadas y actualizadas con éxito!</green>"))
+                        messageService.send(context.sender(), LeaderboardMessages.RELOADED)
                     }
                 }
         )

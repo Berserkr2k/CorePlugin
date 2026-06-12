@@ -1,18 +1,17 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.Sound
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
-import com.github.berserkr2k.coreplugin.common.ColorUtility
 
 class AnvilCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val utilityService: UtilityService,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {
@@ -22,8 +21,7 @@ class AnvilCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        val msg = messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"
-                        sender.sendMessage(ColorUtility.parse(msg))
+                        messageService.send(sender, UtilityMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -40,8 +38,7 @@ class AnvilCommand(
                         sender.playSound(sender.location, Sound.BLOCK_ANVIL_PLACE, 1.0f, 1.0f)
                     }
 
-                    val msg = messagesConfig.utility["anvil-opened"] ?: "<green>Abriendo yunque virtual...</green>"
-                    sender.sendMessage(ColorUtility.parse(msg))
+                    messageService.send(sender, UtilityMessages.ANVIL_OPENED)
                 }
         )
     }

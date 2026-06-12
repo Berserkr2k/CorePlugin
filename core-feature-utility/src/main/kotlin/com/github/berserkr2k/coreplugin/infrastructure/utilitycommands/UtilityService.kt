@@ -2,10 +2,11 @@ package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.config.UtilityConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -15,23 +16,20 @@ import org.bukkit.event.player.PlayerTeleportEvent
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
-import net.kyori.adventure.text.minimessage.MiniMessage
 import java.util.concurrent.CompletableFuture
 
 class UtilityService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val serviceRegistry: ServiceRegistry
-) : Listener {
+) : Listener, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
     val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
     val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
 
     lateinit var config: UtilityConfig
         private set
-
-    private val miniMessage = MiniMessage.miniMessage()
 
     init {
         // Cargar configuración de utilidades síncronamente al iniciar
@@ -41,11 +39,15 @@ class UtilityService(
         plugin.server.pluginManager.registerEvents(this, plugin)
     }
 
+    override suspend fun reload() {
+        reloadConfig().join()
+    }
+
     /**
-     * Recarga el archivo de configuración utility.conf
+     * Recarga el archivo de configuración utility/utility.conf
      */
     fun reloadConfig(): CompletableFuture<Void> {
-        return configManager.loadModuleConfig("utility.conf", UtilityConfig::class.java, UtilityConfig())
+        return configManager.loadModuleConfig("utility/utility.conf", UtilityConfig::class.java, UtilityConfig())
             .thenAccept { loadedConfig ->
                 this.config = loadedConfig
                 plugin.logger.info("¡Configuración de Utilidades recargada con éxito!")
@@ -109,8 +111,7 @@ class UtilityService(
             player.allowFlight = false
             player.isFlying = false
             
-            val msg = messagesConfig.utility["fly-world-left"] ?: "<red>Has salido de un mundo permitido para volar. Modo de vuelo desactivado.</red>"
-            player.sendMessage(miniMessage.deserialize(msg))
+            messageService.send(player, UtilityMessages.FLY_WORLD_LEFT)
         }
     }
 }

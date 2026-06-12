@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.scoreboard
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getScoreboard
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -12,16 +12,12 @@ class ScoreboardCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val scoreboardService: ScoreboardService,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
 
     init {
         registerSidebarCommands()
         registerAdminCommands()
-    }
-
-    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
-        return messagesConfig.getScoreboard(key, *placeholders)
     }
 
     private fun registerSidebarCommands() {
@@ -33,7 +29,7 @@ class ScoreboardCommand(
             sidebarBuilder.handler { context ->
                 val sender = context.sender()
                 if (sender !is Player) {
-                    sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                    messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                     return@handler
                 }
 
@@ -41,9 +37,9 @@ class ScoreboardCommand(
                 state.visible = !state.visible
                 
                 if (state.visible) {
-                    sender.sendMessage(ColorUtility.parse(getMsg("toggle-on")))
+                    messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_ON)
                 } else {
-                    sender.sendMessage(ColorUtility.parse(getMsg("toggle-off")))
+                    messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_OFF)
                 }
             }
         )
@@ -54,7 +50,7 @@ class ScoreboardCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -62,9 +58,9 @@ class ScoreboardCommand(
                     state.visible = !state.visible
                     
                     if (state.visible) {
-                        sender.sendMessage(ColorUtility.parse(getMsg("toggle-on")))
+                        messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_ON)
                     } else {
-                        sender.sendMessage(ColorUtility.parse(getMsg("toggle-off")))
+                        messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_OFF)
                     }
                 }
         )
@@ -80,7 +76,7 @@ class ScoreboardCommand(
                 .handler { context ->
                     val sender = context.sender()
                     scoreboardService.reloadConfig().thenRun {
-                        sender.sendMessage(ColorUtility.parse(getMsg("reloaded")))
+                        messageService.send(sender, CoreMessages.SCOREBOARD_RELOADED)
                     }
                 }
         )

@@ -1,12 +1,12 @@
 package com.github.berserkr2k.coreplugin.infrastructure.warps
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
-import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
-import com.github.berserkr2k.coreplugin.common.gui.toItemStack
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getWarps
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.framework.item.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.command.CommandSender
@@ -14,13 +14,21 @@ import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.StringParser.stringParser
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 class WarpCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val warpService: WarpService,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService,
+    private val serviceRegistry: ServiceRegistry
 ) {
+    private val coroutineScope = CoroutineScope(Dispatchers.Default)
+    private val menuService = serviceRegistry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
 
     init {
         // 1. /setwarp <name>
@@ -31,7 +39,7 @@ class WarpCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
@@ -46,7 +54,7 @@ class WarpCommand(
                         yaw = loc.yaw,
                         pitch = loc.pitch
                     )
-                    sender.sendMessage(ColorUtility.parse(messagesConfig.getWarps("set", "name" to name)))
+                    messageService.send(sender, WarpMessages.SET, PlaceholderContext.of("name" to name))
                 }
         )
 
@@ -60,9 +68,9 @@ class WarpCommand(
                     val name = context.get<String>("name")
                     
                     if (warpService.deleteWarp(name)) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.getWarps("deleted", "name" to name)))
+                        messageService.send(sender, WarpMessages.DELETED, PlaceholderContext.of("name" to name))
                     } else {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.getWarps("not-found", "name" to name)))
+                        messageService.send(sender, WarpMessages.NOT_FOUND, PlaceholderContext.of("name" to name))
                     }
                 }
         )
@@ -75,16 +83,16 @@ class WarpCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse(messagesConfig.utility["only-players"] ?: "<red>Solo jugadores pueden ejecutar este comando.</red>"))
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
 
                     val nameOpt = context.optional<String>("name")
                     if (nameOpt.isPresent) {
                         val name = nameOpt.get()
-                        val warp = warpService.getWarp(name)
+                        val warp = warpService.getWarpConfig(name)
                         if (warp == null) {
-                            sender.sendMessage(ColorUtility.parse(messagesConfig.getWarps("not-found", "name" to name)))
+                            messageService.send(sender, WarpMessages.NOT_FOUND, PlaceholderContext.of("name" to name))
                             return@handler
                         }
                         warpService.handleTeleportRequest(sender, warp)
@@ -102,8 +110,10 @@ class WarpCommand(
                 .permission("core.warps.admin")
                 .handler { context ->
                     val sender = context.sender()
-                    warpService.reload()
-                    sender.sendMessage(ColorUtility.parse("<green>¡Configuraciones de warps recargadas con éxito!</green>"))
+                    coroutineScope.launch {
+                        warpService.reload()
+                        messageService.send(sender, WarpMessages.RELOADED)
+                    }
                 }
         )
     }
@@ -111,21 +121,23 @@ class WarpCommand(
     private fun openWarpsMenu(player: Player) {
         val selectorConfig = warpService.menuConfig
         val menuTitle = ColorUtility.parse(selectorConfig.title)
-        val menu = CustomMenu(menuTitle, selectorConfig.size, plugin)
+        
+        val builder = menuService.createBuilder()
+            .title(menuTitle)
+            .slots(selectorConfig.size)
 
         // 1. Relleno de fondo si está activo
         if (selectorConfig.filler.enabled) {
-            val fillerItem = selectorConfig.filler.item.toItemStack()
-            for (i in 0 until selectorConfig.size) {
-                menu.setItem(i, fillerItem.clone())
-            }
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+            val fillerButton = Button.builder().icon(fillerItem).build()
+            builder.fill(fillerButton)
         }
 
         // 2. Cargar ítems estáticos
-        menu.loadFromConfig(selectorConfig)
+        builder.loadFromConfig(selectorConfig)
 
         // 3. Cargar warps dinámicos
-        val warpsList = warpService.getAllWarps().sortedBy { it.name.lowercase() }
+        val warpsList = warpService.getAllWarpConfigs().sortedBy { it.name.lowercase() }
 
         val drawWarpItem = { warp: WarpConfig, slot: Int ->
             val hasPerm = warp.permission.isEmpty() || player.hasPermission(warp.permission)
@@ -145,31 +157,37 @@ class WarpCommand(
                 lore = loreLines.map { it.replace("<name>", warp.name) }
             )
 
-            val item = ItemBuilder.fromConfig(processedItemConfig).build()
+            val item = itemBuilderFactory.builder(processedItemConfig).build()
 
-            menu.setItem(slot, item) { p, _ ->
-                if (!hasPerm) {
-                    p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                    p.sendMessage(ColorUtility.parse(messagesConfig.getWarps("no-permission", "name" to warp.name)))
-                    return@setItem
+            val btn = Button.builder()
+                .icon(item)
+                .onClick { p ->
+                    if (!hasPerm) {
+                        p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
+                        messageService.send(p, WarpMessages.NO_PERMISSION, PlaceholderContext.of("name" to warp.name))
+                        return@onClick
+                    }
+
+                    p.closeInventory()
+                    warpService.handleTeleportRequest(p, warp)
                 }
-
-                p.closeInventory()
-                warpService.handleTeleportRequest(p, warp)
-            }
+                .build()
+            builder.button(slot, btn)
         }
 
         if (selectorConfig.paginated) {
-            menu.placePaginatedItems(
+            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
+            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
+            builder.placePaginatedItems(
                 selectorConfig,
                 warpsList,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                prevArrow,
+                nextArrow
             ) { warp, slot ->
                 drawWarpItem(warp, slot)
             }
         } else {
-            menu.placeDynamicItems(
+            builder.placeDynamicItems(
                 selectorConfig,
                 warpsList,
                 { it.guiSlot },
@@ -179,6 +197,6 @@ class WarpCommand(
             }
         }
 
-        menu.open(player)
+        builder.build().open(player)
     }
 }

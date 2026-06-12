@@ -1,9 +1,9 @@
 package com.github.berserkr2k.coreplugin.infrastructure.spawn.command
 
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.service.SpawnService
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getSpawn
-import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnMessages
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.incendo.cloud.CommandManager
@@ -11,7 +11,7 @@ import org.incendo.cloud.CommandManager
 class SpawnCommand(
     private val commandManager: CommandManager<CommandSender>,
     private val spawnService: SpawnService,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) {
     init {
         registerCommands()
@@ -24,7 +24,7 @@ class SpawnCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden ir al spawn.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     spawnService.teleportToSpawn(sender)
@@ -37,7 +37,7 @@ class SpawnCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage("Solo jugadores pueden establecer el spawn.")
+                        messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     val loc = sender.location
@@ -49,7 +49,7 @@ class SpawnCommand(
                     
                     val centeredLoc = org.bukkit.Location(loc.world, centeredX, centeredY, centeredZ, snappedYaw, snappedPitch)
                     spawnService.setSpawnLocation(centeredLoc)
-                    sender.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("set-success")))
+                    messageService.send(sender, SpawnMessages.SET_SUCCESS)
                 }
         )
     }
