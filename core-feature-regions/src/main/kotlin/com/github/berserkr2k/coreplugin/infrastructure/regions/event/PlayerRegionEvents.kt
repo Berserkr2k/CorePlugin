@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.event
 
-import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
+import com.github.berserkr2k.coreplugin.infrastructure.regions.CompiledRegion
 import org.bukkit.entity.Player
 
 data class PlayerRegionEnterEvent(

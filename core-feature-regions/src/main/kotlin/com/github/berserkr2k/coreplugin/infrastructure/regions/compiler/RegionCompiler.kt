@@ -1,8 +1,8 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.compiler
 
-import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
-import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
-import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.infrastructure.regions.CompiledRegion
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistry
 import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
 import org.bukkit.Bukkit
 
@@ -21,7 +21,7 @@ object RegionCompiler {
         val maxY = maxOf(dto.minY, dto.maxY)
         val maxZ = maxOf(dto.minZ, dto.maxZ)
 
-        var allowMask = 0
+        var allowMask = 0L
         for (flagStr in dto.allowFlags) {
             val flag = RegionFlags.parse(flagStr)
             if (flag != RegionFlags.NONE) {
@@ -29,7 +29,7 @@ object RegionCompiler {
             }
         }
 
-        var denyMask = 0
+        var denyMask = 0L
         for (flagStr in dto.denyFlags) {
             val flag = RegionFlags.parse(flagStr)
             if (flag != RegionFlags.NONE) {

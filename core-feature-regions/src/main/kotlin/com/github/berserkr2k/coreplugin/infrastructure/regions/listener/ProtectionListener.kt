@@ -1,12 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.listener
 
-import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
-import com.github.berserkr2k.coreplugin.api.regions.RegionQueryContext
-import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionQueryContext
+import com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistry
 import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getRegions
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.Material
 import org.bukkit.GameMode
@@ -22,6 +20,15 @@ import org.bukkit.entity.Boss
 import org.bukkit.entity.ArmorStand
 import org.bukkit.entity.ItemFrame
 import org.bukkit.entity.GlowItemFrame
+import org.bukkit.entity.TNTPrimed
+import org.bukkit.entity.Creeper
+import org.bukkit.entity.Fireball
+import org.bukkit.entity.LargeFireball
+import org.bukkit.entity.Enderman
+import org.bukkit.entity.Animals
+import org.bukkit.entity.Ambient
+import org.bukkit.entity.Fish
+import org.bukkit.entity.Firework
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
 import org.bukkit.event.block.Action
@@ -29,7 +36,14 @@ import org.bukkit.event.block.BlockBreakEvent
 import org.bukkit.event.block.BlockPlaceEvent
 import org.bukkit.event.block.BlockPhysicsEvent
 import org.bukkit.event.block.BlockFromToEvent
-import org.bukkit.event.block.BlockRedstoneEvent
+import org.bukkit.event.block.BlockIgniteEvent
+import org.bukkit.event.block.BlockBurnEvent
+import org.bukkit.event.block.BlockSpreadEvent
+import org.bukkit.event.block.BlockFormEvent
+import org.bukkit.event.block.BlockFadeEvent
+import org.bukkit.event.block.LeavesDecayEvent
+import org.bukkit.event.block.BlockGrowEvent
+import org.bukkit.event.world.StructureGrowEvent
 import org.bukkit.event.entity.EntityDamageByEntityEvent
 import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.entity.EntityPickupItemEvent
@@ -37,32 +51,39 @@ import org.bukkit.event.entity.EntityTargetLivingEntityEvent
 import org.bukkit.event.entity.EntityToggleGlideEvent
 import org.bukkit.event.entity.FoodLevelChangeEvent
 import org.bukkit.event.entity.CreatureSpawnEvent
+import org.bukkit.event.entity.EntityExplodeEvent
+import org.bukkit.event.block.BlockExplodeEvent
+import org.bukkit.event.entity.EntityChangeBlockEvent
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerInteractEntityEvent
 import org.bukkit.event.player.PlayerInteractAtEntityEvent
 import org.bukkit.event.player.PlayerDropItemEvent
 import org.bukkit.event.player.PlayerItemDamageEvent
 import org.bukkit.event.player.PlayerExpChangeEvent
+import org.bukkit.event.player.PlayerTeleportEvent
+import org.bukkit.event.player.PlayerBedEnterEvent
 import org.bukkit.event.vehicle.VehicleCreateEvent
 import org.bukkit.event.vehicle.VehicleEnterEvent
 import org.bukkit.event.vehicle.VehicleDamageEvent
 import com.destroystokyo.paper.event.block.AnvilDamagedEvent
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionMessages
 
 class ProtectionListener(
     private val resolver: RegionRuleResolver,
     private val regionManager: RegionManager,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) : Listener {
 
-    private fun shouldSendMessage(flag: Int): Boolean {
+    private fun shouldSendMessage(flag: Long): Boolean {
         val category = RegionFlags.getCategoryOfFlag(flag) ?: return true
         val config = regionManager.config
         return when (category) {
             "COMBAT" -> config.enableCombatMessages
-            "WORLD" -> config.enableWorldMessages
-            "INTERACTION" -> config.enableInteractionMessages
-            "PLAYER" -> config.enablePlayerMessages
-            "ENTITY" -> config.enableEntityMessages
+            "BUILDING" -> config.enableWorldMessages
+            "INTERACTIONS" -> config.enableInteractionMessages
+            "ENVIRONMENT" -> config.enableWorldMessages
+            "ENTITIES" -> config.enableEntityMessages
             else -> true
         }
     }
@@ -78,7 +99,7 @@ class ProtectionListener(
         if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.BLOCK_BREAK, context)) {
             event.isCancelled = true
             if (shouldSendMessage(RegionFlags.BLOCK_BREAK)) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-break")))
+                messageService.send(player, RegionMessages.NO_BREAK)
             }
         }
     }
@@ -94,7 +115,7 @@ class ProtectionListener(
         if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.BLOCK_PLACE, context)) {
             event.isCancelled = true
             if (shouldSendMessage(RegionFlags.BLOCK_PLACE)) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-place")))
+                messageService.send(player, RegionMessages.NO_PLACE)
             }
         }
     }
@@ -109,11 +130,11 @@ class ProtectionListener(
         if (victim is Player) {
             if (damager is Projectile) {
                 val context = RegionQueryContext(victim, victim.gameMode, victim.hasPermission("core.region.bypass"))
-                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.PROJECTILE_DAMAGE, context)) {
+                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.PVP, context)) {
                     event.isCancelled = true
                     val shooter = damager.shooter as? Player
-                    if (shooter != null && shouldSendMessage(RegionFlags.PROJECTILE_DAMAGE)) {
-                        shooter.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-projectile-damage")))
+                    if (shooter != null && shouldSendMessage(RegionFlags.PVP)) {
+                        messageService.send(shooter, RegionMessages.NO_PVP)
                     }
                 }
             } else if (damager is Player) {
@@ -121,28 +142,35 @@ class ProtectionListener(
                 if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.PVP, context)) {
                     event.isCancelled = true
                     if (shouldSendMessage(RegionFlags.PVP)) {
-                        damager.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-pvp")))
+                        messageService.send(damager, RegionMessages.NO_PVP)
                     }
                 }
             }
-        } else if (victim is ArmorStand) {
-            val playerDamager = damager as? Player
+        } else if (victim is Animals || victim is Ambient || victim is Fish) {
+            val playerDamager = if (damager is Player) damager else if (damager is Projectile) damager.shooter as? Player else null
             val context = playerDamager?.let { RegionQueryContext(it, it.gameMode, it.hasPermission("core.region.bypass")) }
                 ?: RegionQueryContext(null, null, false)
-            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ARMOR_STAND_INTERACTION, context)) {
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.DAMAGE_ANIMALS, context)) {
                 event.isCancelled = true
-                if (playerDamager != null && shouldSendMessage(RegionFlags.ARMOR_STAND_INTERACTION)) {
-                    playerDamager.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-armor-stand-interaction")))
+                if (playerDamager != null && shouldSendMessage(RegionFlags.DAMAGE_ANIMALS)) {
+                    messageService.send(playerDamager, RegionMessages.NO_DAMAGE_ANIMALS)
                 }
             }
-        } else if (victim is ItemFrame || victim is GlowItemFrame) {
-            val playerDamager = damager as? Player
+        } else if (isHostile(victim)) {
+            val playerDamager = if (damager is Player) damager else if (damager is Projectile) damager.shooter as? Player else null
             val context = playerDamager?.let { RegionQueryContext(it, it.gameMode, it.hasPermission("core.region.bypass")) }
                 ?: RegionQueryContext(null, null, false)
-            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ITEM_FRAME_INTERACTION, context)) {
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MOB_DAMAGE, context)) {
                 event.isCancelled = true
-                if (playerDamager != null && shouldSendMessage(RegionFlags.ITEM_FRAME_INTERACTION)) {
-                    playerDamager.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-item-frame-interaction")))
+            }
+        } else if (victim is ArmorStand || victim is ItemFrame || victim is GlowItemFrame) {
+            val playerDamager = if (damager is Player) damager else if (damager is Projectile) damager.shooter as? Player else null
+            val context = playerDamager?.let { RegionQueryContext(it, it.gameMode, it.hasPermission("core.region.bypass")) }
+                ?: RegionQueryContext(null, null, false)
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INTERACT, context)) {
+                event.isCancelled = true
+                if (playerDamager != null && shouldSendMessage(RegionFlags.INTERACT)) {
+                    messageService.send(playerDamager, RegionMessages.NO_INTERACT)
                 }
             }
         }
@@ -155,10 +183,10 @@ class ProtectionListener(
         val loc = stand.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ARMOR_STAND_INTERACTION, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INTERACT, context)) {
             event.isCancelled = true
-            if (shouldSendMessage(RegionFlags.ARMOR_STAND_INTERACTION)) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-armor-stand-interaction")))
+            if (shouldSendMessage(RegionFlags.INTERACT)) {
+                messageService.send(player, RegionMessages.NO_INTERACT)
             }
         }
     }
@@ -171,29 +199,18 @@ class ProtectionListener(
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
 
-        val flag = when (entity) {
-            is ItemFrame, is GlowItemFrame -> RegionFlags.ITEM_FRAME_INTERACTION
-            is ArmorStand -> return // handled in onPlayerInteractAtEntity
-            else -> RegionFlags.ENTITY_INTERACTION
-        }
-
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INTERACT, context)) {
             event.isCancelled = true
-            if (shouldSendMessage(flag)) {
-                val errMsgKey = when (flag) {
-                    RegionFlags.ITEM_FRAME_INTERACTION -> "no-item-frame-interaction"
-                    else -> "no-entity-interaction"
-                }
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions(errMsgKey)))
+            if (shouldSendMessage(RegionFlags.INTERACT)) {
+                messageService.send(player, RegionMessages.NO_INTERACT)
             }
         }
     }
 
     @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {
-        if (event.action != Action.RIGHT_CLICK_BLOCK && event.action != Action.LEFT_CLICK_BLOCK) return
-        val block = event.clickedBlock ?: return
         val player = event.player
+        val block = event.clickedBlock
 
         val item = event.item
         if (item != null) {
@@ -201,36 +218,56 @@ class ProtectionListener(
             if (item.type == toolMaterial && player.hasPermission("core.region.setup")) {
                 return
             }
+            // Check vehicle-place directly from hand
+            if (event.action == Action.RIGHT_CLICK_BLOCK && (item.type.name.contains("MINECART") || item.type.name.contains("BOAT"))) {
+                val loc = block?.location ?: player.location
+                val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+                val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
+                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_PLACE, context)) {
+                    event.isCancelled = true
+                    if (shouldSendMessage(RegionFlags.VEHICLE_PLACE)) {
+                        messageService.send(player, RegionMessages.NO_VEHICLE_PLACE)
+                    }
+                    return
+                }
+            }
         }
+
+        if (event.action != Action.RIGHT_CLICK_BLOCK) return
+        if (block == null) return
 
         val loc = block.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
 
         val mat = block.type
-        val flag = when {
-            mat == Material.CHEST || mat == Material.TRAPPED_CHEST || mat == Material.BARREL || mat.name.contains("SHULKER_BOX") -> RegionFlags.CHEST_ACCESS
-            mat == Material.ENDER_CHEST -> RegionFlags.ENDERCHEST_ACCESS
-            mat.name.contains("ANVIL") -> RegionFlags.ANVIL_USE
-            mat == Material.ENCHANTING_TABLE -> RegionFlags.ENCHANTING_USE
-            mat.name.contains("BUTTON") || mat == Material.LEVER || mat.name.contains("PRESSURE_PLATE") || mat == Material.TRIPWIRE_HOOK || mat == Material.DAYLIGHT_DETECTOR -> RegionFlags.REDSTONE_INTERACTION
-            block.state is org.bukkit.block.Container || mat.name.contains("FURNACE") || mat == Material.DISPENSER || mat == Material.DROPPER || mat == Material.HOPPER || mat == Material.BREWING_STAND -> RegionFlags.CONTAINER_INTERACTION
-            else -> RegionFlags.INTERACT
+        val isUseBlock = mat.name.contains("DOOR") ||
+                         mat.name.contains("GATE") ||
+                         mat.name.contains("TRAPDOOR") ||
+                         mat.name.contains("BUTTON") ||
+                         mat == Material.LEVER ||
+                         mat.name.contains("PRESSURE_PLATE") ||
+                         mat == Material.TRIPWIRE_HOOK ||
+                         mat == Material.DAYLIGHT_DETECTOR ||
+                         mat == Material.CHEST || mat == Material.TRAPPED_CHEST || mat == Material.BARREL || mat.name.contains("SHULKER_BOX") ||
+                         mat == Material.ENDER_CHEST ||
+                         mat.name.contains("ANVIL") ||
+                         mat == Material.ENCHANTING_TABLE ||
+                         mat == Material.LECTERN ||
+                         mat == Material.REPEATER ||
+                         mat == Material.COMPARATOR ||
+                         block.state is org.bukkit.block.Container || mat.name.contains("FURNACE") || mat == Material.DISPENSER || mat == Material.DROPPER || mat == Material.HOPPER || mat == Material.BREWING_STAND ||
+                         mat == Material.BELL || mat == Material.JUKEBOX || mat == Material.NOTE_BLOCK || mat == Material.BEACON || mat == Material.CAULDRON || mat.name.contains("BED")
+
+        val flag = when (mat) {
+            Material.RESPAWN_ANCHOR -> RegionFlags.RESPAWN_ANCHORS
+            else -> if (isUseBlock) RegionFlags.USE else RegionFlags.INTERACT
         }
 
         if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
             event.isCancelled = true
             if (shouldSendMessage(flag)) {
-                val errMsgKey = when (flag) {
-                    RegionFlags.CHEST_ACCESS -> "no-chest-access"
-                    RegionFlags.ENDERCHEST_ACCESS -> "no-enderchest-access"
-                    RegionFlags.ANVIL_USE -> "no-anvil-use"
-                    RegionFlags.ENCHANTING_USE -> "no-enchanting-use"
-                    RegionFlags.REDSTONE_INTERACTION -> "no-redstone-interaction"
-                    RegionFlags.CONTAINER_INTERACTION -> "no-container-interaction"
-                    else -> "no-interact"
-                }
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions(errMsgKey)))
+                messageService.send(player, RegionMessages.NO_INTERACT)
             }
         }
     }
@@ -262,7 +299,8 @@ class ProtectionListener(
         val loc = block.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(null, null, false)
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.BLOCK_PHYSICS, context)) {
+        // Check general build or block-break/place? We can skip checking block physics unless specifically desired, or fallback to build
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.BUILD, context)) {
             event.isCancelled = true
         }
     }
@@ -273,11 +311,9 @@ class ProtectionListener(
         val loc = player.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ITEM_DROP, context)) {
+        // Item dropping can fall under interact or be allowed by default. We will check interact as a generic action
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INTERACT, context)) {
             event.isCancelled = true
-            if (shouldSendMessage(RegionFlags.ITEM_DROP)) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-item-drop")))
-            }
         }
     }
 
@@ -287,71 +323,79 @@ class ProtectionListener(
         val loc = player.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ITEM_PICKUP, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INTERACT, context)) {
             event.isCancelled = true
         }
     }
 
     @EventHandler
     fun onEntityTarget(event: EntityTargetLivingEntityEvent) {
-        val player = event.target as? Player ?: return
-        val loc = player.location
-        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MOB_TARGETING, context)) {
-            event.isCancelled = true
-        }
+        // We will keep this default allowed for mobs targetting unless they are protected.
+        // Usually mob-targeting is a minor flag; we can check INTERACT or keep it allowed
     }
 
     @EventHandler
     fun onBlockFromTo(event: BlockFromToEvent) {
+        val fromBlock = event.block
         val toBlock = event.toBlock
         val loc = toBlock.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(null, null, false)
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.LIQUID_FLOW, context)) {
+        val mat = fromBlock.type
+        val flag = when {
+            mat == Material.WATER -> RegionFlags.WATER_FLOW
+            mat == Material.LAVA -> RegionFlags.LAVA_FLOW
+            else -> return
+        }
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
             event.isCancelled = true
         }
     }
 
     @EventHandler
     fun onEntityDamage(event: EntityDamageEvent) {
-        val player = event.entity as? Player ?: return
-        if (event.cause == EntityDamageEvent.DamageCause.FALL) {
-            val loc = player.location
-            val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-            val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.FALL_DAMAGE, context)) {
-                event.isCancelled = true
-            }
-        }
-    }
+        val victim = event.entity
+        val loc = victim.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
 
-    @EventHandler
-    fun onEntityToggleGlide(event: EntityToggleGlideEvent) {
-        val player = event.entity as? Player ?: return
-        if (event.isGliding) {
-            val loc = player.location
-            val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-            val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ELYTRA_USAGE, context)) {
+        if (victim is Player) {
+            val context = RegionQueryContext(victim, victim.gameMode, victim.hasPermission("core.region.bypass"))
+            // 1. Invincible check
+            if (resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.INVINCIBLE, context)) {
                 event.isCancelled = true
-                if (shouldSendMessage(RegionFlags.ELYTRA_USAGE)) {
-                    player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-elytra-usage")))
+                return
+            }
+            // 2. Fall damage check
+            if (event.cause == EntityDamageEvent.DamageCause.FALL) {
+                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.FALL_DAMAGE, context)) {
+                    event.isCancelled = true
+                    return
+                }
+            }
+        } else {
+            val context = RegionQueryContext(null, null, false)
+            if (victim is Animals || victim is Ambient || victim is Fish) {
+                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.DAMAGE_ANIMALS, context)) {
+                    event.isCancelled = true
+                    return
+                }
+            } else if (isHostile(victim)) {
+                if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MOB_DAMAGE, context)) {
+                    event.isCancelled = true
+                    return
                 }
             }
         }
     }
 
     @EventHandler
-    fun onBlockRedstone(event: BlockRedstoneEvent) {
-        val block = event.block
-        val loc = block.location
-        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-        val context = RegionQueryContext(null, null, false)
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.REDSTONE_INTERACTION, context)) {
-            event.newCurrent = event.oldCurrent
-        }
+    fun onEntityToggleGlide(event: EntityToggleGlideEvent) {
+        // Glide is allowed
+    }
+
+    @EventHandler
+    fun onBlockRedstone(event: org.bukkit.event.block.BlockRedstoneEvent) {
+        // Redstone interaction is allowed by default, we don't block physics redstone lines
     }
 
     @EventHandler
@@ -360,8 +404,9 @@ class ProtectionListener(
         val loc = vehicle.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(null, null, false)
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_USAGE, context)) {
-            event.isCancelled = true
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_PLACE, context)) {
+            // Remove vehicle if not allowed
+            vehicle.remove()
         }
     }
 
@@ -371,11 +416,8 @@ class ProtectionListener(
         val loc = event.vehicle.location
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_USAGE, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.USE, context)) {
             event.isCancelled = true
-            if (shouldSendMessage(RegionFlags.VEHICLE_USAGE)) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-vehicle-usage")))
-            }
         }
     }
 
@@ -386,36 +428,19 @@ class ProtectionListener(
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = attacker?.let { RegionQueryContext(it, it.gameMode, it.hasPermission("core.region.bypass")) }
             ?: RegionQueryContext(null, null, false)
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_USAGE, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.VEHICLE_DESTROY, context)) {
             event.isCancelled = true
-            if (attacker != null && shouldSendMessage(RegionFlags.VEHICLE_USAGE)) {
-                attacker.sendMessage(ColorUtility.parse(messagesConfig.getRegions("no-vehicle-usage")))
-            }
         }
     }
 
     @EventHandler
     fun onPlayerExpChange(event: PlayerExpChangeEvent) {
-        val player = event.player
-        val loc = player.location
-        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.EXP_GAIN, context)) {
-            event.amount = 0
-        }
+        // Exp gain allowed
     }
 
     @EventHandler
     fun onFoodLevelChange(event: FoodLevelChangeEvent) {
-        val player = event.entity as? Player ?: return
-        if (event.foodLevel < player.foodLevel) {
-            val loc = player.location
-            val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
-            val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
-            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.HUNGER_LOSS, context)) {
-                event.isCancelled = true
-            }
-        }
+        // Hunger loss allowed
     }
 
     @EventHandler
@@ -425,11 +450,203 @@ class ProtectionListener(
         val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
         val context = RegionQueryContext(null, null, false)
         
-        val isHostileEntity = isHostile(entity)
-        val flagToCheck = if (isHostileEntity) RegionFlags.HOSTILE_SPAWN else RegionFlags.PASSIVE_SPAWN
-        
-        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flagToCheck, context)) {
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MOB_SPAWNING, context)) {
             event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onBlockBurn(event: BlockBurnEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.FIRE_SPREAD, context)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onBlockSpread(event: BlockSpreadEvent) {
+        val block = event.block
+        val source = event.source
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val flag = when (source.type) {
+            Material.FIRE -> RegionFlags.FIRE_SPREAD
+            Material.GRASS_BLOCK -> RegionFlags.GRASS_GROWTH
+            Material.MYCELIUM -> RegionFlags.MYCELIUM_SPREAD
+            else -> return
+        }
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onBlockIgnite(event: BlockIgniteEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        if (event.cause == BlockIgniteEvent.IgniteCause.LAVA) {
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.LAVA_FIRE, context)) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    @EventHandler
+    fun onBlockForm(event: BlockFormEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val mat = event.newState.type
+        val flag = when (mat) {
+            Material.SNOW, Material.SNOW_BLOCK -> RegionFlags.SNOW_FALL
+            Material.ICE -> RegionFlags.ICE_FORM
+            else -> return
+        }
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onBlockFade(event: BlockFadeEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val mat = block.type
+        val flag = when (mat) {
+            Material.SNOW, Material.SNOW_BLOCK -> RegionFlags.SNOW_MELT
+            Material.ICE, Material.PACKED_ICE, Material.FROSTED_ICE -> RegionFlags.ICE_MELT
+            else -> return
+        }
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onLeavesDecay(event: LeavesDecayEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.LEAF_DECAY, context)) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onBlockGrow(event: BlockGrowEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val mat = event.newState.type
+        if (mat == Material.BROWN_MUSHROOM || mat == Material.RED_MUSHROOM) {
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MUSHROOM_GROWTH, context)) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    @EventHandler
+    fun onStructureGrow(event: StructureGrowEvent) {
+        val loc = event.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val type = event.species
+        if (type == org.bukkit.TreeType.BROWN_MUSHROOM || type == org.bukkit.TreeType.RED_MUSHROOM) {
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.MUSHROOM_GROWTH, context)) {
+                event.isCancelled = true
+            }
+        }
+    }
+
+    @EventHandler
+    fun onPlayerTeleport(event: PlayerTeleportEvent) {
+        val player = event.player
+        val to = event.to
+        val worldIndex = WorldIndexRegistry.getIndex(to.world.uid)
+        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
+        val cause = event.cause
+        val flag = when (cause) {
+            PlayerTeleportEvent.TeleportCause.ENDER_PEARL -> RegionFlags.ENDERPEARL
+            PlayerTeleportEvent.TeleportCause.CHORUS_FRUIT -> RegionFlags.CHORUS_FRUIT_TELEPORT
+            else -> return
+        }
+        if (!resolver.isActionAllowed(worldIndex, to.blockX, to.blockY, to.blockZ, flag, context)) {
+            event.isCancelled = true
+            if (shouldSendMessage(flag)) {
+                if (flag == RegionFlags.ENDERPEARL) {
+                    player.sendMessage(ColorUtility.parse("<red>❌ No se permite el uso de enderpearls aquí.</red>"))
+                } else {
+                    player.sendMessage(ColorUtility.parse("<red>❌ No se permite el teletransporte con fruta de coro aquí.</red>"))
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    fun onPlayerBedEnter(event: PlayerBedEnterEvent) {
+        val player = event.player
+        val bed = event.bed
+        val loc = bed.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.SLEEP, context)) {
+            event.isCancelled = true
+            player.sendMessage(ColorUtility.parse("<red>❌ No tienes permiso para dormir aquí.</red>"))
+        }
+    }
+
+    @EventHandler
+    fun onEntityExplode(event: EntityExplodeEvent) {
+        val entity = event.entity
+        val loc = event.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        val flag = when (entity) {
+            is TNTPrimed -> RegionFlags.TNT
+            is Creeper -> RegionFlags.CREEPER_EXPLOSION
+            is Fireball, is LargeFireball -> RegionFlags.GHAST_FIREBALL
+            else -> RegionFlags.OTHER_EXPLOSION
+        }
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, flag, context)) {
+            event.blockList().clear()
+            event.yield = 0.0f
+        }
+    }
+
+    @EventHandler
+    fun onBlockExplode(event: BlockExplodeEvent) {
+        val block = event.block
+        val loc = block.location
+        val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+        val context = RegionQueryContext(null, null, false)
+        if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.OTHER_EXPLOSION, context)) {
+            event.blockList().clear()
+            event.yield = 0.0f
+        }
+    }
+
+    @EventHandler
+    fun onEntityChangeBlock(event: EntityChangeBlockEvent) {
+        val entity = event.entity
+        if (entity is Enderman) {
+            val block = event.block
+            val loc = block.location
+            val worldIndex = WorldIndexRegistry.getIndex(loc.world.uid)
+            val context = RegionQueryContext(null, null, false)
+            if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.ENDERMAN_GRIEF, context)) {
+                event.isCancelled = true
+            }
         }
     }
 

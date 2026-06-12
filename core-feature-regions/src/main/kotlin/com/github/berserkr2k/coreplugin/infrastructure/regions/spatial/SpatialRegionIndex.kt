@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.spatial
 
-import com.github.berserkr2k.coreplugin.api.regions.CompiledRegion
+import com.github.berserkr2k.coreplugin.infrastructure.regions.CompiledRegion
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap
 
 class SpatialRegionIndex {
@@ -16,9 +16,11 @@ class SpatialRegionIndex {
             val minChunkZ = region.minZ shr 4
             val maxChunkZ = region.maxZ shr 4
 
+            val worldIndex = region.worldIndex
+
             for (cx in minChunkX..maxChunkX) {
                 for (cz in minChunkZ..maxChunkZ) {
-                    val chunkKey = (cx.toLong() shl 32) or (cz.toLong() and 0xffffffffL)
+                    val chunkKey = (worldIndex.toLong() shl 48) or ((cx.toLong() and 0xffffffL) shl 24) or (cz.toLong() and 0xffffffL)
                     temporaryMap.computeIfAbsent(chunkKey) { ArrayList() }.add(region)
                 }
             }
@@ -30,8 +32,8 @@ class SpatialRegionIndex {
         }
     }
 
-    fun getRegionsInChunk(chunkX: Int, chunkZ: Int): Array<CompiledRegion>? {
-        val chunkKey = (chunkX.toLong() shl 32) or (chunkZ.toLong() and 0xffffffffL)
+    fun getRegionsInChunk(worldIndex: Int, chunkX: Int, chunkZ: Int): Array<CompiledRegion>? {
+        val chunkKey = (worldIndex.toLong() shl 48) or ((chunkX.toLong() and 0xffffffL) shl 24) or (chunkZ.toLong() and 0xffffffL)
         return chunkMap.get(chunkKey)
     }
 }

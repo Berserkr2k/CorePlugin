@@ -1,5 +1,7 @@
-package com.github.berserkr2k.coreplugin.api.regions
+package com.github.berserkr2k.coreplugin.infrastructure.regions
 
+import com.github.berserkr2k.coreplugin.api.framework.regions.Region
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlag
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -23,19 +25,22 @@ object WorldIndexRegistry {
 }
 
 data class CompiledRegion(
-    val id: String,
+    override val id: String,
     val worldIndex: Int,
-    val priority: Int,
+    override val priority: Int,
     val minX: Int,
     val minY: Int,
     val minZ: Int,
     val maxX: Int,
     val maxY: Int,
     val maxZ: Int,
-    val allowMask: Int,
-    val denyMask: Int
-) {
-    fun contains(x: Int, y: Int, z: Int): Boolean {
+    val allowMask: Long,
+    val denyMask: Long
+) : Region {
+    override val worldUniqueId: UUID?
+        get() = WorldIndexRegistry.getUuid(worldIndex)
+
+    override fun contains(x: Int, y: Int, z: Int): Boolean {
         return x >= minX &&
                x <= maxX &&
                y >= minY &&
@@ -44,12 +49,12 @@ data class CompiledRegion(
                z <= maxZ
     }
 
-    fun hasFlag(flag: Int): Boolean {
-        return ((allowMask or denyMask) and flag) != 0
+    override fun hasFlag(flag: RegionFlag): Boolean {
+        return ((allowMask or denyMask) and flag.mask) != 0L
     }
 
-    fun isAllowed(flag: Int): Boolean {
-        if ((denyMask and flag) != 0) return false
-        return (allowMask and flag) != 0
+    override fun isAllowed(flag: RegionFlag): Boolean {
+        if ((denyMask and flag.mask) != 0L) return false
+        return (allowMask and flag.mask) != 0L
     }
 }

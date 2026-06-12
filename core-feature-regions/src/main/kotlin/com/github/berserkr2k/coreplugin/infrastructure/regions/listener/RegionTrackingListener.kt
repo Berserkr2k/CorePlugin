@@ -1,10 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.regions.listener
 
-import com.github.berserkr2k.coreplugin.api.regions.WorldIndexRegistry
-import com.github.berserkr2k.coreplugin.api.regions.RegionFlags
-import com.github.berserkr2k.coreplugin.api.regions.RegionQueryContext
-import com.github.berserkr2k.coreplugin.api.event.CoreEventBus
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistry
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionQueryContext
+import com.github.berserkr2k.coreplugin.api.core.event.CoreEventBus
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.infrastructure.regions.event.PlayerRegionEnterEvent
 import com.github.berserkr2k.coreplugin.infrastructure.regions.event.PlayerRegionLeaveEvent
 import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver

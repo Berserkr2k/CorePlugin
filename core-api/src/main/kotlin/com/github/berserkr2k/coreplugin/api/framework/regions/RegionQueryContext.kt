@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.regions
+package com.github.berserkr2k.coreplugin.api.framework.regions
 
 import org.bukkit.GameMode
 import org.bukkit.entity.Player
