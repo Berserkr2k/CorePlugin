@@ -5,15 +5,17 @@ import com.github.berserkr2k.coreplugin.api.core.database.FeatureDatabase
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import org.bukkit.plugin.Plugin
+import java.io.File
 import java.sql.Connection
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
+import java.util.logging.Logger
 
 class DatabaseServiceImpl(
-    private val plugin: Plugin,
+    private val dataFolder: File,
     private val configManager: ModularConfigManager,
-    private val taskScheduler: TaskScheduler
+    private val taskScheduler: TaskScheduler,
+    private val logger: Logger
 ) : com.github.berserkr2k.coreplugin.api.core.database.DatabaseService {
     private var dataSource: HikariDataSource? = null
     lateinit var config: DatabaseConfig
@@ -27,7 +29,7 @@ class DatabaseServiceImpl(
             this.config = loadedConfig
             initializePool()
         } catch (ex: Exception) {
-            plugin.logger.severe("Error during database initialization: ${ex.message}")
+            logger.severe("Error during database initialization: ${ex.message}")
             throw ex
         }
     }
@@ -44,7 +46,7 @@ class DatabaseServiceImpl(
             }
             else -> {
                 // SQLite as default local fallback
-                val dbFile = plugin.dataFolder.resolve("core/storage/database.db")
+                val dbFile = dataFolder.resolve("core/storage/database.db")
                 val parent = dbFile.parentFile
                 if (!parent.exists()) {
                     parent.mkdirs()
@@ -67,12 +69,12 @@ class DatabaseServiceImpl(
 
         try {
             dataSource = HikariDataSource(hikariConfig)
-            plugin.logger.info("¡Pool de conexiones HikariCP (${config.driver.uppercase()}) inicializado con éxito!")
+            logger.info("¡Pool de conexiones HikariCP (${config.driver.uppercase()}) inicializado con éxito!")
             
             // Ejecutar migraciones de base de datos de forma automática y secuencial
-            MigrationManager({ getConnection() }, config.driver, plugin.logger).runMigrations()
+            MigrationManager({ getConnection() }, config.driver, logger).runMigrations()
         } catch (e: Exception) {
-            plugin.logger.severe("Fallo al inicializar el pool de conexiones HikariCP o ejecutar migraciones: ${e.message}")
+            logger.severe("Fallo al inicializar el pool de conexiones HikariCP o ejecutar migraciones: ${e.message}")
             e.printStackTrace()
             throw e
         }

@@ -143,7 +143,7 @@ class CorePlugin(
         RegionCommand(this, commandManager, regionManagerImpl, messageRegistry)
 
         // 4. Inicializar Base de Datos (Módulo SQL)
-        val db = DatabaseServiceImpl(this, configManager, taskScheduler)
+        val db = DatabaseServiceImpl(this.dataFolder, configManager, taskScheduler, this.logger)
         databaseService = db
         val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
         profileRegistry = reg
