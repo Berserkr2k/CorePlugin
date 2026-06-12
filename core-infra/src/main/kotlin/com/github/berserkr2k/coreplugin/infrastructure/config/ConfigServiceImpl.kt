@@ -53,12 +53,19 @@ class ConfigServiceImpl(
                         ?: plugin::class.java.classLoader.getResourceAsStream(fileName)
                 }
                 
+                val parentDir = file.parent
+                if (parentDir != null && Files.notExists(parentDir)) {
+                    Files.createDirectories(parentDir)
+                }
+
                 if (resourceStream != null) {
                     resourceStream.use { input ->
                         Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
                     }
                 } else {
-                    Files.createFile(file)
+                    if (Files.notExists(file)) {
+                        Files.createFile(file)
+                    }
                 }
             }
             
