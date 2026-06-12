@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.lifecycle
+package com.github.berserkr2k.coreplugin.api.core.lifecycle
 
 import java.util.concurrent.CompletableFuture
 
@@ -15,7 +15,7 @@ interface LifecycleListener {
 }
 
 interface Reloadable {
-    fun reload(): CompletableFuture<Void>
+    suspend fun reload()
 }
 
 interface FeatureModule {

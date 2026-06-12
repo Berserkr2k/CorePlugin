@@ -25,15 +25,19 @@ import org.bukkit.plugin.Plugin
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
-import com.github.berserkr2k.coreplugin.api.state.StateContainer
-import com.github.berserkr2k.coreplugin.api.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer
 import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
 class ArmorStandEditorStateContainer(
     var editingStandUuid: UUID? = null,
@@ -46,7 +50,7 @@ class ArmorStandEditorStateContainer(
 class ArmorStandEditorListener(
     private val plugin: Plugin,
     private val leaderboardService: LeaderboardService,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val registry: ServiceRegistry
 ) : Listener {
 
@@ -111,7 +115,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
+                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -133,7 +137,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
+                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -156,7 +160,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
+                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -200,7 +204,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
+                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
         }
     }
@@ -280,8 +284,15 @@ class ArmorStandEditorListener(
             }
             val scaleName = if (scale == ScaleMode.COARSE) "GRUESO" else "FINO"
             
+            val actionbarTemplate = messageService.getRawTemplate(CoreMessages.LEADERBOARD_POSE_ACTIONBAR).ifEmpty {
+                "<gold><bold><part> (<axis>): <angle>°</bold></gold> <gray>(Modo: <mode>)</gray>"
+            }
             player.sendActionBar(miniMessage.deserialize(
-                "<gold><bold>$partsName ($axis): ${formattedAngle}°</bold></gold> <gray>(Modo: $scaleName)</gray>"
+                actionbarTemplate,
+                Placeholder.parsed("part", partsName),
+                Placeholder.parsed("axis", axis),
+                Placeholder.parsed("angle", formattedAngle),
+                Placeholder.parsed("mode", scaleName)
             ))
             
             // Sonido pling
@@ -327,14 +338,14 @@ class ArmorStandEditorListener(
         
         val stand = Bukkit.getEntity(targetStandUuid) as? ArmorStand
         if (stand == null) {
-            player.sendMessage(miniMessage.deserialize("<red>El ArmorStand ya no existe.</red>"))
+            messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             return
         }
         
         regionTaskScheduler.runAtLocation(stand.location) {
             stand.customName(deserialized)
             stand.isCustomNameVisible = true
-            player.sendMessage(miniMessage.deserialize("<green>¡Nombre asignado con éxito!</green>"))
+            messageService.send(player, CoreMessages.LEADERBOARD_NAME_ASSIGNED)
         }
     }
 }

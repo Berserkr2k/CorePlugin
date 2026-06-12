@@ -1,8 +1,8 @@
-package com.github.berserkr2k.coreplugin.api.event
+package com.github.berserkr2k.coreplugin.api.core.event
 
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 
 enum class EventPriority {
     LOW, NORMAL, HIGH, MONITOR

@@ -27,5 +27,7 @@ data class SpawnConfig(
     @Setting("warmup-seconds") val warmupSeconds: Int = 3,
     @Setting("limbo-recovery-enabled") val limboRecoveryEnabled: Boolean = true,
     @Setting("force-spawn-on-first-join") val forceSpawnOnFirstJoin: Boolean = true,
+    @Setting("teleport-sound") val teleportSound: String = "ENTITY_ENDERMAN_TELEPORT",
+    @Setting("void-teleport-only-configured-worlds") val voidTeleportOnlyConfiguredWorlds: Boolean = true,
     @Setting("worlds") val worlds: Map<String, WorldSpawnSettings> = mapOf("world" to WorldSpawnSettings())
 )

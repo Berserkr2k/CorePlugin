@@ -5,11 +5,13 @@ import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig.ChatFormatSection
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
-import com.github.berserkr2k.coreplugin.api.state.StateContainer
-import com.github.berserkr2k.coreplugin.api.state.StateContainerType
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getChat
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import io.papermc.paper.chat.ChatRenderer
 import io.papermc.paper.event.player.AsyncChatEvent
 import net.kyori.adventure.audience.Audience
@@ -31,11 +33,11 @@ class ChatStateContainer(
 val CHAT_STATE_TYPE = StateContainerType { ChatStateContainer() }
 
 class ModernChatModuleListener(
-    private val chatConfig: ChatConfig,
+    @Volatile var chatConfig: ChatConfig,
     private val papiBridge: LegacyPlaceholderBridge,
     private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
     private val serviceRegistry: ServiceRegistry,
-    private val messagesConfig: MessagesConfig
+    private val messageService: MessageService
 ) : Listener, ChatRenderer {
 
     private val stateService = serviceRegistry.get(PlayerStateService::class.java)
@@ -75,9 +77,11 @@ class ModernChatModuleListener(
             val required = (filter.cooldownSeconds * 1000).toLong()
             if (elapsed < required) {
                 val remaining = (required - elapsed) / 1000.0
-                player.sendMessage(ColorUtility.parse(
-                    messagesConfig.getChat("cooldown", "<cooldown>" to String.format("%.1f", remaining))
-                ))
+                messageService.send(
+                    player,
+                    CoreMessages.CHAT_COOLDOWN,
+                    PlaceholderContext.of(Placeholder.parsed("cooldown", String.format("%.1f", remaining)))
+                )
                 return null
             }
         }
@@ -85,7 +89,7 @@ class ModernChatModuleListener(
         // 2. Link Blocker
         if (filter.blockLinks && !player.hasPermission("core.chat.bypass.links")) {
             if (LINK_PATTERN.matcher(rawMessage).find()) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getChat("link-blocked")))
+                messageService.send(player, CoreMessages.CHAT_LINK_BLOCKED)
                 return null
             }
         }

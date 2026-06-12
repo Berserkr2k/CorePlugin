@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.leaderboard
+package com.github.berserkr2k.coreplugin.api.feature.leaderboard
 
 import org.bukkit.Location
 import org.bukkit.entity.Player

@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.economy
+package com.github.berserkr2k.coreplugin.api.feature.economy
 
 interface CurrencyInfo {
     val id: String

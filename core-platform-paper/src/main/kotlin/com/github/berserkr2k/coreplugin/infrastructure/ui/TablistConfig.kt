@@ -12,7 +12,8 @@ data class TablistConfig(
         TablistPriorityGroup("mod", "core.tablist.priority.mod", 10, "<green>"),
         TablistPriorityGroup("vip", "core.tablist.priority.vip", 50, "<gold>"),
         TablistPriorityGroup("default", "core.tablist.priority.default", 100, "<gray>")
-    )
+    ),
+    @Setting("update-interval-ticks") val updateIntervalTicks: Long = 20L
 ) {
     @ConfigSerializable
     data class TablistPriorityGroup(

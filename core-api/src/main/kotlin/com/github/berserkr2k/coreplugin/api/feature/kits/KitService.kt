@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.kits
+package com.github.berserkr2k.coreplugin.api.feature.kits
 
 import org.bukkit.entity.Player
 import java.util.UUID

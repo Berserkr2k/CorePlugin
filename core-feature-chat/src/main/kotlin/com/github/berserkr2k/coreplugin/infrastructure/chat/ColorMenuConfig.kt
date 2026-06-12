@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.chat
 
-import com.github.berserkr2k.coreplugin.common.gui.FillerConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
 @ConfigSerializable

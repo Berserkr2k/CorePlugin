@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.economy
 
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
-import com.github.berserkr2k.coreplugin.api.economy.CurrencyInfo
+import com.github.berserkr2k.coreplugin.api.feature.economy.CurrencyInfo
 
 @ConfigSerializable
 data class CurrencyConfig(

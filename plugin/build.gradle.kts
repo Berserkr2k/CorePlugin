@@ -38,6 +38,10 @@ dependencies {
 }
 
 tasks {
+    jar {
+        enabled = false
+    }
+
     shadowJar {
         archiveClassifier.set("")
 
@@ -46,6 +50,7 @@ tasks {
         relocate("org.postgresql", "$prefix.postgresql")
         relocate("org.spongepowered.configurate", "$prefix.configurate")
         relocate("org.incendo.cloud", "$prefix.cloud")
+        relocate("kotlinx.coroutines", "$prefix.coroutines")
     }
 
     test {

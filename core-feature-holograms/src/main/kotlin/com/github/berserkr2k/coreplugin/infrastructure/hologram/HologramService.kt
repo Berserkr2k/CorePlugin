@@ -15,9 +15,10 @@ import com.comphenix.protocol.events.PacketAdapter
 import com.comphenix.protocol.events.PacketEvent
 import com.comphenix.protocol.events.ListenerPriority
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
 
 class HologramService(
@@ -25,11 +26,13 @@ class HologramService(
     private val configManager: ModularConfigManager,
     private val placeholderBridge: LegacyPlaceholderBridge,
     private val registry: ServiceRegistry
-) {
+) : com.github.berserkr2k.coreplugin.api.feature.holograms.HologramService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val activeHolograms = ConcurrentHashMap<String, ModernHologram>()
     private val refreshTasks = ConcurrentHashMap<String, Task>()
     private val configs = ConcurrentHashMap<String, HologramConfig>()
-    private val hologramsFolder = plugin.dataFolder.resolve("holograms")
+    
+    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
+    private val hologramsFolder = folderProvider.getFeatureFolder("holograms").resolve("holograms").toFile()
     
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
@@ -55,6 +58,10 @@ class HologramService(
         }
     }
 
+    override suspend fun reload() {
+        reloadHolograms().join()
+    }
+
     private fun setupDefaultHolograms() {
         if (!hologramsFolder.exists()) {
             hologramsFolder.mkdirs()
@@ -73,7 +80,7 @@ class HologramService(
 
         val futures = files.map { file ->
             val id = file.nameWithoutExtension.lowercase()
-            configManager.loadModuleConfig("holograms/${file.name}", HologramConfig::class.java, HologramConfig(id = id))
+            configManager.loadModuleConfig("holograms/holograms/${file.name}", HologramConfig::class.java, HologramConfig(id = id))
                 .thenAccept { loadedConfig ->
                     configs[id] = loadedConfig
 
@@ -149,6 +156,10 @@ class HologramService(
         return activeHolograms.values.find { it.isInteractionEntity(id) }
     }
 
+    override fun createHologram(id: String, location: Location, lines: List<String>) {
+        createHologram(id, location, lines, null, null, null, false, 1, null)
+    }
+
     /**
      * Crea dinámicamente un holograma packet-based e impone unicidad eliminando cualquier duplicado previo.
      */
@@ -203,7 +214,7 @@ class HologramService(
             renderDistance = renderDistance ?: 48
         )
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
+        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
 
         return holo
     }
@@ -211,21 +222,21 @@ class HologramService(
     /**
      * Edita dinámicamente las líneas de texto de un holograma y lo guarda en disco.
      */
-    fun editHologram(id: String, lines: List<String>): Boolean {
+    override fun editHologram(id: String, lines: List<String>): Boolean {
         val holo = activeHolograms[id] ?: return false
         holo.updateText(lines)
 
         val oldConfig = configs[id] ?: return false
         val newConfig = oldConfig.copy(lines = lines)
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
+        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
         return true
     }
 
     /**
      * Traslada la posición de un holograma y refresca su renderizado y configuración.
      */
-    fun moveHologram(id: String, newLocation: Location): Boolean {
+    override fun moveHologram(id: String, newLocation: Location): Boolean {
         val holo = activeHolograms[id] ?: return false
 
         // Ocultar a los espectadores actuales
@@ -248,14 +259,14 @@ class HologramService(
             world = newLocation.world.name
         )
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/$id.conf", HologramConfig::class.java, newConfig)
+        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
         return true
     }
 
     /**
      * Elimina el holograma físicamente para todos los clientes y lo remueve del disco.
      */
-    fun deleteHologram(id: String): Boolean {
+    override fun deleteHologram(id: String): Boolean {
         refreshTasks.remove(id)?.cancel()
         val holo = activeHolograms.remove(id) ?: return false
         holo.delete()
@@ -274,12 +285,13 @@ class HologramService(
         }
     }
 
-    fun getActiveHolograms(): Map<String, ModernHologram> = activeHolograms
+    override fun getActiveHolograms(): Map<String, Location> = activeHolograms.mapValues { it.value.location }
+    fun getActiveHologramObjects(): Map<String, ModernHologram> = activeHolograms
 
     /**
      * Recarga todos los hologramas desde la carpeta de configuraciones.
      */
-    fun reloadHolograms(): java.util.concurrent.CompletableFuture<Void> {
+    override fun reloadHolograms(): java.util.concurrent.CompletableFuture<Void> {
         return java.util.concurrent.CompletableFuture.runAsync({
             loadAllHolograms()
             plugin.logger.info("¡Se han recargado con éxito ${activeHolograms.size} hologramas desde la carpeta holograms/!")

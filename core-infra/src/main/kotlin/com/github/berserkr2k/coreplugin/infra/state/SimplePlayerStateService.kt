@@ -1,8 +1,8 @@
 package com.github.berserkr2k.coreplugin.infra.state
 
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
-import com.github.berserkr2k.coreplugin.api.state.StateContainer
-import com.github.berserkr2k.coreplugin.api.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 

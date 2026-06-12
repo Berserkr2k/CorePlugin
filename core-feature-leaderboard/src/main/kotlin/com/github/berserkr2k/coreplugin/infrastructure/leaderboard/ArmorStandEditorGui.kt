@@ -1,10 +1,8 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
-import com.github.berserkr2k.coreplugin.common.gui.MenuConfig
-import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
 import org.bukkit.GameMode
@@ -16,8 +14,10 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.EulerAngle
 import org.bukkit.Bukkit
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 
 @ConfigSerializable
 data class ArmorStandEditorGuiConfig(
@@ -34,13 +34,19 @@ object ArmorStandEditorGui {
     private lateinit var plugin: Plugin
     private lateinit var configManager: ModularConfigManager
     private lateinit var playerStateService: PlayerStateService
+    private lateinit var messageService: MessageService
+    private lateinit var editorConfig: EditorConfig
+    private lateinit var menuService: MenuService
 
     lateinit var guiConfig: ArmorStandEditorGuiConfig
 
     fun init(plugin: Plugin, configManager: ModularConfigManager, serviceRegistry: ServiceRegistry) {
         this.plugin = plugin
         this.configManager = configManager
-        this.playerStateService = serviceRegistry.get(PlayerStateService::class.java)
+        this.playerStateService = serviceRegistry.get(PlayerStateService::class.java)!!
+        this.messageService = serviceRegistry.get(MessageService::class.java)!!
+        this.editorConfig = serviceRegistry.get(EditorConfig::class.java)!!
+        this.menuService = serviceRegistry.get(MenuService::class.java)!!
         reloadConfigs()
     }
 
@@ -68,22 +74,19 @@ object ArmorStandEditorGui {
         } else {
             "<yellow>Modo actual: <bold>FINO</bold></yellow> (<gray>1° / 0.05m</gray>)"
         }
-
         val placeholders = mapOf("%scale_status%" to scaleLore)
 
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.main.title),
-            guiConfig.main.size,
-            plugin
-        )
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.main.title))
+            .slots(guiConfig.main.size)
 
         // Registrar acciones locales
-        menu.registerLocalAction("pose") { p, _ -> openPoseMenu(plugin, p, stand) }
-        menu.registerLocalAction("position") { p, _ -> openPositionMenu(plugin, p, stand) }
-        menu.registerLocalAction("properties") { p, _ -> openPropertiesMenu(plugin, p, stand) }
-        menu.registerLocalAction("equipment") { p, _ -> openEquipmentMenu(plugin, p, stand) }
+        builder.registerAction("pose") { p -> openPoseMenu(plugin, p, stand) }
+        builder.registerAction("position") { p -> openPositionMenu(plugin, p, stand) }
+        builder.registerAction("properties") { p -> openPropertiesMenu(plugin, p, stand) }
+        builder.registerAction("equipment") { p -> openEquipmentMenu(plugin, p, stand) }
         
-        menu.registerLocalAction("copy") { p, _ ->
+        builder.registerAction("copy") { p ->
             val equipMap = mutableMapOf<EquipmentSlot, ItemStack?>()
             for (slot in EquipmentSlot.values()) {
                 equipMap[slot] = stand.equipment.getItem(slot)
@@ -104,15 +107,15 @@ object ArmorStandEditorGui {
                 isInvulnerable = stand.isInvulnerable,
                 equipment = equipMap
             )
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡Propiedades físicas y de pose copiadas al portapapeles!</green>"))
+            messageService.send(p, LeaderboardMessages.COPIED)
         }
 
-        menu.registerLocalAction("paste") { p, _ ->
+        builder.registerAction("paste") { p ->
             val st = getEditorState(p)
             val copied = st.copiedSettings
             if (copied == null) {
-                p.sendMessage(ColorUtility.parse("<red>❌ No tienes ajustes copiados en el portapapeles.</red>"))
-                return@registerLocalAction
+                messageService.send(p, LeaderboardMessages.NO_CLIPBOARD)
+                return@registerAction
             }
             stand.headPose = copied.headPose
             stand.bodyPose = copied.bodyPose
@@ -131,53 +134,51 @@ object ArmorStandEditorGui {
                 for ((slot, item) in copied.equipment) {
                     stand.equipment.setItem(slot, item)
                 }
-                p.sendMessage(ColorUtility.parse("<green>✔ ¡Ajustes y equipamiento pegados con éxito!</green>"))
+                messageService.send(p, LeaderboardMessages.PASTED_ALL)
             } else {
-                p.sendMessage(ColorUtility.parse("<green>✔ ¡Ajustes de pose aplicados! (Los objetos no se duplicaron por seguridad en Supervivencia)</green>"))
+                messageService.send(p, LeaderboardMessages.PASTED_POSE)
             }
         }
 
-        menu.registerLocalAction("rename") { p, _ ->
+        builder.registerAction("rename") { p ->
             p.closeInventory()
             val st = getEditorState(p)
             st.renamingStandUuid = stand.uniqueId
-            p.sendMessage(ColorUtility.parse("<gold>✏ Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>"))
+            messageService.send(p, LeaderboardMessages.WRITE_NAME)
         }
 
-        menu.registerLocalAction("scale") { p, _ ->
+        builder.registerAction("scale") { p ->
             val nextScale = if (scale == ScaleMode.COARSE) ScaleMode.FINE else ScaleMode.COARSE
             val st = getEditorState(p)
             st.scaleMode = nextScale
-            p.sendMessage(ColorUtility.parse("<green>✔ Escala de ajuste cambiada a ${nextScale.name}.</green>"))
+            messageService.send(p, LeaderboardMessages.SCALE_CHANGED, PlaceholderContext.of("scale" to nextScale.name))
             open(plugin, p, stand)
         }
 
-        menu.loadFromConfig(guiConfig.main, placeholders)
-        menu.open(player)
+        builder.loadFromConfig(guiConfig.main, placeholders)
+        builder.build().open(player)
     }
 
     /**
      * Sub-Menú: Ajustar Poses de Extremidades
      */
     private fun openPoseMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.pose.title),
-            guiConfig.pose.size,
-            plugin
-        )
-
-        menu.registerLocalAction("pose_head") { p, _ -> openPartRotationMenu(plugin, p, stand, "HEAD") }
-        menu.registerLocalAction("pose_body") { p, _ -> openPartRotationMenu(plugin, p, stand, "BODY") }
-        menu.registerLocalAction("pose_left_arm") { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_ARM") }
-        menu.registerLocalAction("pose_right_arm") { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_ARM") }
-        menu.registerLocalAction("pose_left_leg") { p, _ -> openPartRotationMenu(plugin, p, stand, "LEFT_LEG") }
-        menu.registerLocalAction("pose_right_leg") { p, _ -> openPartRotationMenu(plugin, p, stand, "RIGHT_LEG") }
-        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
-
-        menu.loadFromConfig(guiConfig.pose)
-        menu.open(player)
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.pose.title))
+            .slots(guiConfig.pose.size)
+ 
+        builder.registerAction("pose_head") { p -> openPartRotationMenu(plugin, p, stand, "HEAD") }
+        builder.registerAction("pose_body") { p -> openPartRotationMenu(plugin, p, stand, "BODY") }
+        builder.registerAction("pose_left_arm") { p -> openPartRotationMenu(plugin, p, stand, "LEFT_ARM") }
+        builder.registerAction("pose_right_arm") { p -> openPartRotationMenu(plugin, p, stand, "RIGHT_ARM") }
+        builder.registerAction("pose_left_leg") { p -> openPartRotationMenu(plugin, p, stand, "LEFT_LEG") }
+        builder.registerAction("pose_right_leg") { p -> openPartRotationMenu(plugin, p, stand, "RIGHT_LEG") }
+        builder.registerAction("back_to_main") { p -> open(plugin, p, stand) }
+ 
+        builder.loadFromConfig(guiConfig.pose)
+        builder.build().open(player)
     }
-
+ 
     /**
      * Sub-Menú: Rotación de una parte específica en X/Y/Z
      */
@@ -191,22 +192,20 @@ object ArmorStandEditorGui {
             "RIGHT_LEG" -> "Pierna Derecha"
             else -> part
         }
-
+ 
         val placeholders = mapOf("%part_name%" to partsName)
-
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.rotation.title.replace("%part_name%", partsName)),
-            guiConfig.rotation.size,
-            plugin
-        )
-
-        menu.registerLocalAction("adjust_x") { p, _ -> givePoseTool(p, stand, part, "X") }
-        menu.registerLocalAction("adjust_y") { p, _ -> givePoseTool(p, stand, part, "Y") }
-        menu.registerLocalAction("adjust_z") { p, _ -> givePoseTool(p, stand, part, "Z") }
-        menu.registerLocalAction("back_to_pose") { p, _ -> openPoseMenu(plugin, p, stand) }
-
-        menu.loadFromConfig(guiConfig.rotation, placeholders)
-        menu.open(player)
+ 
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.rotation.title.replace("%part_name%", partsName)))
+            .slots(guiConfig.rotation.size)
+ 
+        builder.registerAction("adjust_x") { p -> givePoseTool(p, stand, part, "X") }
+        builder.registerAction("adjust_y") { p -> givePoseTool(p, stand, part, "Y") }
+        builder.registerAction("adjust_z") { p -> givePoseTool(p, stand, part, "Z") }
+        builder.registerAction("back_to_pose") { p -> openPoseMenu(plugin, p, stand) }
+ 
+        builder.loadFromConfig(guiConfig.rotation, placeholders)
+        builder.build().open(player)
     }
 
     private fun givePoseTool(player: Player, stand: ArmorStand, part: String, axis: String) {
@@ -217,8 +216,8 @@ object ArmorStandEditorGui {
         val st = getEditorState(player)
         st.originalHandItem = currentItem.clone()
 
-        // 2. Crear la herramienta de pose (Palanca)
-        val tool = ItemStack(Material.LEVER)
+        // 2. Crear la herramienta de pose
+        val tool = ItemStack(Material.valueOf(editorConfig.poseToolMaterial))
         val meta = tool.itemMeta ?: return
         
         val partsName = when(part.uppercase()) {
@@ -231,15 +230,10 @@ object ArmorStandEditorGui {
             else -> part
         }
 
-        meta.displayName(ColorUtility.parse("<gold><bold>Herramienta de Pose: $partsName ($axis)</bold></gold>"))
-        meta.lore(listOf(
-            ColorUtility.parse("<yellow>Parte: <white>$partsName</white></yellow>"),
-            ColorUtility.parse("<yellow>Eje: <white>$axis</white></yellow>"),
-            ColorUtility.parse(""),
-            ColorUtility.parse("<green>◀ Click Izquierdo: Aumentar ángulo</green>"),
-            ColorUtility.parse("<red>▶ Click Derecho: Disminuir ángulo</red>"),
-            ColorUtility.parse("<gray>Sneak + Click Derecho: Volver al menú</gray>")
-        ))
+        meta.displayName(ColorUtility.parse(editorConfig.poseToolName.replace("%part%", partsName).replace("%axis%", axis)))
+        meta.lore(editorConfig.poseToolLore.map { 
+            ColorUtility.parse(it.replace("%part%", partsName).replace("%axis%", axis))
+        })
 
         // Guardar estado en PDC
         meta.persistentDataContainer.set(
@@ -251,7 +245,7 @@ object ArmorStandEditorGui {
 
         // 3. Colocar en la mano del jugador
         player.inventory.setItemInMainHand(tool)
-        player.sendMessage(ColorUtility.parse("<green>✔ ¡Recibiste la <gold>Herramienta de Pose</gold>! Ajusta libremente. Sneak + Click Derecho para volver.</green>"))
+        messageService.send(player, LeaderboardMessages.POSE_TOOL)
     }
 
     /**
@@ -268,59 +262,57 @@ object ArmorStandEditorGui {
             "%deg%" to deg.toString()
         )
 
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.position.title),
-            guiConfig.position.size,
-            plugin
-        )
-
-        menu.registerLocalAction("move_x_plus") { _, _ ->
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.position.title))
+            .slots(guiConfig.position.size)
+ 
+        builder.registerAction("move_x_plus") { _ ->
             val loc = stand.location.clone().add(dist, 0.0, 0.0)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("move_x_minus") { _, _ ->
+        builder.registerAction("move_x_minus") { _ ->
             val loc = stand.location.clone().add(-dist, 0.0, 0.0)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("move_y_plus") { _, _ ->
+        builder.registerAction("move_y_plus") { _ ->
             val loc = stand.location.clone().add(0.0, dist, 0.0)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("move_y_minus") { _, _ ->
+        builder.registerAction("move_y_minus") { _ ->
             val loc = stand.location.clone().add(0.0, -dist, 0.0)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("move_z_plus") { _, _ ->
+        builder.registerAction("move_z_plus") { _ ->
             val loc = stand.location.clone().add(0.0, 0.0, dist)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("move_z_minus") { _, _ ->
+        builder.registerAction("move_z_minus") { _ ->
             val loc = stand.location.clone().add(0.0, 0.0, -dist)
             stand.teleport(loc)
         }
-        menu.registerLocalAction("yaw_plus") { _, _ ->
+        builder.registerAction("yaw_plus") { _ ->
             val loc = stand.location.clone()
             loc.yaw = (loc.yaw + deg).toFloat()
             stand.teleport(loc)
         }
-        menu.registerLocalAction("yaw_minus") { _, _ ->
+        builder.registerAction("yaw_minus") { _ ->
             val loc = stand.location.clone()
             loc.yaw = (loc.yaw - deg).toFloat()
             stand.teleport(loc)
         }
-        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
-
-        menu.loadFromConfig(guiConfig.position, placeholders)
-        menu.open(player)
+        builder.registerAction("back_to_main") { p -> open(plugin, p, stand) }
+ 
+        builder.loadFromConfig(guiConfig.position, placeholders)
+        builder.build().open(player)
     }
-
+ 
     /**
      * Sub-Menú: Toggles de Propiedades Físicas
      */
     private fun openPropertiesMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
         val yes = "<green>✔ SÍ</green>"
         val no = "<red>❌ NO</red>"
-
+ 
         val placeholders = mapOf(
             "%arms_status%" to if (stand.hasArms()) yes else no,
             "%visibility_status%" to if (stand.isVisible) yes else no,
@@ -329,53 +321,45 @@ object ArmorStandEditorGui {
             "%gravity_status%" to if (stand.hasGravity()) yes else no,
             "%invulnerable_status%" to if (stand.isInvulnerable) yes else no
         )
-
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.properties.title),
-            guiConfig.properties.size,
-            plugin
-        )
-
-        menu.registerLocalAction("toggle_arms") { p, _ ->
+ 
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.properties.title))
+            .slots(guiConfig.properties.size)
+ 
+        builder.registerAction("toggle_arms") { p ->
             stand.setArms(!stand.hasArms())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("toggle_visibility") { p, _ ->
+        builder.registerAction("toggle_visibility") { p ->
             stand.isVisible = !stand.isVisible
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("toggle_baseplate") { p, _ ->
+        builder.registerAction("toggle_baseplate") { p ->
             stand.setBasePlate(!stand.hasBasePlate())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("toggle_small") { p, _ ->
+        builder.registerAction("toggle_small") { p ->
             stand.isSmall = !stand.isSmall
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("toggle_gravity") { p, _ ->
+        builder.registerAction("toggle_gravity") { p ->
             stand.setGravity(!stand.hasGravity())
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("toggle_invulnerable") { p, _ ->
+        builder.registerAction("toggle_invulnerable") { p ->
             stand.isInvulnerable = !stand.isInvulnerable
             openPropertiesMenu(plugin, p, stand)
         }
-        menu.registerLocalAction("back_to_main") { p, _ -> open(plugin, p, stand) }
-
-        menu.loadFromConfig(guiConfig.properties, placeholders)
-        menu.open(player)
+        builder.registerAction("back_to_main") { p -> open(plugin, p, stand) }
+ 
+        builder.loadFromConfig(guiConfig.properties, placeholders)
+        builder.build().open(player)
     }
-
+ 
     /**
      * Sub-Menú: Colocación de Equipamiento Avanzado
      */
     private fun openEquipmentMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
-        val menu = CustomMenu(
-            ColorUtility.parse(guiConfig.equipment.title),
-            guiConfig.equipment.size,
-            plugin
-        )
-
         // Cargar ítems actuales del ArmorStand
         val head = stand.equipment.helmet ?: ItemStack(Material.AIR)
         val chest = stand.equipment.chestplate ?: ItemStack(Material.AIR)
@@ -383,37 +367,49 @@ object ArmorStandEditorGui {
         val feet = stand.equipment.boots ?: ItemStack(Material.AIR)
         val mainHand = stand.equipment.itemInMainHand ?: ItemStack(Material.AIR)
         val offHand = stand.equipment.itemInOffHand ?: ItemStack(Material.AIR)
-
-        menu.setItem(10, head)
-        menu.setItem(11, chest)
-        menu.setItem(12, legs)
-        menu.setItem(13, feet)
-        menu.setItem(14, mainHand)
-        menu.setItem(15, offHand)
-
+ 
+        lateinit var menu: Menu
+ 
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(guiConfig.equipment.title))
+            .slots(guiConfig.equipment.size)
+ 
+        val itemsSlots = mapOf(
+            10 to head,
+            11 to chest,
+            12 to legs,
+            13 to feet,
+            14 to mainHand,
+            15 to offHand
+        )
+        itemsSlots.forEach { (slot, item) ->
+            builder.button(slot, Button.builder().icon(item).build())
+        }
+ 
         // Marcar slots como interactuables
-        menu.interactableSlots.addAll(listOf(10, 11, 12, 13, 14, 15))
-
-        menu.onClose = { p ->
-            val newHead = menu.inventory.getItem(10) ?: ItemStack(Material.AIR)
-            val newChest = menu.inventory.getItem(11) ?: ItemStack(Material.AIR)
-            val newLegs = menu.inventory.getItem(12) ?: ItemStack(Material.AIR)
-            val newFeet = menu.inventory.getItem(13) ?: ItemStack(Material.AIR)
-            val newMainHand = menu.inventory.getItem(14) ?: ItemStack(Material.AIR)
-            val newOffHand = menu.inventory.getItem(15) ?: ItemStack(Material.AIR)
-
+        builder.interactableSlots(listOf(10, 11, 12, 13, 14, 15))
+ 
+        builder.closeAction { p ->
+            val newHead = menu.getItem(10) ?: ItemStack(Material.AIR)
+            val newChest = menu.getItem(11) ?: ItemStack(Material.AIR)
+            val newLegs = menu.getItem(12) ?: ItemStack(Material.AIR)
+            val newFeet = menu.getItem(13) ?: ItemStack(Material.AIR)
+            val newMainHand = menu.getItem(14) ?: ItemStack(Material.AIR)
+            val newOffHand = menu.getItem(15) ?: ItemStack(Material.AIR)
+ 
             stand.equipment.helmet = newHead
             stand.equipment.chestplate = newChest
             stand.equipment.leggings = newLegs
             stand.equipment.boots = newFeet
             stand.equipment.setItemInMainHand(newMainHand)
             stand.equipment.setItemInOffHand(newOffHand)
-
-            p.sendMessage(ColorUtility.parse("<green>✔ ¡El equipamiento del ArmorStand se ha sincronizado exitosamente!</green>"))
+ 
+            messageService.send(p, LeaderboardMessages.EQUIP_SYNCED)
         }
-
+ 
         // Cargar estructura base de la configuración (etiquetas, etc.)
-        menu.loadFromConfig(guiConfig.equipment, ignoreSlots = listOf(10, 11, 12, 13, 14, 15))
+        builder.loadFromConfig(guiConfig.equipment, ignoreSlots = listOf(10, 11, 12, 13, 14, 15))
+        menu = builder.build()
         menu.open(player)
     }
 

@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
 @ConfigSerializable

@@ -1,17 +1,18 @@
 package com.github.berserkr2k.coreplugin.infrastructure.spawn.service
 
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
-import com.github.berserkr2k.coreplugin.api.state.StateContainer
-import com.github.berserkr2k.coreplugin.api.state.StateContainerType
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getSpawn
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnMessages
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnConfig
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.PersistedLocation
-import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Sound
@@ -31,16 +32,23 @@ class SpawnService(
     private val taskScheduler: TaskScheduler,
     private val regionTaskScheduler: RegionTaskScheduler,
     private val playerStateService: PlayerStateService,
-    private val messagesConfig: MessagesConfig
-) {
+    private val messageService: MessageService
+) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     lateinit var config: SpawnConfig
         private set
 
     init {
-        configManager.loadModuleConfig("spawn.conf", SpawnConfig::class.java, SpawnConfig())
+        configManager.loadModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, SpawnConfig())
             .thenAccept { loaded ->
                 this.config = loaded
             }
+    }
+
+    override suspend fun reload() {
+        configManager.loadModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, SpawnConfig())
+            .thenAccept { loaded ->
+                this.config = loaded
+            }.join()
     }
 
     private fun getSpawnState(uuid: UUID): SpawnStateContainer {
@@ -59,11 +67,17 @@ class SpawnService(
     }
 
     fun getWorldSettings(worldName: String): com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings {
-        return config.worlds[worldName] ?: com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings(
+        config.worlds[worldName]?.let { return it }
+
+        // Fallback: search for first configured world in the map, or fallback to server's first world, or "world"
+        val fallbackWorld = config.worlds.keys.firstOrNull() ?: Bukkit.getWorlds().firstOrNull()?.name ?: "world"
+        config.worlds[fallbackWorld]?.let { return it }
+
+        return com.github.berserkr2k.coreplugin.infrastructure.spawn.WorldSpawnSettings(
             voidTeleportEnabled = true,
-            spawnLocation = PersistedLocation(world = worldName),
+            spawnLocation = PersistedLocation(world = fallbackWorld),
             voidThresholdY = -64,
-            safeFallbackLocation = PersistedLocation(world = worldName)
+            safeFallbackLocation = PersistedLocation(world = fallbackWorld)
         )
     }
 
@@ -81,7 +95,7 @@ class SpawnService(
 
         val newConfig = config.copy(worlds = updatedWorlds)
         config = newConfig
-        configManager.saveModuleConfig("spawn.conf", SpawnConfig::class.java, newConfig)
+        configManager.saveModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, newConfig)
         
         // Update Bukkit world spawn coordinate physically
         loc.world.setSpawnLocation(loc)
@@ -90,7 +104,7 @@ class SpawnService(
     fun teleportToSpawn(player: Player, bypassWarmup: Boolean = false) {
         val destination = getSpawnLocation(player.world.name)
         if (destination == null) {
-            player.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("not-configured")))
+            messageService.send(player, SpawnMessages.NOT_CONFIGURED)
             return
         }
 
@@ -104,7 +118,7 @@ class SpawnService(
         state.activeWarmup = null
 
         val warmupTime = config.warmupSeconds
-        player.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("warmup", "time" to warmupTime)))
+        messageService.send(player, SpawnMessages.WARMUP, PlaceholderContext.of("time" to warmupTime.toString()))
 
         val task = taskScheduler.runSyncLater(Runnable {
             regionTaskScheduler.runAtLocation(player.location, Runnable {
@@ -120,21 +134,27 @@ class SpawnService(
     private fun executeTeleport(player: Player, destination: Location) {
         player.teleportAsync(destination).thenAccept { success ->
             if (success) {
-                player.sendMessage(ColorUtility.parse(messagesConfig.getSpawn("success")))
-                player.playSound(player.location, Sound.ENTITY_ENDERMAN_TELEPORT, 1.0f, 1.0f)
+                regionTaskScheduler.runAtLocation(destination, Runnable {
+                    messageService.send(player, SpawnMessages.SUCCESS)
+                    val soundName = config.teleportSound
+                    val sound = try { Sound.valueOf(soundName.uppercase()) } catch (e: Exception) { Sound.ENTITY_ENDERMAN_TELEPORT }
+                    player.playSound(destination, sound, 1.0f, 1.0f)
+                })
             } else {
-                player.sendMessage(ColorUtility.parse("<red>❌ No se pudo realizar la teletransportación.</red>"))
+                regionTaskScheduler.runAtLocation(player.location, Runnable {
+                    messageService.send(player, SpawnMessages.FAILURE)
+                })
             }
         }
     }
 
-    fun cancelWarmup(player: Player, messageKey: String) {
+    fun cancelWarmup(player: Player, key: SpawnMessages) {
         val state = getSpawnState(player.uniqueId)
         val task = state.activeWarmup
         if (task != null) {
             task.cancel()
             state.activeWarmup = null
-            player.sendMessage(ColorUtility.parse(messagesConfig.getSpawn(messageKey)))
+            messageService.send(player, key)
         }
     }
 

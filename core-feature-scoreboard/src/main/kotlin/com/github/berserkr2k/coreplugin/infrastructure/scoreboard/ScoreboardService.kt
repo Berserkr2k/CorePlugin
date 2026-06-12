@@ -1,12 +1,12 @@
 package com.github.berserkr2k.coreplugin.infrastructure.scoreboard
 
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
-import com.github.berserkr2k.coreplugin.api.state.PlayerStateService
-import com.github.berserkr2k.coreplugin.api.state.StateContainer
-import com.github.berserkr2k.coreplugin.api.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
@@ -37,7 +37,7 @@ class ScoreboardService(
     private val configManager: ModularConfigManager,
     private val placeholderBridge: LegacyPlaceholderBridge,
     private val serviceRegistry: ServiceRegistry
-) : Listener {
+) : Listener, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
     private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
@@ -55,8 +55,12 @@ class ScoreboardService(
         plugin.server.pluginManager.registerEvents(this, plugin)
     }
 
+    override suspend fun reload() {
+        reloadConfig().join()
+    }
+
     fun reloadConfig(): CompletableFuture<Void> {
-        return configManager.loadModuleConfig("scoreboard.conf", ScoreboardModuleConfig::class.java, ScoreboardModuleConfig())
+        return configManager.loadModuleConfig("core/scoreboard.conf", ScoreboardModuleConfig::class.java, ScoreboardModuleConfig())
             .thenAccept { loadedConfig ->
                 this.config = loadedConfig
                 if (loadedConfig.enabled) {

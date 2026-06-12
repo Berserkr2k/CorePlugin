@@ -7,8 +7,8 @@ import org.bukkit.Bukkit
 import java.math.BigDecimal
 import java.util.Optional
 import java.util.UUID
-import com.github.berserkr2k.coreplugin.api.economy.EconomyService
-import com.github.berserkr2k.coreplugin.api.economy.CurrencyInfo
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.feature.economy.CurrencyInfo
 
 class DummyCurrencyInfo(override val id: String) : CurrencyInfo {
     override val displayName: String = "Créditos"

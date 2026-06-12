@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.scheduler
+package com.github.berserkr2k.coreplugin.api.core.scheduler
 
 import org.bukkit.Location
 import org.bukkit.entity.Entity

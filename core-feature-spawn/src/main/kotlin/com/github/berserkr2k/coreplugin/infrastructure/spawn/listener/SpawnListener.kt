@@ -1,7 +1,8 @@
 package com.github.berserkr2k.coreplugin.infrastructure.spawn.listener
 
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.service.SpawnService
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnMessages
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import it.unimi.dsi.fastutil.objects.Object2LongOpenHashMap
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -30,10 +31,7 @@ class SpawnListener(
         if (!player.hasPlayedBefore() && spawnService.config.forceSpawnOnFirstJoin) {
             val spawnLoc = spawnService.getSpawnLocation(player.world.name)
             if (spawnLoc != null) {
-                // Teleport safely regionalized
-                regionTaskScheduler.runAtLocation(spawnLoc) {
-                    player.teleport(spawnLoc)
-                }
+                player.teleportAsync(spawnLoc)
             }
             return
         }
@@ -42,15 +40,20 @@ class SpawnListener(
         if (spawnService.config.limboRecoveryEnabled) {
             val loc = player.location
             if (loc.world != null) {
+                // Skip void protection for unconfigured worlds if the flag is enabled
+                if (spawnService.config.voidTeleportOnlyConfiguredWorlds && !spawnService.config.worlds.containsKey(loc.world.name)) return
                 val settings = spawnService.getWorldSettings(loc.world.name)
                 if (settings.voidTeleportEnabled && loc.blockY < settings.voidThresholdY) {
                     val dest = spawnService.resolveLocation(settings.spawnLocation)
                         ?: spawnService.resolveLocation(settings.safeFallbackLocation)
                         ?: spawnService.getSpawnLocation(loc.world.name)
                     if (dest != null) {
-                        regionTaskScheduler.runAtLocation(dest) {
-                            player.teleport(dest)
-                            player.fallDistance = 0f
+                        player.teleportAsync(dest).thenAccept { success ->
+                            if (success) {
+                                regionTaskScheduler.runAtLocation(dest, Runnable {
+                                    player.fallDistance = 0f
+                                })
+                            }
                         }
                     }
                 }
@@ -79,7 +82,7 @@ class SpawnListener(
         val from = event.from
         val to = event.to
         if (from.blockX != to.blockX || from.blockY != to.blockY || from.blockZ != to.blockZ) {
-            spawnService.cancelWarmup(player, "cancelled-movement")
+            spawnService.cancelWarmup(player, SpawnMessages.CANCELLED_MOVEMENT)
         }
 
         // 2. Void protection check
@@ -90,6 +93,8 @@ class SpawnListener(
 
         val world = event.to.world
         if (world != null) {
+            // Skip void protection for unconfigured worlds if the flag is enabled
+            if (spawnService.config.voidTeleportOnlyConfiguredWorlds && !spawnService.config.worlds.containsKey(world.name)) return
             val settings = spawnService.getWorldSettings(world.name)
             if (settings.voidTeleportEnabled && event.to.blockY < settings.voidThresholdY) {
                 val destination = spawnService.resolveLocation(settings.spawnLocation)
@@ -99,9 +104,12 @@ class SpawnListener(
 
                 lastTeleportTickCache.put(uuid, currentServerTick)
 
-                regionTaskScheduler.runAtLocation(destination) {
-                    player.teleport(destination)
-                    player.fallDistance = 0f
+                player.teleportAsync(destination).thenAccept { success ->
+                    if (success) {
+                        regionTaskScheduler.runAtLocation(destination, Runnable {
+                            player.fallDistance = 0f
+                        })
+                    }
                 }
             }
         }
@@ -110,7 +118,7 @@ class SpawnListener(
     @EventHandler
     fun onEntityDamage(event: EntityDamageEvent) {
         val player = event.entity as? Player ?: return
-        spawnService.cancelWarmup(player, "cancelled-damage")
+        spawnService.cancelWarmup(player, SpawnMessages.CANCELLED_DAMAGE)
     }
 
     @EventHandler

@@ -3,8 +3,8 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import org.bukkit.NamespacedKey
 import org.bukkit.block.data.type.Stairs
 import org.bukkit.entity.ArmorStand
@@ -17,17 +17,16 @@ import org.bukkit.event.block.Action
 import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.entity.EntityDismountEvent
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.getUtility
 
 class ChairListener(
     private val plugin: Plugin,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val serviceRegistry: ServiceRegistry
 ) : Listener {
 
@@ -35,10 +34,6 @@ class ChairListener(
     val activeChairs = ConcurrentHashMap.newKeySet<UUID>()
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
     private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
-
-    private fun getMsg(key: String): String {
-        return messagesConfig.getUtility(key)
-    }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     fun onPlayerInteract(event: PlayerInteractEvent) {
@@ -66,7 +61,7 @@ class ChairListener(
         val up1 = block.getRelative(org.bukkit.block.BlockFace.UP)
         val up2 = up1.getRelative(org.bukkit.block.BlockFace.UP)
         if (up1.type.isSolid || up2.type.isSolid || up1.isLiquid) {
-            player.sendMessage(ColorUtility.parse(getMsg("chair-unsafe")))
+            messageService.send(player, CoreMessages.CHAIR_UNSAFE)
             return
         }
 
@@ -91,7 +86,7 @@ class ChairListener(
             }.isNotEmpty()
 
             if (alreadyOccupied) {
-                player.sendMessage(ColorUtility.parse(getMsg("chair-occupied")))
+                messageService.send(player, CoreMessages.CHAIR_OCCUPIED)
                 return@runAtLocation
             }
 

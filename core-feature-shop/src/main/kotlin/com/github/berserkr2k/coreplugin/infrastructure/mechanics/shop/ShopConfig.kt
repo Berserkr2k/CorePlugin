@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 
 @ConfigSerializable
 data class ShopItemConfig(

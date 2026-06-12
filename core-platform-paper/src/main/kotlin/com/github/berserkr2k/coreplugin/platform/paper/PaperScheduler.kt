@@ -1,9 +1,9 @@
 package com.github.berserkr2k.coreplugin.platform.paper
 
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.ThreadAssertion
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.ThreadAssertion
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.entity.Entity

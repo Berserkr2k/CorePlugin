@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.trails
+package com.github.berserkr2k.coreplugin.api.feature.trails
 
 import java.util.UUID
 import java.util.concurrent.CompletableFuture

@@ -6,8 +6,8 @@ import org.bukkit.Bukkit
 import org.bukkit.OfflinePlayer
 import java.math.BigDecimal
 import java.util.UUID
-import com.github.berserkr2k.coreplugin.api.economy.EconomyService
-import com.github.berserkr2k.coreplugin.api.economy.CurrencyInfo
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.feature.economy.CurrencyInfo
 
 class VaultEconomyHook(private val economyService: EconomyService) : Economy {
 

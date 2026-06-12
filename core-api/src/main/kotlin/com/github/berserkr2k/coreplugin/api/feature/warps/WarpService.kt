@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.api.warps
+package com.github.berserkr2k.coreplugin.api.feature.warps
 
 import org.bukkit.Location
 import org.bukkit.entity.Player

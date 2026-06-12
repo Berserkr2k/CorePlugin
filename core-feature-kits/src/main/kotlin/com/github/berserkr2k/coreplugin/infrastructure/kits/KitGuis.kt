@@ -1,12 +1,9 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
-import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
-import com.github.berserkr2k.coreplugin.common.gui.MenuConfig
-import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
-import com.github.berserkr2k.coreplugin.common.gui.FillerConfig
-import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
-import com.github.berserkr2k.coreplugin.common.gui.toItemStack
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.framework.item.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
@@ -15,18 +12,30 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.event.inventory.ClickType
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 class KitGuis(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
-    private val kitService: KitService
+    private val kitService: KitService,
+    private val serviceRegistry: ServiceRegistry
 ) {
-    private val selectorConfig: MenuConfig by lazy {
-        configManager.loadModuleConfig("menus/kits-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig()).join()
-    }
+    private val menuService = serviceRegistry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
+
+    var selectorConfig: MenuConfig = createDefaultSelectorConfig()
+        private set
     
-    private val showcaseConfig: MenuConfig by lazy {
-        configManager.loadModuleConfig("menus/kits-showcase.conf", MenuConfig::class.java, createDefaultShowcaseConfig()).join()
+    var showcaseConfig: MenuConfig = createDefaultShowcaseConfig()
+        private set
+
+    init {
+        reload()
+    }
+
+    fun reload() {
+        selectorConfig = configManager.loadModuleConfig("menus/kits-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig()).join()
+        showcaseConfig = configManager.loadModuleConfig("menus/kits-showcase.conf", MenuConfig::class.java, createDefaultShowcaseConfig()).join()
     }
 
     private fun createDefaultSelectorConfig(): MenuConfig {
@@ -64,18 +73,15 @@ class KitGuis(
     }
 
     fun openKitSelector(player: Player) {
-        val menu = CustomMenu(
-            ColorUtility.parse(selectorConfig.title),
-            selectorConfig.size,
-            plugin
-        )
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(selectorConfig.title))
+            .slots(selectorConfig.size)
 
         // Rellenar con paneles decorativos
         if (selectorConfig.filler.enabled) {
-            val fillerItem = selectorConfig.filler.item.toItemStack()
-            for (i in 0 until selectorConfig.size) {
-                menu.setItem(i, fillerItem.clone())
-            }
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+            val fillerButton = Button.builder().icon(fillerItem).build()
+            builder.fill(fillerButton)
         }
 
         val sortedKits = kitService.kits.toList().sortedBy { it.first }
@@ -119,39 +125,45 @@ class KitGuis(
             loreLines.add("<yellow>⚡ Click Izquierdo para Reclamar</yellow>")
             loreLines.add("<aqua>⚡ Click Derecho para Previsualizar</aqua>")
 
-            val kitIcon = ItemBuilder.fromConfig(baseItem)
+            val kitIcon = itemBuilderFactory.builder(baseItem)
                 .lore(loreLines)
                 .build()
 
-            menu.setItem(slot, kitIcon) { p, event ->
-                if (event.click == ClickType.RIGHT) {
-                    openKitShowcase(p, kitId)
-                } else {
-                    p.closeInventory()
-                    kitService.claimKit(p, kitId, false).thenAccept { result ->
-                        when (result) {
-                            is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
-                            is ClaimResult.Failure -> {
-                                p.sendMessage(ColorUtility.parse(result.reason))
-                                p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
+            val btn = Button.builder()
+                .icon(kitIcon)
+                .onClick { p, clickType ->
+                    if (clickType == ClickType.RIGHT) {
+                        openKitShowcase(p, kitId)
+                    } else {
+                        p.closeInventory()
+                        kitService.claimKit(p, kitId, false).thenAccept { result ->
+                            when (result) {
+                                is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
+                                is ClaimResult.Failure -> {
+                                    p.sendMessage(ColorUtility.parse(result.reason))
+                                    p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
+                                }
                             }
                         }
                     }
                 }
-            }
+                .build()
+            builder.button(slot, btn)
         }
 
         if (selectorConfig.paginated) {
-            menu.placePaginatedItems(
+            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
+            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
+            builder.placePaginatedItems(
                 selectorConfig,
                 sortedKits,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                prevArrow,
+                nextArrow
             ) { kitEntry, slot ->
                 drawKit(kitEntry, slot)
             }
         } else {
-            menu.placeDynamicItems(
+            builder.placeDynamicItems(
                 selectorConfig,
                 sortedKits,
                 { it.second.guiSlot }
@@ -160,7 +172,7 @@ class KitGuis(
             }
         }
 
-        menu.open(player)
+        builder.build().open(player)
     }
 
     fun openKitShowcase(player: Player, kitId: String) {
@@ -174,18 +186,15 @@ class KitGuis(
         }
 
         val titleText = showcaseConfig.title.replace("%kit_name%", config.displayName)
-        val menu = CustomMenu(
-            ColorUtility.parse(titleText),
-            slots,
-            plugin
-        )
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(titleText))
+            .slots(slots)
 
         // Rellenar con paneles decorativos
         if (showcaseConfig.filler.enabled) {
-            val fillerItem = showcaseConfig.filler.item.toItemStack()
-            for (i in 0 until slots) {
-                menu.setItem(i, fillerItem.clone())
-            }
+            val fillerItem = itemBuilderFactory.builder(showcaseConfig.filler.item).build()
+            val fillerButton = Button.builder().icon(fillerItem).build()
+            builder.fill(fillerButton)
         }
 
         val activeSlots = mutableListOf<Int>()
@@ -203,7 +212,8 @@ class KitGuis(
 
         items.forEachIndexed { index, itemStack ->
             if (index < activeSlots.size) {
-                menu.setItem(activeSlots[index], itemStack)
+                val itemBtn = Button.builder().icon(itemStack).build()
+                builder.button(activeSlots[index], itemBtn)
             }
         }
 
@@ -223,28 +233,32 @@ class KitGuis(
         )
 
         // Botón de Volver
-        val backItem = ItemBuilder.fromConfig(backBtnConfig.item).build()
-        menu.setItem(slots - 9, backItem) { p, _ ->
-            backBtnConfig.sound?.let { sound ->
-                try {
-                    p.playSound(p.location, Sound.valueOf(sound.uppercase()), 1.0f, 1.0f)
-                } catch (e: Exception) {}
+        val backItem = itemBuilderFactory.builder(backBtnConfig.item).build()
+        val backBtn = Button.builder()
+            .icon(backItem)
+            .onClick { p ->
+                backBtnConfig.sound?.let { sound ->
+                    try {
+                        p.playSound(p.location, Sound.valueOf(sound.uppercase()), 1.0f, 1.0f)
+                    } catch (e: Exception) {}
+                }
+                openKitSelector(p)
             }
-            openKitSelector(p)
-        }
+            .build()
+        builder.button(slots - 9, backBtn)
 
         // Botón de Reclamar
         val claimItemConfig = claimBtnConfig.item
         val actionItem: ItemStack = when {
             !hasPerm -> {
-                ItemBuilder(Material.RED_CONCRETE)
+                itemBuilderFactory.builder(Material.RED_CONCRETE)
                     .displayName("<red><bold>❌ Kit Bloqueado</bold></red>")
                     .lore(listOf("<gray>Requiere el rango de permiso:</gray>", "<red>${config.permission}</red>"))
                     .build()
             }
             isCooldownActive -> {
                 val timeStr = kitService.formatTime(remaining)
-                ItemBuilder(Material.YELLOW_CONCRETE)
+                itemBuilderFactory.builder(Material.YELLOW_CONCRETE)
                     .displayName("<yellow><bold>⏳ En Cooldown</bold></yellow>")
                     .lore(listOf("<gray>Debes esperar:</gray>", "<yellow>$timeStr</yellow>", "<gray>para reclamar nuevamente.</gray>"))
                     .build()
@@ -257,28 +271,32 @@ class KitGuis(
                     line.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore)
                 }
                 
-                ItemBuilder.fromConfig(claimItemConfig.copy(lore = processedLore)).build()
+                itemBuilderFactory.builder(claimItemConfig.copy(lore = processedLore)).build()
             }
         }
 
-        menu.setItem(actionSlot, actionItem) { p, _ ->
-            claimBtnConfig.sound?.let { sound ->
-                try {
-                    p.playSound(p.location, Sound.valueOf(sound.uppercase()), 1.0f, 1.0f)
-                } catch (e: Exception) {}
-            }
-            p.closeInventory()
-            kitService.claimKit(p, kitId, false).thenAccept { result ->
-                when (result) {
-                    is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
-                    is ClaimResult.Failure -> {
-                        p.sendMessage(ColorUtility.parse(result.reason))
-                        p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
+        val claimBtn = Button.builder()
+            .icon(actionItem)
+            .onClick { p ->
+                claimBtnConfig.sound?.let { sound ->
+                    try {
+                        p.playSound(p.location, Sound.valueOf(sound.uppercase()), 1.0f, 1.0f)
+                    } catch (e: Exception) {}
+                }
+                p.closeInventory()
+                kitService.claimKit(p, kitId, false).thenAccept { result ->
+                    when (result) {
+                        is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
+                        is ClaimResult.Failure -> {
+                            p.sendMessage(ColorUtility.parse(result.reason))
+                            p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
+                        }
                     }
                 }
             }
-        }
+            .build()
+        builder.button(actionSlot, claimBtn)
 
-        menu.open(player)
+        builder.build().open(player)
     }
 }

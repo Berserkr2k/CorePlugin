@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.economy
 
-import com.github.berserkr2k.coreplugin.api.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.ServicePriority
 

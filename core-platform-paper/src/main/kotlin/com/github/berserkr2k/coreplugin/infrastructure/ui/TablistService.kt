@@ -11,31 +11,43 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.UUID
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
 class TablistService(
     private val plugin: Plugin,
     private val papiBridge: LegacyPlaceholderBridge,
     private val configManager: ModularConfigManager,
     private val registry: ServiceRegistry
-) {
+) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val activeBossBars = ConcurrentHashMap<UUID, BossBar>()
     private var tablistConfig = TablistConfig()
+    private var updateTask: Task? = null
 
     init {
         // Carga dinámica HOCON mapeada directamente a clases de Kotlin
-        configManager.loadModuleConfig("tablist.conf", TablistConfig::class.java, TablistConfig())
+        configManager.loadModuleConfig("core/tablist.conf", TablistConfig::class.java, TablistConfig())
            .thenAccept { loadedConfig ->
                 this.tablistConfig = loadedConfig
                 startTablistScheduler()
             }
     }
 
+    override suspend fun reload() {
+        try {
+            val loadedConfig = configManager.loadModuleConfig("core/tablist.conf", TablistConfig::class.java, TablistConfig()).join()
+            this.tablistConfig = loadedConfig
+            startTablistScheduler()
+        } catch (e: Exception) {
+            plugin.logger.severe("Error al recargar tablist.conf: ${e.message}")
+        }
+    }
+
     private fun startTablistScheduler() {
+        updateTask?.cancel()
         // Programación asíncrona robusta exenta de hilos bloqueantes (Paper/Folia compatible)
-        taskScheduler.runAsyncTimer({
+        updateTask = taskScheduler.runAsyncTimer({
             for (player in Bukkit.getOnlinePlayers()) {
                 val group = resolvePlayerPriorityGroup(player)
                 val priority = group?.priority ?: 100
@@ -51,7 +63,7 @@ class TablistService(
  
                 player.sendPlayerListHeaderAndFooter(header, footer)
             }
-        }, 0L, 20L)
+        }, 0L, tablistConfig.updateIntervalTicks)
     }
 
     private fun resolvePlayerPriorityGroup(player: Player): TablistConfig.TablistPriorityGroup? {

@@ -8,9 +8,20 @@ val rootLibs = libs
 
 subprojects {
     apply(plugin = "org.jetbrains.kotlin.jvm")
+    apply(plugin = "maven-publish")
 
     group = "com.github.berserkr2k.coreplugin" // Usando tu alias de Github
     version = "1.0.1"
+
+    afterEvaluate {
+        configure<PublishingExtension> {
+            publications {
+                create<MavenPublication>("maven") {
+                    from(components["java"])
+                }
+            }
+        }
+    }
 
     repositories {
         mavenCentral()
@@ -44,5 +55,6 @@ subprojects {
     dependencies {
         add("compileOnly", rootLibs.paper.modern)
         add("compileOnly", rootLibs.configurate.hocon)
+        add("implementation", rootLibs.coroutines.core)
     }
 }

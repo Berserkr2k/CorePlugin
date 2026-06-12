@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.warps
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
 @ConfigSerializable
@@ -16,6 +16,7 @@ data class WarpConfig(
     val warmupSeconds: Int = 0,
     val cooldownSeconds: Int = 0,
     val guiSlot: Int = -1,
+    val teleportSound: String = "ENTITY_ENDERMAN_TELEPORT",
     val item: ItemConfig = ItemConfig(
         material = "ENDER_PEARL",
         displayName = "<green><bold>Warp spawn</bold></green>",

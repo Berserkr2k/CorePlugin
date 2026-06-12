@@ -11,7 +11,7 @@ import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags
 import java.util.regex.Pattern
 
-class AnvilListener(private val config: AnvilConfig) : Listener {
+class AnvilListener(@Volatile var config: AnvilConfig) : Listener {
 
     private val colorParser = MiniMessage.builder()
        .tags(TagResolver.builder().resolver(StandardTags.color()).build())

@@ -17,7 +17,7 @@ import org.bukkit.util.Vector
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 
 class ProjectileTrailListener(
     private val plugin: Plugin,
