@@ -28,7 +28,7 @@ val SPAWN_STATE = StateContainerType { SpawnStateContainer() }
 
 class SpawnService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
+    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
     private val taskScheduler: TaskScheduler,
     private val regionTaskScheduler: RegionTaskScheduler,
     private val playerStateService: PlayerStateService,
@@ -36,6 +36,12 @@ class SpawnService(
 ) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     lateinit var config: SpawnConfig
         private set
+
+    private val configManager: ModularConfigManager by lazy {
+        Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+            ?.get(ModularConfigManager::class.java)
+            ?: throw IllegalStateException("ModularConfigManager not registered in ServiceRegistry")
+    }
 
     init {
         configManager.loadModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, SpawnConfig())

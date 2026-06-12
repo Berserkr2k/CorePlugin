@@ -174,7 +174,29 @@ class CorePlugin(
         registry.register(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java, itemBuilderFactoryImpl)
 
         try {
+            // Inicializar módulos heredados provisionales
             initializeModules()
+
+            // Inicializar Motor de Ciclo de Vida Enterprise para Características Modernas
+            val context = com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext(
+                plugin = this,
+                registry = serviceRegistry,
+                commandManager = commandManager,
+                taskScheduler = taskScheduler,
+                regionTaskScheduler = regionTaskScheduler,
+                messageService = messageRegistry,
+                configService = serviceRegistry.get(ConfigService::class.java),
+                databaseService = databaseService
+            )
+
+            val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)
+            this.featureManager = manager
+
+            // Registro centralizado de las nuevas features modulares
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
+
+            // Habilitación masiva
+            manager.enableAll()
         } catch (e: Exception) {
             paperLogger.error("Error crítico al inicializar el CorePlugin: ${e.message}", e)
             server.pluginManager.disablePlugin(this)
@@ -435,22 +457,7 @@ class CorePlugin(
         }
 
         // 16. Inicializar Módulo de Punto de Aparición (Spawn)
-        initModule("Punto de Aparición (Spawn)") {
-            val context = com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext(
-                plugin = this,
-                registry = serviceRegistry,
-                commandManager = commandManager,
-                taskScheduler = taskScheduler,
-                regionTaskScheduler = regionTaskScheduler,
-                messageService = messageRegistry,
-                configService = configService,
-                databaseService = databaseService
-            )
-            val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)
-            this.featureManager = manager
-            manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
-            manager.enableAll()
-        }
+        // Lógica de inicialización migrada al Kernel central de ciclo de vida en onEnable()
 
         // Register reloadables in reloadCoordinator
         val coreReloadable = object : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
