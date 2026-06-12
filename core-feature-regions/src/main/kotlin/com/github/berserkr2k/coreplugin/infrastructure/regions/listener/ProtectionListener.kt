@@ -70,10 +70,14 @@ import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionMessages
 
 class ProtectionListener(
-    private val resolver: RegionRuleResolver,
-    private val regionManager: RegionManager,
-    private val messageService: MessageService
+    private val regionManager: RegionManager
 ) : Listener {
+
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    private val resolver = regionManager.resolver
+    private val messageService = registry.get(MessageService::class.java)!!
 
     private fun shouldSendMessage(flag: Long): Boolean {
         val category = RegionFlags.getCategoryOfFlag(flag) ?: return true

@@ -16,10 +16,15 @@ import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerJoinEvent
 
 class RegionTrackingListener(
-    private val resolver: RegionRuleResolver,
-    private val playerStateService: PlayerStateService,
-    private val eventBus: CoreEventBus
+    private val regionManager: com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
 ) : Listener {
+
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    private val resolver = regionManager.resolver
+    private val playerStateService = registry.get(PlayerStateService::class.java)!!
+    private val eventBus = registry.get(CoreEventBus::class.java)!!
 
     @EventHandler
     fun onPlayerMove(event: PlayerMoveEvent) {

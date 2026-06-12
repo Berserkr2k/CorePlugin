@@ -21,12 +21,13 @@ import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 class RegionCommand(
     private val plugin: Plugin,
     private val commandManager: CommandManager<CommandSender>,
-    private val session: PlayerSelectionSession,
     private val regionManager: RegionManager,
-    private val resolver: RegionRuleResolver,
-    private val messageService: MessageService,
-    private val serviceRegistry: ServiceRegistry
+    private val messageService: MessageService
 ) {
+    private val session = regionManager.selectionSession
+    private val resolver = regionManager.resolver
+    private val serviceRegistry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
 
     init {
         registerCommands()

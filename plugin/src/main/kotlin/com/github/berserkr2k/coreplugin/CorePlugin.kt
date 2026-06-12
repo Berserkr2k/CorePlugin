@@ -29,9 +29,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.ui.TablistService
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardService
 import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardCommand
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
-import com.github.berserkr2k.coreplugin.infrastructure.regions.command.PlayerSelectionSession
 import com.github.berserkr2k.coreplugin.infrastructure.regions.command.RegionCommand
-import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
 import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.SelectionListener
 import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.ProtectionListener
 import com.github.berserkr2k.coreplugin.infrastructure.regions.listener.RegionTrackingListener
@@ -80,7 +78,6 @@ class CorePlugin(
     private var chairListener: ChairListener? = null
     private var tablistService: TablistService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
-    private var regionManager: RegionManager? = null
     private var spawnService: SpawnService? = null
     private var featureManager: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager? = null
 
@@ -156,6 +153,17 @@ class CorePlugin(
         registry.register(com.github.berserkr2k.coreplugin.api.framework.menu.MenuService::class.java, menuServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java, commandServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java, itemBuilderFactoryImpl)
+
+        // 3. Inicializar Módulo de Regiones y Protecciones (Framework Layer)
+        val regionManagerImpl = RegionManager(this, configService, taskScheduler)
+        registry.register(com.github.berserkr2k.coreplugin.api.framework.regions.RegionService::class.java, regionManagerImpl)
+        reloadCoordinator.register("regions", regionManagerImpl)
+
+        server.pluginManager.registerEvents(SelectionListener(regionManagerImpl), this)
+        server.pluginManager.registerEvents(ProtectionListener(regionManagerImpl), this)
+        server.pluginManager.registerEvents(RegionTrackingListener(regionManagerImpl), this)
+
+        RegionCommand(this, commandManager, regionManagerImpl, messageRegistry)
 
         try {
             // Inicializar módulos heredados provisionales
@@ -306,23 +314,7 @@ class CorePlugin(
 
 
 
-        // 15. Inicializar Módulo de Regiones y Protecciones
-        initModule("Regiones y Protecciones") {
-            val rManager = RegionManager(this, configManager)
-            regionManager = rManager
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.framework.regions.RegionService::class.java, rManager)
 
-            val stateService = serviceRegistry.get(PlayerStateService::class.java)!!
-            val eventBus = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.event.CoreEventBus::class.java)!!
-            val session = PlayerSelectionSession(stateService)
-            val resolver = RegionRuleResolver(rManager)
-
-            server.pluginManager.registerEvents(SelectionListener(session, rManager), this)
-            server.pluginManager.registerEvents(ProtectionListener(resolver, rManager, messageRegistry), this)
-            server.pluginManager.registerEvents(RegionTrackingListener(resolver, stateService, eventBus), this)
-
-            RegionCommand(this, commandManager, session, rManager, resolver, messageRegistry, serviceRegistry)
-        }
 
         // 16. Inicializar Módulo de Punto de Aparición (Spawn)
         // Lógica de inicialización migrada al Kernel central de ciclo de vida en onEnable()
@@ -344,7 +336,6 @@ class CorePlugin(
 
         // Leaderboard reload coordinator registered via LeaderboardFeature
 
-        regionManager?.let { reloadCoordinator.register("regions", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }
         shopManager?.let { reloadCoordinator.register("shops", it) }
 

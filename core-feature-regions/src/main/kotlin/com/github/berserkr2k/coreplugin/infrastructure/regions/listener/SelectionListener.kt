@@ -10,9 +10,10 @@ import org.bukkit.event.block.Action
 import org.bukkit.inventory.EquipmentSlot
 
 class SelectionListener(
-    private val session: PlayerSelectionSession,
     private val regionManager: RegionManager
 ) : Listener {
+
+    private val session = regionManager.selectionSession
 
     @EventHandler
     fun onPlayerInteract(event: PlayerInteractEvent) {

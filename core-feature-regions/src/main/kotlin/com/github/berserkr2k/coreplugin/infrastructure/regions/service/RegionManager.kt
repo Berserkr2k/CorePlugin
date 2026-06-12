@@ -5,7 +5,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.regions.GlobalRegionConfi
 import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
 import com.github.berserkr2k.coreplugin.infrastructure.regions.compiler.RegionCompiler
 import com.github.berserkr2k.coreplugin.infrastructure.regions.spatial.SpatialRegionIndex
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import org.spongepowered.configurate.objectmapping.ObjectMapper
 import org.spongepowered.configurate.util.NamingSchemes
@@ -17,9 +17,20 @@ import java.util.concurrent.ConcurrentHashMap
 
 class RegionManager(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager
+    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
+    private val taskScheduler: com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 ) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable,
     com.github.berserkr2k.coreplugin.api.framework.regions.RegionService {
+
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    val resolver = com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver(this)
+
+    val selectionSession by lazy {
+        val playerStateService = registry.get(PlayerStateService::class.java)!!
+        com.github.berserkr2k.coreplugin.infrastructure.regions.command.PlayerSelectionSession(playerStateService)
+    }
 
     override fun hasFlag(location: org.bukkit.Location, flag: com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlag): Boolean {
         val worldIdx = com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistry.getIndex(location.world.uid)
@@ -98,20 +109,32 @@ class RegionManager(
         .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
         .build()
 
+    private fun loadConfig() {
+        try {
+            val featureConfig = configService.getCustomConfig("regions", "regions.conf")
+            val field = featureConfig.javaClass.getDeclaredField("rootNode")
+            field.isAccessible = true
+            val rootNode = field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
+            val mapper = mapperFactory.get(GlobalRegionConfig::class.java)
+            this.config = mapper.load(rootNode) ?: GlobalRegionConfig()
+        } catch (e: Exception) {
+            plugin.logger.severe("Error al cargar la configuración global de regiones: ${e.message}")
+            this.config = GlobalRegionConfig()
+        }
+    }
+
     init {
-        configManager.loadModuleConfig("regions/regions.conf", GlobalRegionConfig::class.java, GlobalRegionConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                loadAllRegions()
-            }
+        taskScheduler.runAsync {
+            loadConfig()
+            loadAllRegions()
+        }
     }
 
     override suspend fun reload() {
-        configManager.loadModuleConfig("regions/regions.conf", GlobalRegionConfig::class.java, GlobalRegionConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                loadAllRegions()
-            }.join()
+        val featureConfig = configService.getCustomConfig("regions", "regions.conf")
+        featureConfig.reload()
+        loadConfig()
+        loadAllRegions()
     }
 
     fun getCurrentIndex(): SpatialRegionIndex = currentIndex.get()
@@ -129,22 +152,22 @@ class RegionManager(
     }
 
     fun createRegion(region: RegionConfig): CompletableFuture<Void> {
-        return CompletableFuture.runAsync {
+        return CompletableFuture.runAsync({
             regionsMap[region.id.lowercase()] = region
             saveRegionToFile(region)
             rebuildIndex()
-        }
+        }, { taskScheduler.runAsync(it) })
     }
 
     fun removeRegion(id: String): CompletableFuture<Boolean> {
-        return CompletableFuture.supplyAsync {
+        return CompletableFuture.supplyAsync({
             val removed = regionsMap.remove(id.lowercase()) != null
             if (removed) {
                 deleteRegionFile(id)
                 rebuildIndex()
             }
             removed
-        }
+        }, { taskScheduler.runAsync(it) })
     }
 
     fun rebuildIndex() {
