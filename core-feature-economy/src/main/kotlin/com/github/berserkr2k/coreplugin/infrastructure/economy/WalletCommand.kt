@@ -10,7 +10,6 @@ import org.incendo.cloud.parser.standard.StringParser.stringParser
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.common.FancyLogger
 import com.github.berserkr2k.coreplugin.common.TransactionLockManager
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
@@ -104,7 +103,7 @@ class WalletCommand(
             if (!hasAny) {
                 send(sender, EconomyMessages.NO_PERMISSION_VIEW)
             } else {
-                sender.sendRawMessage(ColorUtility.parse(builder.toString().trimEnd()))
+                messageService.sendRaw(sender, builder.toString().trimEnd())
             }
         }
     }

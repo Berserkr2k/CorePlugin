@@ -1,7 +1,9 @@
 package com.github.berserkr2k.coreplugin.infrastructure.ui
 
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
@@ -17,7 +19,6 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 class TablistService(
     private val plugin: Plugin,
     private val papiBridge: LegacyPlaceholderBridge,
-    private val configManager: ModularConfigManager,
     private val registry: ServiceRegistry
 ) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val taskScheduler = registry.get(TaskScheduler::class.java)
@@ -26,18 +27,42 @@ class TablistService(
     private var updateTask: Task? = null
 
     init {
-        // Carga dinámica HOCON mapeada directamente a clases de Kotlin
-        configManager.loadModuleConfig("core/tablist.conf", TablistConfig::class.java, TablistConfig())
-           .thenAccept { loadedConfig ->
-                this.tablistConfig = loadedConfig
-                startTablistScheduler()
+        this.tablistConfig = loadConfig()
+        startTablistScheduler()
+    }
+
+    private fun loadConfig(): TablistConfig {
+        val file = plugin.dataFolder.toPath().resolve("core/tablist.conf")
+        if (java.nio.file.Files.notExists(file)) {
+            java.nio.file.Files.createDirectories(file.parent)
+            java.nio.file.Files.createFile(file)
+        }
+        val mapperFactory = ObjectMapper.factoryBuilder()
+            .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+            .build()
+        val loader = HoconConfigurationLoader.builder()
+            .path(file)
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
             }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(TablistConfig::class.java)
+        return if (root.empty()) {
+            val defaultInstance = TablistConfig()
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: TablistConfig()
+        }
     }
 
     override suspend fun reload() {
         try {
-            val loadedConfig = configManager.loadModuleConfig("core/tablist.conf", TablistConfig::class.java, TablistConfig()).join()
-            this.tablistConfig = loadedConfig
+            this.tablistConfig = loadConfig()
             startTablistScheduler()
         } catch (e: Exception) {
             plugin.logger.severe("Error al recargar tablist.conf: ${e.message}")

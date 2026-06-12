@@ -23,48 +23,24 @@ class ConfigServiceImpl(
     private val executor = Executor { command -> taskScheduler.runAsync(command) }
 
     override fun getConfig(featureId: String): FeatureConfig {
-        return getCustomConfig(featureId, "config.conf")
+        val path = basePath.resolve("features").resolve(featureId).resolve("config.conf")
+        Files.createDirectories(path.parent)
+        if (Files.notExists(path)) {
+            Files.createFile(path)
+        }
+        return configs.computeIfAbsent("${featureId.lowercase()}:config.conf") { HoconFeatureConfig(path, executor) }
     }
 
     override fun getCustomConfig(featureId: String, fileName: String): FeatureConfig {
-        val cacheKey = "${featureId.lowercase()}:$fileName"
-        return configs.computeIfAbsent(cacheKey) {
-            val path = basePath.resolve("features").resolve(featureId.lowercase()).resolve(fileName)
-            
-            if (Files.notExists(path)) {
-                val parentDir = path.parent
-                if (parentDir != null && Files.notExists(parentDir)) {
-                    Files.createDirectories(parentDir)
-                }
-                
-                // Intentar buscar e inyectar el recurso desde el .jar
-                val resourcePath = "features/${featureId.lowercase()}/$fileName"
-                var resourceStream: InputStream? = plugin.getResource(resourcePath)
-                if (resourceStream == null) {
-                    resourceStream = plugin.getResource("${featureId.lowercase()}/$fileName")
-                }
-                if (resourceStream == null) {
-                    resourceStream = plugin.getResource(fileName)
-                }
-                if (resourceStream == null) {
-                    // Cargar vía ClassLoader del plugin como fallback definitivo
-                    resourceStream = plugin::class.java.classLoader.getResourceAsStream(resourcePath)
-                        ?: plugin::class.java.classLoader.getResourceAsStream("${featureId.lowercase()}/$fileName")
-                        ?: plugin::class.java.classLoader.getResourceAsStream(fileName)
-                }
-                
-                if (resourceStream != null) {
-                    resourceStream.use { input ->
-                        Files.copy(input, path, StandardCopyOption.REPLACE_EXISTING)
-                    }
-                } else {
-                    if (Files.notExists(path)) {
-                        Files.createFile(path)
-                    }
-                }
-            }
-            
-            HoconFeatureConfig(path, executor)
+        val path = basePath.resolve("features").resolve(featureId).resolve(fileName)
+        Files.createDirectories(path.parent)
+        if (Files.notExists(path)) {
+            Files.createFile(path)
         }
+        return configs.computeIfAbsent("${featureId.lowercase()}:$fileName") { HoconFeatureConfig(path, executor) }
+    }
+
+    fun getLoadedConfigs(): Set<String> {
+        return configs.keys
     }
 }

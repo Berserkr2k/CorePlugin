@@ -2,7 +2,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.database
 
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.database.FeatureDatabase
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import java.io.File
@@ -13,7 +15,6 @@ import java.util.logging.Logger
 
 class DatabaseServiceImpl(
     private val dataFolder: File,
-    private val configManager: ModularConfigManager,
     private val taskScheduler: TaskScheduler,
     private val logger: Logger
 ) : com.github.berserkr2k.coreplugin.api.core.database.DatabaseService {
@@ -25,12 +26,40 @@ class DatabaseServiceImpl(
 
     init {
         try {
-            val loadedConfig = configManager.loadModuleConfig("core/database.conf", DatabaseConfig::class.java, DatabaseConfig()).join()
-            this.config = loadedConfig
+            this.config = loadConfig()
             initializePool()
         } catch (ex: Exception) {
             logger.severe("Error during database initialization: ${ex.message}")
             throw ex
+        }
+    }
+
+    private fun loadConfig(): DatabaseConfig {
+        val file = dataFolder.resolve("core/database.conf")
+        if (!file.exists()) {
+            file.parentFile.mkdirs()
+            file.createNewFile()
+        }
+        val mapperFactory = ObjectMapper.factoryBuilder()
+            .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+            .build()
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(DatabaseConfig::class.java)
+        return if (root.empty()) {
+            val defaultInstance = DatabaseConfig()
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: DatabaseConfig()
         }
     }
 

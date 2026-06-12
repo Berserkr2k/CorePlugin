@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.incendo.cloud.CommandManager
@@ -22,14 +22,14 @@ class ProjectileTrailCommand(
             ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
         val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)
 
-        this.guis = TrailGuis(trailManager, regionTaskScheduler, menuService, itemBuilderFactory)
+        this.guis = TrailGuis(trailManager, regionTaskScheduler, menuService, itemBuilderFactory, messageService)
         // 1. /trail (Abrir selector gráfico)
         manager.command(
             manager.commandBuilder("trail")
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendRawMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
+                        messageService.send(sender, TrailMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     guis.openTrailSelector(sender)
@@ -42,7 +42,7 @@ class ProjectileTrailCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendRawMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
+                        messageService.send(sender, TrailMessages.ONLY_PLAYERS)
                         return@handler
                     }
                     guis.openTrailSelector(sender)
@@ -58,7 +58,7 @@ class ProjectileTrailCommand(
                 .handler { context ->
                     val sender = context.sender()
                     trailManager.loadAllTrails()
-                    sender.sendRawMessage(ColorUtility.parse("<green>¡Configuraciones de Estelas de Proyectiles recargadas con éxito en tiempo real!</green>"))
+                    messageService.send(sender, TrailMessages.RELOADED)
                 }
         )
 
@@ -77,13 +77,13 @@ class ProjectileTrailCommand(
 
                     val config = trailManager.trails[trailId]
                     if (config == null) {
-                        sender.sendRawMessage(ColorUtility.parse("<red>La estela especificada '$trailId' no existe.</red>"))
+                        messageService.send(sender, TrailMessages.NOT_FOUND, PlaceholderContext.of("id" to trailId))
                         return@handler
                     }
 
                     trailManager.savePlayerTrail(target.uniqueId, trailId).thenRun {
-                        sender.sendRawMessage(ColorUtility.parse("<green>¡Estela '${config.displayName}' equipada con éxito a ${target.name}!</green>"))
-                        target.sendRawMessage(ColorUtility.parse("<green>¡Se te ha equipado la estela '${config.displayName}' por un administrador!</green>"))
+                        messageService.send(sender, TrailMessages.ADMIN_EQUIPPED_SENDER, PlaceholderContext.of("name" to config.displayName, "target" to target.name))
+                        messageService.send(target, TrailMessages.ADMIN_EQUIPPED_TARGET, PlaceholderContext.of("name" to config.displayName))
                     }
                 }
         )
@@ -100,8 +100,8 @@ class ProjectileTrailCommand(
                     val target = context.get<Player>("target")
 
                     trailManager.savePlayerTrail(target.uniqueId, null).thenRun {
-                        sender.sendRawMessage(ColorUtility.parse("<green>¡Se ha removido la estela de ${target.name} con éxito!</green>"))
-                        target.sendRawMessage(ColorUtility.parse("<yellow>Tu estela de partículas ha sido removida por un administrador.</yellow>"))
+                        messageService.send(sender, TrailMessages.ADMIN_CLEARED_SENDER, PlaceholderContext.of("target" to target.name))
+                        messageService.send(target, TrailMessages.ADMIN_CLEARED_TARGET)
                     }
                 }
         )

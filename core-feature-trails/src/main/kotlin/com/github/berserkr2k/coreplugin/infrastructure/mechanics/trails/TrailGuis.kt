@@ -4,7 +4,7 @@ import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -13,7 +13,8 @@ class TrailGuis(
     private val trailManager: ProjectileTrailManager,
     private val regionTaskScheduler: com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler,
     private val menuService: MenuService,
-    private val itemBuilderFactory: ItemBuilderFactory
+    private val itemBuilderFactory: ItemBuilderFactory,
+    private val messageService: com.github.berserkr2k.coreplugin.api.core.message.MessageService
 ) {
 
     fun openTrailSelector(player: Player) {
@@ -84,7 +85,7 @@ class TrailGuis(
                     if (hasPerm) {
                         trailManager.savePlayerTrail(p.uniqueId, trailId).thenRun {
                             p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
-                            p.sendRawMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
+                            messageService.send(p, TrailMessages.EQUIPPED, PlaceholderContext.of("name" to config.displayName))
                             // Reabrir regionalmente en sincronismo
                             regionTaskScheduler.runAtLocation(p.location, Runnable {
                                 openTrailSelector(p)
@@ -92,7 +93,7 @@ class TrailGuis(
                         }
                     } else {
                         p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                        p.sendRawMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
+                        messageService.send(p, TrailMessages.NO_PERMISSION)
                     }
                 }
                 .build()
@@ -157,7 +158,7 @@ class TrailGuis(
                         Sound.BLOCK_LAVA_EXTINGUISH
                     }
                     p.playSound(p.location, soundEnum, 1.0f, 1.5f)
-                    p.sendRawMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
+                    messageService.send(p, TrailMessages.REMOVED)
                     // Reabrir regionalmente
                     regionTaskScheduler.runAtLocation(p.location, Runnable {
                         openTrailSelector(p)

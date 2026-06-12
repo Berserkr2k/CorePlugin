@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.api.core.message
 
 enum class CoreMessages(override val path: String) : MessageKey {
     ONLY_PLAYERS("only-players"),
+    NO_PERMISSION("no-permission"),
 
     // Chat messages
     CHAT_SOCIALSPY_ENABLED("chat.socialspy-enabled"),
@@ -44,6 +45,7 @@ enum class CoreMessages(override val path: String) : MessageKey {
     companion object {
         val defaults = mapOf(
             "only-players" to "<red>Solo jugadores pueden ejecutar este comando.</red>",
+            "no-permission" to "<red>❌ No tienes permisos para realizar esta acción.</red>",
             "chat.socialspy-enabled" to "<green>SocialSpy habilitado.</green>",
             "chat.socialspy-disabled" to "<red>SocialSpy deshabilitado.</red>",
             "chat.pm-usage" to "<red>Uso: /msg <jugador> <mensaje></red>",

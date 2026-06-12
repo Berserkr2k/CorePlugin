@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
@@ -64,7 +64,7 @@ class ShopGuis(
 
     fun openCategoriesMenu(player: Player) {
         if (!shopManager.marketReady) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("market-regulating")))
+            messageService.send(player, ShopMessages.MARKET_REGULATING)
             return
         }
  
@@ -95,7 +95,7 @@ class ShopGuis(
 
     fun openHistoryMenu(player: Player) {
         if (!shopManager.marketReady) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("market-regulating")))
+            messageService.send(player, ShopMessages.MARKET_REGULATING)
             return
         }
 
@@ -183,14 +183,14 @@ class ShopGuis(
             })
         }.exceptionally { ex ->
             plugin.logger.severe("Fallo al abrir historial de transacciones para ${player.name}: ${ex.message}")
-            player.sendRawMessage(ColorUtility.parse(getMsg("history-error")))
+            messageService.send(player, ShopMessages.HISTORY_ERROR)
             null
         }
     }
 
     fun openCategoryMenu(player: Player, shopId: String) {
         if (!shopManager.marketReady) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("market-regulating")))
+            messageService.send(player, ShopMessages.MARKET_REGULATING)
             return
         }
  
@@ -540,7 +540,7 @@ class ShopGuis(
     private fun executePurchase(player: Player, shopId: String, itemConfig: ShopItemConfig, isMax: Boolean, qty: Int = 0) {
         val uuid = player.uniqueId
         if (!TransactionLockManager.acquire(uuid)) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("locked")))
+            messageService.send(player, ShopMessages.LOCKED)
             return
         }
 
@@ -555,14 +555,14 @@ class ShopGuis(
         // 1. Validar Espacio en Inventario (Main Thread)
         val space = getInventorySpace(player, baseItem)
         if (space <= 0) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("no-space")))
+            messageService.send(player, ShopMessages.NO_SPACE)
             TransactionLockManager.release(uuid)
             return
         }
 
         val finalQty = if (isMax) space else qty
         if (finalQty <= 0 || (!isMax && space < qty)) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("no-space-qty", "qty" to finalQty.toString())))
+            messageService.send(player, ShopMessages.NO_SPACE_QTY, PlaceholderContext.of("qty" to finalQty.toString()))
             TransactionLockManager.release(uuid)
             return
         }
@@ -580,12 +580,12 @@ class ShopGuis(
                 actualQty = adjMax.first
                 totalCost = adjMax.second
                 if (actualQty <= 0) {
-                    player.sendRawMessage(ColorUtility.parse(getMsg("no-funds")))
+                    messageService.send(player, ShopMessages.NO_FUNDS)
                     TransactionLockManager.release(uuid)
                     return
                 }
             } else {
-                player.sendRawMessage(ColorUtility.parse(getMsg("no-funds")))
+                messageService.send(player, ShopMessages.NO_FUNDS)
                 TransactionLockManager.release(uuid)
                 return
             }
@@ -603,12 +603,14 @@ class ShopGuis(
                             player.inventory.addItem(itemStack)
                             
                             player.playSound(player.location, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f)
-                            player.sendRawMessage(ColorUtility.parse(
-                                getMsg("buy-success", 
-                                    "qty" to actualQty.toString(), 
+                            messageService.send(
+                                player,
+                                ShopMessages.BUY_SUCCESS,
+                                PlaceholderContext.of(
+                                    "qty" to actualQty.toString(),
                                     "price" to economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)
                                 )
-                            ))
+                            )
                             
                             // Registrar volumen de mercado
                             val itemId = shopManager.getItemId(itemConfig)
@@ -622,7 +624,7 @@ class ShopGuis(
                 } else {
                     // 5. SQL Commit Fallido -> Reversión automática hecha por EconomyService.kt
                     regionTaskScheduler.runAtEntity(player, Runnable {
-                        player.sendRawMessage(ColorUtility.parse(getMsg("error-db")))
+                        messageService.send(player, ShopMessages.ERROR_DB)
                         TransactionLockManager.release(uuid)
                     })
                 }
@@ -633,7 +635,7 @@ class ShopGuis(
     private fun executeSale(player: Player, shopId: String, itemConfig: ShopItemConfig, isAll: Boolean, qty: Int = 0) {
         val uuid = player.uniqueId
         if (!TransactionLockManager.acquire(uuid)) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("locked")))
+            messageService.send(player, ShopMessages.LOCKED)
             return
         }
 
@@ -657,14 +659,14 @@ class ShopGuis(
 
         val totalOwnedCount = ownedItems.sumOf { it.first.amount }
         if (totalOwnedCount <= 0) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("no-items")))
+            messageService.send(player, ShopMessages.NO_ITEMS)
             TransactionLockManager.release(uuid)
             return
         }
 
         val finalQty = if (isAll) totalOwnedCount else qty
         if (finalQty <= 0 || (!isAll && totalOwnedCount < qty)) {
-            player.sendRawMessage(ColorUtility.parse(getMsg("no-items-qty", "qty" to finalQty.toString())))
+            messageService.send(player, ShopMessages.NO_ITEMS_QTY, PlaceholderContext.of("qty" to finalQty.toString()))
             TransactionLockManager.release(uuid)
             return
         }
@@ -724,12 +726,14 @@ class ShopGuis(
                             }
 
                             player.playSound(player.location, Sound.ENTITY_EXPERIENCE_ORB_PICKUP, 1.0f, 1.0f)
-                            player.sendRawMessage(ColorUtility.parse(
-                                getMsg("sell-success", 
-                                    "qty" to finalQty.toString(), 
+                            messageService.send(
+                                player,
+                                ShopMessages.SELL_SUCCESS,
+                                PlaceholderContext.of(
+                                    "qty" to finalQty.toString(),
                                     "payout" to economyService.formatBalance(shopManager.marketConfig.currencyId, totalPayout)
                                 )
-                            ))
+                            )
 
                             // Registrar volumen de mercado
                             val itemId = shopManager.getItemId(itemConfig)
@@ -743,7 +747,7 @@ class ShopGuis(
                 } else {
                     // 5. SQL Commit Fallido -> Reversión automática hecha por EconomyService.kt
                     regionTaskScheduler.runAtEntity(player, Runnable {
-                        player.sendRawMessage(ColorUtility.parse(getMsg("error-db")))
+                        messageService.send(player, ShopMessages.ERROR_DB)
                         TransactionLockManager.release(uuid)
                     })
                 }

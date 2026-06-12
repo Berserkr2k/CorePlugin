@@ -1,6 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import org.spongepowered.configurate.objectmapping.ConfigSerializable
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -121,4 +122,36 @@ class UtilityService(
             messageService.send(player, UtilityMessages.FLY_WORLD_LEFT)
         }
     }
+}
+
+@ConfigSerializable
+data class UtilityConfig(
+    val fly: FlySettings = FlySettings(),
+    val anvil: AnvilSettings = AnvilSettings(),
+    val bossbar: BossBarSettings = BossBarSettings(),
+    val title: TitleSettings = TitleSettings()
+) {
+    @ConfigSerializable
+    data class TitleSettings(
+        val fadeInTicks: Int = 10,
+        val stayTicks: Int = 70,
+        val fadeOutTicks: Int = 20
+    )
+
+    @ConfigSerializable
+    data class FlySettings(
+        val allowedWorlds: List<String> = listOf("world", "world_nether", "world_the_end")
+    )
+
+    @ConfigSerializable
+    data class AnvilSettings(
+        val sound: String = "BLOCK_ANVIL_PLACE"
+    )
+
+    @ConfigSerializable
+    data class BossBarSettings(
+        val defaultColor: String = "PURPLE",
+        val defaultOverlay: String = "PROGRESS",
+        val defaultDurationSeconds: Int = 10
+    )
 }

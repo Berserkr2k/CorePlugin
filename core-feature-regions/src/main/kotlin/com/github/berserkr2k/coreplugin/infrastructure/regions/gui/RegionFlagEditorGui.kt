@@ -3,11 +3,13 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions.gui
 import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
 import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionMessages
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -23,6 +25,7 @@ class RegionFlagEditorGui(
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
     private val menuService = serviceRegistry.get(MenuService::class.java)!!
     private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
+    private val messageService = serviceRegistry.get(MessageService::class.java)!!
 
     /**
      * Abre el menú principal de selección de categorías para la región especificada.
@@ -30,7 +33,7 @@ class RegionFlagEditorGui(
     fun openCategorySelection(player: Player, regionId: String) {
         val dto = regionManager.getRegionDTO(regionId)
         if (dto == null) {
-            player.sendRawMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
+            messageService.send(player, RegionMessages.REGION_NOT_FOUND, PlaceholderContext.of("id" to regionId))
             return
         }
 
@@ -105,7 +108,7 @@ class RegionFlagEditorGui(
     fun openFlagsList(player: Player, regionId: String, categoryId: String) {
         val dto = regionManager.getRegionDTO(regionId)
         if (dto == null) {
-            player.sendRawMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
+            messageService.send(player, RegionMessages.REGION_NOT_FOUND, PlaceholderContext.of("id" to regionId))
             return
         }
 

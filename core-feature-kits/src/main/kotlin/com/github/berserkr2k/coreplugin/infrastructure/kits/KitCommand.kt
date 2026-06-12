@@ -1,7 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
@@ -27,7 +26,8 @@ class KitCommand(
         plugin,
         org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
             ?.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!,
-        kitService
+        kitService,
+        messageService
     )
 
     init {
@@ -71,8 +71,8 @@ class KitCommand(
 
                     kitService.claimKit(sender, kitId, false).thenAccept { result ->
                         when (result) {
-                            is ClaimResult.Success -> sender.sendRawMessage(ColorUtility.parse(result.message))
-                            is ClaimResult.Failure -> sender.sendRawMessage(ColorUtility.parse(result.reason))
+                            is ClaimResult.Success -> messageService.sendRaw(sender, result.message)
+                            is ClaimResult.Failure -> messageService.sendRaw(sender, result.reason)
                         }
                     }
                 }
@@ -95,7 +95,7 @@ class KitCommand(
                                 messageService.send(target, KitMessages.GIVE_SUCCESS_RECEIVER, PlaceholderContext.of("kit" to kitId))
                             }
                             is ClaimResult.Failure -> {
-                                sender.sendRawMessage(ColorUtility.parse("<red>Error al entregar kit: ${result.reason}</red>"))
+                                messageService.sendRaw(sender, "<red>Error al entregar kit:</red> ${result.reason}")
                             }
                         }
                     }

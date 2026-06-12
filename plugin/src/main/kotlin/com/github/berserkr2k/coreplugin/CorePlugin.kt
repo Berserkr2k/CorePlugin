@@ -12,7 +12,6 @@ import com.github.berserkr2k.coreplugin.platform.paper.PaperThreadAssertion
 import com.github.berserkr2k.coreplugin.api.core.event.CoreEventBus
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.infra.state.SimplePlayerStateService
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
 import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
@@ -40,8 +39,6 @@ class CorePlugin(
 ) : JavaPlugin() {
 
     lateinit var serviceRegistry: ServiceRegistry
-        private set
-    lateinit var configManager: ModularConfigManager
         private set
     lateinit var placeholderBridge: LegacyPlaceholderBridge
         private set
@@ -105,13 +102,12 @@ class CorePlugin(
         messageRegistry.registerFeature("kits", com.github.berserkr2k.coreplugin.infrastructure.kits.KitMessages.defaults)
         messageRegistry.registerFeature("holograms", com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramMessages.defaults)
         messageRegistry.registerFeature("leaderboards", com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardMessages.defaults)
+        messageRegistry.registerFeature("trails", com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailMessages.defaults)
 
         placeholderBridge = LegacyPlaceholderBridge()
         registry.register(LegacyPlaceholderBridge::class.java, placeholderBridge)
         registry.register(com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService::class.java, placeholderBridge)
-        configManager = ModularConfigManager(this, dataFolderPath)
-        registry.register(ModularConfigManager::class.java, configManager)
-
+        
         // Inicializar el MenuManager para prevención de robos y duplicados
         com.github.berserkr2k.coreplugin.common.gui.MenuManager.init(this)
 
@@ -143,7 +139,7 @@ class CorePlugin(
         RegionCommand(this, commandManager, regionManagerImpl, messageRegistry)
 
         // 4. Inicializar Base de Datos (Módulo SQL)
-        val db = DatabaseServiceImpl(this.dataFolder, configManager, taskScheduler, this.logger)
+        val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger)
         databaseService = db
         val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
         profileRegistry = reg
@@ -158,11 +154,11 @@ class CorePlugin(
         )
 
         // 5. Inicializar Módulo de Interfaces (Tablist, Bossbars)
-        val tablist = TablistService(this, placeholderBridge, configManager, registry)
+        val tablist = TablistService(this, placeholderBridge, registry)
         tablistService = tablist
 
         // 6. Inicializar Módulo de Yunques
-        val anvil = AnvilModule(this, configManager, registry)
+        val anvil = AnvilModule(this, registry)
         anvilModule = anvil
 
         // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
@@ -188,7 +184,7 @@ class CorePlugin(
         // 9. Registrar DebugCommand
         val fRegistry = messageRegistry as? com.github.berserkr2k.coreplugin.infrastructure.message.FeatureMessageRegistry
         if (fRegistry != null) {
-            DebugCommand(this, commandManager, reloadCoordinator, fRegistry, configManager, messageRegistry)
+            DebugCommand(this, commandManager, reloadCoordinator, fRegistry, configService, messageRegistry)
         }
 
         // 10. Programar guardado por lotes cada 5 minutos asíncronamente
@@ -245,7 +241,6 @@ class CorePlugin(
             databaseService?.shutdown()
             shutdownList.add(" <gray>🔌 <red>Base de Datos</red>   : <gold>[ CERRADO ]</gold> (Pool Hikari...)</gray>")
         }
-        configManager.shutdown()
         shutdownList.add(" <gray>🔌 <red>Configuraciones</red> : <gold>[ CERRADO ]</gold> (Deteniendo hilos...)</gray>")
         featureManager?.let {
             it.disableAll()

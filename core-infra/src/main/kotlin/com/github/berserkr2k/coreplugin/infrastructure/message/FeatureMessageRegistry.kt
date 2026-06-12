@@ -79,6 +79,11 @@ class FeatureMessageRegistry(
         audience.sendMessage(component)
     }
 
+    override fun sendRaw(audience: Audience, message: String) {
+        if (message.isEmpty()) return
+        audience.sendMessage(miniMessage.deserialize(message))
+    }
+
     override fun getRawTemplate(key: MessageKey): String {
         val featureMap = featureMessages[key.feature.lowercase()] ?: return ""
         return featureMap[key.path] ?: ""

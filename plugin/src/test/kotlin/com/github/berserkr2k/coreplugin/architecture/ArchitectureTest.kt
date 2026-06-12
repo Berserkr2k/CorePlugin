@@ -58,12 +58,12 @@ class ArchitectureTest {
     @ArchTest
     val features_must_not_use_raw_bukkit_or_paper_messaging_leaks: ArchRule = noClasses()
         .that().resideInAPackage("..com.github.berserkr2k.coreplugin.infrastructure..")
-        .should().callMethodWhere(object : DescribedPredicate<JavaMethodCall>("calls sendMessage on Player or CommandSender") {
+        .and().resideOutsideOfPackage("..com.github.berserkr2k.coreplugin.infrastructure.message..")
+        .should().callMethodWhere(object : DescribedPredicate<JavaMethodCall>("calls sendMessage or sendRawMessage") {
             override fun test(target: JavaMethodCall): Boolean {
-                return target.name == "sendMessage" && 
-                (target.target.owner.isAssignableTo(Player::class.java) || 
-                 target.target.owner.isAssignableTo(CommandSender::class.java))
+                val name = target.name
+                return name == "sendMessage" || name == "sendRawMessage"
             }
         })
-        .`as`("Gameplay features must never invoke raw .sendMessage() on Bukkit entities. Use MessageService abstractions instead.")
+        .`as`("Gameplay features must never invoke raw .sendMessage() or .sendRawMessage() on Bukkit entities. Use MessageService abstractions instead.")
 }

@@ -22,7 +22,10 @@ enum class RegionMessages(override val path: String) : MessageKey {
     REGION_INFO("region-info"),
     DEBUG_HERE_HEADER("debug-here-header"),
     DEBUG_HERE_ITEM("debug-here-item"),
-    DEBUG_FLAGS("debug-flags");
+    DEBUG_FLAGS("debug-flags"),
+    NO_ENDERPEARL("no-enderpearl"),
+    NO_CHORUS_FRUIT("no-chorus-fruit"),
+    NO_SLEEP("no-sleep");
 
     override val feature: String = "regions"
 
@@ -47,7 +50,10 @@ enum class RegionMessages(override val path: String) : MessageKey {
             "region-info" to "<dark_gray>===========================================</dark_gray>\n<gold><bold>Región:</bold></gold> <yellow><id></yellow>\n<gray>Prioridad:</gray> <white><priority></white>\n<gray>Mundo:</gray> <white><world></white>\n<gray>Límites:</gray> <white>(<min_x>, <min_y>, <min_z>) -> (<max_x>, <max_y>, <max_z>)</white>\n<gray>Banderas Permitidas:</gray> <green><allow_flags></green>\n<gray>Banderas Denegadas:</gray> <red><deny_flags></red>\n<dark_gray>===========================================</dark_gray>",
             "debug-here-header" to "<yellow>Regiones activas aquí (Count: <count>):</yellow>",
             "debug-here-item" to "<gray>- <id> (Prio: <priority>)</gray>",
-            "debug-flags" to "<yellow>Bypass general: <bypass>\nGameMode: <gamemode></yellow>"
+            "debug-flags" to "<yellow>Bypass general: <bypass>\nGameMode: <gamemode></yellow>",
+            "no-enderpearl" to "<red>❌ No se permite el uso de enderpearls aquí.</red>",
+            "no-chorus-fruit" to "<red>❌ No se permite el teletransporte con fruta de coro aquí.</red>",
+            "no-sleep" to "<red>❌ No tienes permiso para dormir aquí.</red>"
         )
     }
 }

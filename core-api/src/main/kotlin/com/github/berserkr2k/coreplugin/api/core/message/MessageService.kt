@@ -13,6 +13,11 @@ interface MessageService {
     )
 
     /**
+     * Envía un mensaje raw (MiniMessage string) a una audiencia específica sin usar una key.
+     */
+    fun sendRaw(audience: Audience, message: String)
+
+    /**
      * Obtiene el template crudo (MiniMessage string) para una llave de mensaje específica.
      */
     fun getRawTemplate(key: MessageKey): String

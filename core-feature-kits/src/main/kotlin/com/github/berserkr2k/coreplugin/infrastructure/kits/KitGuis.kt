@@ -5,7 +5,7 @@ import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -20,7 +20,8 @@ import java.io.File
 class KitGuis(
     private val plugin: Plugin,
     private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
-    private val kitService: KitService
+    private val kitService: KitService,
+    private val messageService: MessageService
 ) {
     var selectorConfig: MenuConfig = createDefaultSelectorConfig()
         private set
@@ -167,9 +168,9 @@ class KitGuis(
                         p.closeInventory()
                         kitService.claimKit(p, kitId, false).thenAccept { result ->
                             when (result) {
-                                is ClaimResult.Success -> p.sendRawMessage(ColorUtility.parse(result.message))
+                                is ClaimResult.Success -> messageService.sendRaw(p, result.message)
                                 is ClaimResult.Failure -> {
-                                    p.sendRawMessage(ColorUtility.parse(result.reason))
+                                    messageService.sendRaw(p, result.reason)
                                     p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
                                 }
                             }
@@ -315,9 +316,9 @@ class KitGuis(
                 p.closeInventory()
                 kitService.claimKit(p, kitId, false).thenAccept { result ->
                     when (result) {
-                        is ClaimResult.Success -> p.sendRawMessage(ColorUtility.parse(result.message))
+                        is ClaimResult.Success -> messageService.sendRaw(p, result.message)
                         is ClaimResult.Failure -> {
-                            p.sendRawMessage(ColorUtility.parse(result.reason))
+                            messageService.sendRaw(p, result.reason)
                             p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
                         }
                     }

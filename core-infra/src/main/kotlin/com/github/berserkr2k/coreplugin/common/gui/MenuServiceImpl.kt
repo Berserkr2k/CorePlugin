@@ -5,6 +5,19 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import net.kyori.adventure.text.Component
+import org.bukkit.Bukkit
+import org.bukkit.event.EventHandler
+import org.bukkit.event.Listener
+import org.bukkit.event.inventory.InventoryClickEvent
+import org.bukkit.event.inventory.InventoryDragEvent
+import org.bukkit.event.inventory.InventoryCloseEvent
+import org.bukkit.inventory.Inventory
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
+import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import java.util.concurrent.ConcurrentHashMap
 
 class ButtonImpl(
     override val icon: ItemStack,
@@ -171,4 +184,292 @@ class MenuServiceImpl(private val plugin: Plugin) : MenuService {
     }
     
     override fun createBuilder(): MenuBuilder = MenuBuilderImpl(plugin)
+}
+
+fun ItemConfig.toItemStack(): ItemStack {
+    val factory = Bukkit.getServicesManager().load(ItemBuilderFactory::class.java)
+        ?: throw IllegalStateException("ItemBuilderFactory service is not registered in Bukkit's ServiceManager!")
+    return factory.builder(this).build()
+}
+
+class CustomMenu(
+    val title: Component,
+    val slots: Int,
+    private val plugin: Plugin
+) {
+    val inventory: Inventory = Bukkit.createInventory(null, slots, title)
+    private val clickHandlers = ConcurrentHashMap<Int, (Player, InventoryClickEvent) -> Unit>()
+    val interactableSlots = ConcurrentHashMap.newKeySet<Int>()
+    var onClose: ((Player) -> Unit)? = null
+    
+    private val localActions = ConcurrentHashMap<String, (Player, InventoryClickEvent) -> Unit>()
+
+    var currentPage: Int = 0
+    var totalPages: Int = 1
+    private var pageRedrawer: (() -> Unit)? = null
+
+    fun setPageRedrawer(redrawer: () -> Unit) {
+        this.pageRedrawer = redrawer
+    }
+
+    fun nextPage() {
+        if (currentPage < totalPages - 1) {
+            currentPage++
+            pageRedrawer?.invoke()
+        }
+    }
+
+    fun previousPage() {
+        if (currentPage > 0) {
+            currentPage--
+            pageRedrawer?.invoke()
+        }
+    }
+
+    fun registerLocalAction(actionName: String, handler: (Player, InventoryClickEvent) -> Unit) {
+        localActions[actionName.lowercase()] = handler
+    }
+
+    fun getActionHandler(actionName: String): ((Player, InventoryClickEvent) -> Unit)? {
+        return localActions[actionName.lowercase()] ?: MenuActionRegistry.getAction(actionName)
+    }
+
+    fun setItem(slot: Int, item: ItemStack, onClick: ((Player, InventoryClickEvent) -> Unit)? = null) {
+        if (slot in 0 until slots) {
+            inventory.setItem(slot, item)
+            if (onClick != null) {
+                clickHandlers[slot] = onClick
+            } else {
+                clickHandlers.remove(slot)
+            }
+        }
+    }
+
+    fun loadFromConfig(config: MenuConfig, placeholders: Map<String, String> = emptyMap(), ignoreSlots: List<Int> = emptyList()) {
+        if (config.filler.enabled) {
+            val fillerItem = config.filler.item.toItemStack()
+            for (i in 0 until slots) {
+                if (i !in ignoreSlots) {
+                    setItem(i, fillerItem.clone())
+                }
+            }
+        }
+
+        config.items.forEach { (_, menuItemConfig) ->
+            val processedItemConfig = applyPlaceholders(menuItemConfig.item, placeholders)
+            val itemStack = processedItemConfig.toItemStack()
+
+            menuItemConfig.slots.forEach { slot ->
+                if (slot in 0 until slots) {
+                    setItem(slot, itemStack.clone()) { player, event ->
+                        val permission = menuItemConfig.permission
+                        val sound = menuItemConfig.sound
+                        val action = menuItemConfig.action
+                        if (permission != null && !player.hasPermission(permission)) {
+                            Bukkit.getServicesManager().load(MessageService::class.java)?.send(player, CoreMessages.NO_PERMISSION)
+                            return@setItem
+                        }
+
+                        if (sound != null) {
+                            try {
+                                val soundEnum = org.bukkit.Sound.valueOf(sound.uppercase())
+                                player.playSound(player.location, soundEnum, 1.0f, 1.0f)
+                            } catch (e: Exception) {}
+                        }
+
+                        if (action != null) {
+                            val handler = getActionHandler(action)
+                            if (handler != null) {
+                                handler(player, event)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun applyPlaceholders(config: ItemConfig, placeholders: Map<String, String>): ItemConfig {
+        if (placeholders.isEmpty()) return config
+        
+        var display = config.displayName
+        if (display != null) {
+            placeholders.forEach { (k, v) ->
+                display = display!!.replace(k, v)
+            }
+        }
+        
+        val processedLore = config.lore.map { line ->
+            var temp = line
+            placeholders.forEach { (k, v) ->
+                temp = temp.replace(k, v)
+            }
+            temp
+        }
+
+        return config.copy(
+            displayName = display,
+            lore = processedLore
+        )
+    }
+
+    fun open(player: Player) {
+        player.openInventory(inventory)
+        MenuManager.registerActiveMenu(inventory, this)
+    }
+
+    fun handleInventoryClick(event: InventoryClickEvent) {
+        event.isCancelled = true
+        val player = event.whoClicked as? Player ?: return
+        val slot = event.rawSlot
+        val handler = clickHandlers[slot]
+        if (handler != null) {
+            handler(player, event)
+        }
+    }
+
+    fun <T> placeDynamicItems(
+        config: MenuConfig,
+        items: List<T>,
+        getGuiSlot: (T) -> Int,
+        startSlot: Int = 10,
+        render: (T, Int) -> Unit
+    ) {
+        val occupiedSlots = mutableSetOf<Int>()
+        config.items.values.forEach { occupiedSlots.addAll(it.slots) }
+
+        val placedSlots = mutableSetOf<Int>()
+        var nextFreeSlot = startSlot
+
+        items.forEach { item ->
+            val suggestedSlot = getGuiSlot(item)
+            val targetSlot = if (suggestedSlot in 0 until slots && !occupiedSlots.contains(suggestedSlot)) {
+                suggestedSlot
+            } else {
+                while (nextFreeSlot in occupiedSlots || placedSlots.contains(nextFreeSlot)) {
+                    nextFreeSlot++
+                }
+                if (nextFreeSlot >= slots) {
+                    return@forEach
+                }
+                nextFreeSlot
+            }
+            placedSlots.add(targetSlot)
+            render(item, targetSlot)
+        }
+    }
+
+    fun <T> placePaginatedItems(
+        config: MenuConfig,
+        items: List<T>,
+        previousPageItem: ItemStack,
+        nextPageItem: ItemStack,
+        render: (T, Int) -> Unit
+    ) {
+        val dynamicSlots = config.dynamicSlots.ifEmpty {
+            val occupied = mutableSetOf<Int>()
+            config.items.values.forEach { occupied.addAll(it.slots) }
+            (0 until slots).filter { 
+                it !in occupied && 
+                it != config.previousPageSlot && 
+                it != config.nextPageSlot
+            }
+        }
+
+        val pageSize = dynamicSlots.size
+        if (pageSize <= 0) return
+
+        totalPages = maxOf(1, java.lang.Math.ceil(items.size.toDouble() / pageSize).toInt())
+
+        val redraw = {
+            val emptyItem = ItemStack(org.bukkit.Material.AIR)
+            dynamicSlots.forEach { setItem(it, emptyItem.clone(), null) }
+            config.previousPageSlot?.let { if (it in 0 until slots) setItem(it, emptyItem.clone(), null) }
+            config.nextPageSlot?.let { if (it in 0 until slots) setItem(it, emptyItem.clone(), null) }
+
+            val start = currentPage * pageSize
+            val end = minOf(start + pageSize, items.size)
+            val pageItems = if (start < items.size) items.subList(start, end) else emptyList()
+
+            pageItems.forEachIndexed { idx, item ->
+                val slot = dynamicSlots[idx]
+                render(item, slot)
+            }
+
+            config.previousPageSlot?.let { prevSlot ->
+                if (prevSlot in 0 until slots && currentPage > 0) {
+                    val prevBtn = previousPageItem
+                    setItem(prevSlot, prevBtn) { p, _ ->
+                        previousPage()
+                    }
+                }
+            }
+
+            config.nextPageSlot?.let { nextSlot ->
+                if (nextSlot in 0 until slots && currentPage < totalPages - 1) {
+                    val nextBtn = nextPageItem
+                    setItem(nextSlot, nextBtn) { p, _ ->
+                        nextPage()
+                    }
+                }
+            }
+            Unit
+        }
+
+        setPageRedrawer(redraw)
+        redraw()
+    }
+}
+
+object MenuManager : Listener {
+    private val activeMenus = ConcurrentHashMap<Inventory, CustomMenu>()
+
+    fun registerActiveMenu(inventory: Inventory, menu: CustomMenu) {
+        activeMenus[inventory] = menu
+    }
+
+    fun init(plugin: Plugin) {
+        plugin.server.pluginManager.registerEvents(this, plugin)
+    }
+
+    @EventHandler
+    fun onInventoryClick(event: InventoryClickEvent) {
+        val inventory = event.inventory
+        val menu = activeMenus[inventory] ?: return
+
+        if (event.rawSlot < 0) return
+
+        if (event.rawSlot < event.inventory.size) {
+            if (menu.interactableSlots.contains(event.rawSlot)) {
+                event.isCancelled = false
+            } else {
+                event.isCancelled = true
+                menu.handleInventoryClick(event)
+            }
+        } else {
+            if (event.isShiftClick) {
+                event.isCancelled = true
+            } else {
+                event.isCancelled = false
+            }
+        }
+    }
+
+    @EventHandler
+    fun onInventoryDrag(event: InventoryDragEvent) {
+        val inventory = event.inventory
+        val menu = activeMenus[inventory] ?: return
+        
+        val hasNonInteractableDrag = event.rawSlots.any { it < inventory.size && !menu.interactableSlots.contains(it) }
+        if (hasNonInteractableDrag) {
+            event.isCancelled = true
+        }
+    }
+
+    @EventHandler
+    fun onInventoryClose(event: InventoryCloseEvent) {
+        val player = event.player as? Player ?: return
+        val menu = activeMenus.remove(event.inventory)
+        menu?.onClose?.invoke(player)
+    }
 }

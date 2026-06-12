@@ -2,7 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.commands
 
 import com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator
 import com.github.berserkr2k.coreplugin.infrastructure.message.FeatureMessageRegistry
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import org.bukkit.command.CommandSender
@@ -11,19 +11,15 @@ import org.incendo.cloud.CommandManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import net.kyori.adventure.text.minimessage.MiniMessage
-import com.github.berserkr2k.coreplugin.common.sendRawMessage
-
 class DebugCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val reloadCoordinator: ReloadCoordinator,
     private val messageRegistry: FeatureMessageRegistry,
-    private val configManager: ModularConfigManager,
+    private val configService: ConfigService,
     private val messageService: MessageService
 ) {
     private val coroutineScope = CoroutineScope(Dispatchers.Default)
-    private val mm = MiniMessage.miniMessage()
 
     init {
         registerDebugCommands()
@@ -55,7 +51,7 @@ class DebugCommand(
                         sb.append(" <gray>⚡ <gold>$padded</gold>: $count keys loaded</gray>\n")
                     }
                     sb.append("<dark_gray>======================================================</dark_gray>")
-                    sender.sendRawMessage(mm.deserialize(sb.toString()))
+                    messageService.sendRaw(sender, sb.toString())
                 }
         )
 
@@ -68,13 +64,14 @@ class DebugCommand(
                     sb.append("<dark_gray>======================================================</dark_gray>\n")
                     sb.append("<yellow><bold>          CONFIGURATION REGISTRY DIAGNOSTICS</bold></yellow>\n")
                     sb.append("<dark_gray>======================================================</dark_gray>\n")
-                    sb.append(" <gray>⚡ <gold>Total Active Configurations</gold>: ${configManager.getLoadedConfigs().size}</gray>\n")
+                    val loadedConfigs = (configService as? com.github.berserkr2k.coreplugin.infrastructure.config.ConfigServiceImpl)?.getLoadedConfigs() ?: emptySet()
+                    sb.append(" <gray>⚡ <gold>Total Active Configurations</gold>: ${loadedConfigs.size}</gray>\n")
                     sb.append("<dark_gray>------------------------------------------------------</dark_gray>\n")
-                    for (cfg in configManager.getLoadedConfigs()) {
+                    for (cfg in loadedConfigs) {
                         sb.append(" <gray>⚡ <gold>Config File</gold>: $cfg</gray>\n")
                     }
                     sb.append("<dark_gray>======================================================</dark_gray>")
-                    sender.sendRawMessage(mm.deserialize(sb.toString()))
+                    messageService.sendRaw(sender, sb.toString())
                 }
         )
 
@@ -83,7 +80,7 @@ class DebugCommand(
             debugBuilder.literal("reload")
                 .handler { context ->
                     val sender = context.sender()
-                    sender.sendRawMessage(mm.deserialize("<gold>⚙️ Iniciando recarga asíncrona de todos los módulos...</gold>"))
+                    messageService.sendRaw(sender, "<gold>⚙️ Iniciando recarga asíncrona de todos los módulos...</gold>")
                     
                     coroutineScope.launch {
                         try {
@@ -101,9 +98,9 @@ class DebugCommand(
                             sb.append("<dark_gray>------------------------------------------------------</dark_gray>\n")
                             sb.append(" <gray>⚡ <gold>Tiempo Total Transcurrido</gold>: <green>${totalTime}ms</green></gray>\n")
                             sb.append("<dark_gray>======================================================</dark_gray>")
-                            sender.sendRawMessage(mm.deserialize(sb.toString()))
+                            messageService.sendRaw(sender, sb.toString())
                         } catch (e: Exception) {
-                            sender.sendRawMessage(mm.deserialize("<red>❌ Falló la recarga asíncrona: ${e.message}</red>"))
+                            messageService.sendRaw(sender, "<red>❌ Falló la recarga asíncrona: ${e.message}</red>")
                             plugin.logger.severe("Error durante debug reload: ${e.message}")
                             e.printStackTrace()
                         }
