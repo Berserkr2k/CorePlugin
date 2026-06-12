@@ -2,48 +2,59 @@ package com.github.berserkr2k.coreplugin.infrastructure.chat
 
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import org.bukkit.Bukkit
-import org.bukkit.plugin.Plugin
-
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import org.bukkit.plugin.Plugin
 
 class ChatModule(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
+    private val featureConfig: FeatureConfig,
     private val papiBridge: LegacyPlaceholderBridge,
     private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
-    private val serviceRegistry: ServiceRegistry,
-    private val messageService: MessageService
+    private val messageService: MessageService,
+    private val taskScheduler: TaskScheduler,
+    private val stateService: PlayerStateService
 ) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     lateinit var config: ChatConfig
         private set
     private var listener: ModernChatModuleListener? = null
-    private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
+
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+    private val mapper = mapperFactory.get(ChatConfig::class.java)
+
+    private fun getRootNode(): org.spongepowered.configurate.CommentedConfigurationNode {
+        val field = featureConfig.javaClass.getDeclaredField("rootNode")
+        field.isAccessible = true
+        return field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
+    }
+
+    private fun loadConfig() {
+        val rootNode = getRootNode()
+        this.config = mapper.load(rootNode) ?: ChatConfig()
+    }
 
     init {
-        configManager.loadModuleConfig("core/chat.conf", ChatConfig::class.java, ChatConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                
-                // Registro del listener en el planificador regional maestro
-                taskScheduler.runSync {
-                    val chatListener = ModernChatModuleListener(config, papiBridge, profileRegistry, serviceRegistry, messageService)
-                    plugin.server.pluginManager.registerEvents(chatListener, plugin)
-                    listener = chatListener
-                }
-            }
+        loadConfig()
+        
+        // Registro del listener en el planificador regional maestro
+        taskScheduler.runSync {
+            val chatListener = ModernChatModuleListener(config, papiBridge, profileRegistry, stateService, messageService)
+            plugin.server.pluginManager.registerEvents(chatListener, plugin)
+            listener = chatListener
+        }
     }
 
     override suspend fun reload() {
         try {
-            val loadedConfig = configManager.loadModuleConfig("core/chat.conf", ChatConfig::class.java, ChatConfig()).join()
-            this.config = loadedConfig
-            listener?.chatConfig = loadedConfig
+            featureConfig.reload()
+            loadConfig()
+            listener?.chatConfig = this.config
         } catch (e: Exception) {
-            plugin.logger.severe("Error al recargar chat.conf: ${e.message}")
+            plugin.logger.severe("Error al recargar chat: ${e.message}")
         }
     }
 }

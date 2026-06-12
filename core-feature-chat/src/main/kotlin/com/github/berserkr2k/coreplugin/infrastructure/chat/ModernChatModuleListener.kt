@@ -4,7 +4,6 @@ import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig
 import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig.ChatFormatSection
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
@@ -36,11 +35,9 @@ class ModernChatModuleListener(
     @Volatile var chatConfig: ChatConfig,
     private val papiBridge: LegacyPlaceholderBridge,
     private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
-    private val serviceRegistry: ServiceRegistry,
+    private val stateService: PlayerStateService,
     private val messageService: MessageService
 ) : Listener, ChatRenderer {
-
-    private val stateService = serviceRegistry.get(PlayerStateService::class.java)
 
     private val LINK_PATTERN = Pattern.compile(
         "(https?://)?([a-zA-Z0-9\\-]+\\.)+[a-zA-Z]{2,6}(:[0-9]+)?(/\\S*)?|\\b(?:\\d{1,3}\\.){3}\\d{1,3}(:[0-9]+)?\\b",

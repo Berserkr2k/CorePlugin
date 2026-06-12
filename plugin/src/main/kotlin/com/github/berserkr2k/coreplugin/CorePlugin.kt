@@ -18,9 +18,6 @@ import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvide
 import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseServiceImpl
-import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatModule
-import com.github.berserkr2k.coreplugin.infrastructure.chat.PrivateMessageCommand
-import com.github.berserkr2k.coreplugin.infrastructure.chat.ColorCommand
 import com.github.berserkr2k.coreplugin.infrastructure.warps.WarpService
 import com.github.berserkr2k.coreplugin.infrastructure.warps.WarpCommand
 import com.github.berserkr2k.coreplugin.infrastructure.mechanics.AnvilModule
@@ -86,7 +83,6 @@ class CorePlugin(
 
     private var databaseService: DatabaseServiceImpl? = null
     private var profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry? = null
-    private var chatModule: ChatModule? = null
     private var anvilModule: AnvilModule? = null
     private var hologramService: HologramService? = null
     private var leaderboardService: LeaderboardService? = null
@@ -150,6 +146,7 @@ class CorePlugin(
         messageRegistry.registerFeature("leaderboards", com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardMessages.defaults)
 
         placeholderBridge = LegacyPlaceholderBridge()
+        registry.register(LegacyPlaceholderBridge::class.java, placeholderBridge)
         configManager = ModularConfigManager(this, dataFolderPath)
         registry.register(ModularConfigManager::class.java, configManager)
 
@@ -195,6 +192,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.warps.WarpFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.kits.KitFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.chat.ChatFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -270,14 +268,7 @@ class CorePlugin(
             // Eliminado del ServiceRegistry público por ser feature/infraestructura interna
         }
 
-        // 3. Inicializar Módulo de Chat Enriquecido (DeluxeChat Equivalence)
-        initDbDependentModule("Chat y Mensajería") {
-            val service = ChatModule(this, configManager, placeholderBridge, profileRegistry!!, serviceRegistry, messageRegistry)
-            chatModule = service
-            // Eliminado del ServiceRegistry público por ser feature interna
-            PrivateMessageCommand(this, commandManager, profileRegistry!!, messageRegistry)
-            ColorCommand(this, commandManager, profileRegistry!!, configManager, messageRegistry, serviceRegistry)
-        }
+        // 3. Módulo de Chat Enriquecido migrado a ChatFeature
 
         // 4. Inicializar Módulo de Yunques (Moderación y Permisos de Color)
         initModule("Yunques y Bloqueos") {
@@ -450,7 +441,6 @@ class CorePlugin(
                         fRegistry.registerFeature(featureId)
                     }
                 }
-                chatModule?.reload()
                 anvilModule?.reload()
                 tablistService?.reload()
                 scoreboardService?.reload()

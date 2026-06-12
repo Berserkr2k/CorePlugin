@@ -5,7 +5,7 @@ import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
@@ -24,18 +24,30 @@ class ColorCommand(
     private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val profileRegistry: ProfileRegistry,
-    private val configManager: ModularConfigManager,
+    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
     private val messageService: MessageService,
-    private val serviceRegistry: ServiceRegistry
+    private val registry: ServiceRegistry
 ) {
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
-    private val menuService = serviceRegistry.get(MenuService::class.java)!!
-    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
+    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)!!
+    private val menuService = registry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
     private var menuConfig = ColorMenuConfig()
 
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+    private val mapper = mapperFactory.get(ColorMenuConfig::class.java)
+
+    private fun loadConfig() {
+        val featureConfig = configService.getCustomConfig("chat", "menus/color-selector.conf")
+        val field = featureConfig.javaClass.getDeclaredField("rootNode")
+        field.isAccessible = true
+        val rootNode = field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
+        this.menuConfig = mapper.load(rootNode) ?: ColorMenuConfig()
+    }
+
     init {
-        configManager.loadModuleConfig("menus/color-selector.conf", ColorMenuConfig::class.java, ColorMenuConfig())
-            .thenAccept { this.menuConfig = it }
+        loadConfig()
 
         manager.command(
             manager.commandBuilder("color")
@@ -53,8 +65,12 @@ class ColorCommand(
     }
 
     fun reload() {
-        configManager.loadModuleConfig("menus/color-selector.conf", ColorMenuConfig::class.java, ColorMenuConfig())
-            .thenAccept { this.menuConfig = it }
+        try {
+            configService.getCustomConfig("chat", "menus/color-selector.conf").reload()
+            loadConfig()
+        } catch (e: Exception) {
+            plugin.logger.severe("Error al recargar color-selector.conf: ${e.message}")
+        }
     }
 
     private fun openColorMenu(player: Player) {
