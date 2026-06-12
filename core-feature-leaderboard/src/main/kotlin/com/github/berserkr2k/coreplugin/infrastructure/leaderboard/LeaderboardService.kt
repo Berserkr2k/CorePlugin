@@ -1,10 +1,11 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
-import com.github.berserkr2k.coreplugin.infrastructure.database.*
+import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
+
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
-import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilder
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Material
@@ -31,54 +32,62 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
+import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 
 data class ActivePodium(val uuid: UUID, val location: Location)
 
 class LeaderboardService(
     private val plugin: Plugin,
     private val configManager: com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val databaseService: DatabaseService,
     private val placeholderBridge: LegacyPlaceholderBridge,
     private val profileRegistry: ProfileRegistry,
     private val registry: ServiceRegistry
-) : Listener {
+) : Listener, com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val leaderboardKey = NamespacedKey(plugin, "leaderboard_id")
     private val rankKey = NamespacedKey(plugin, "leaderboard_rank")
     private val miniMessage = MiniMessage.miniMessage()
     
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+    private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
 
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()
     
-    private val leaderboardsFolder = plugin.dataFolder.resolve("leaderboards")
+    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
+    private val leaderboardsFolder = folderProvider.getFeatureFolder("economy").resolve("leaderboards").toFile()
 
     init {
         // Inicializar directorio e cargar clasificacións
         setupLeaderboardsFolder()
         loadAllLeaderboards()
         
-        databaseService.initFuture.thenAccept {
-            // Spawn de podios persistidos
-            taskScheduler.runAsync {
-                spawnAllPersistedLeaderboards()
-            }
-
-            // Tarea de actualización y refresco de podios (cada 60s)
-            taskScheduler.runAsyncTimer({
-                for (player in Bukkit.getOnlinePlayers()) {
-                    updatePlayerStats(player)
-                }
-                refreshAllLeaderboards()
-            }, 100L, 1200L)
+        // Spawn de podios persistidos
+        taskScheduler.runAsync {
+            spawnAllPersistedLeaderboards()
         }
 
+        // Tarea de actualización y refresco de podios (cada 60s)
+        taskScheduler.runAsyncTimer({
+            for (player in Bukkit.getOnlinePlayers()) {
+                updatePlayerStats(player)
+            }
+            refreshAllLeaderboards()
+        }, 100L, 1200L)
+
         Bukkit.getPluginManager().registerEvents(this, plugin)
+    }
+
+    override suspend fun reload() {
+        loadAllLeaderboards()
+        refreshAllLeaderboards()
     }
 
     private fun setupLeaderboardsFolder() {
@@ -89,7 +98,7 @@ class LeaderboardService(
         // Crear clasificaciones por defecto si está vacía
         val defaultCreditsFile = leaderboardsFolder.resolve("credits.conf")
         if (!defaultCreditsFile.exists()) {
-            configManager.loadModuleConfig("leaderboards/credits.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
+            configManager.loadModuleConfig("economy/leaderboards/credits.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
                 id = "credits",
                 placeholder = "%coreplugin_balance_credits%",
                 displayName = "<gold><bold>TOP CRÉDITOS</bold></gold>"
@@ -98,7 +107,7 @@ class LeaderboardService(
 
         val defaultKillsFile = leaderboardsFolder.resolve("kills.conf")
         if (!defaultKillsFile.exists()) {
-            configManager.loadModuleConfig("leaderboards/kills.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
+            configManager.loadModuleConfig("economy/leaderboards/kills.conf", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(
                 id = "kills",
                 placeholder = "%statistic_player_kills%",
                 displayName = "<red><bold>TOP KILLS</bold></gold>"
@@ -113,7 +122,7 @@ class LeaderboardService(
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val config = configManager.loadModuleConfig("leaderboards/${file.name}", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id)).join()
+                val config = configManager.loadModuleConfig("economy/leaderboards/${file.name}", CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id)).join()
                 leaderboards[id] = config
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la clasificación desde ${file.name}: ${e.message}")
@@ -134,7 +143,7 @@ class LeaderboardService(
         }
     }
 
-    fun spawnOrFindLeaderboard(location: Location, leaderboardId: String, rank: Int) {
+    override fun spawnOrFindLeaderboard(location: Location, leaderboardId: String, rank: Int) {
         val key = "${leaderboardId}_$rank"
         
         regionTaskScheduler.runAtLocation(location) {
@@ -205,7 +214,7 @@ class LeaderboardService(
                     it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "entry")
                 }
             }
-            entryDisplay.text(miniMessage.deserialize(messagesConfig.leaderboards["loading"] ?: "<gold>Cargando...</gold>"))
+            entryDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(CoreMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
 
             // 2. Holograma del Encabezado - Solo para Ranks <= headerAboveRank (e.g. Rank 1)
             val config = leaderboards[leaderboardId.lowercase()] ?: CustomLeaderboardConfig(id = leaderboardId)
@@ -225,7 +234,7 @@ class LeaderboardService(
                         it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "header")
                     }
                 }
-                headerDisplay.text(miniMessage.deserialize(messagesConfig.leaderboards["loading"] ?: "<gold>Cargando...</gold>"))
+                headerDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(CoreMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
             } else {
                 headerDisplays.forEach { it.remove() }
             }
@@ -234,7 +243,7 @@ class LeaderboardService(
         }
     }
 
-    fun registerLeaderboard(id: String, rank: Int, loc: Location): CompletableFuture<Void> {
+    override fun registerLeaderboard(id: String, rank: Int, loc: Location): CompletableFuture<Void> {
         val leaderboardId = id.lowercase()
         return CompletableFuture.runAsync({
             val config = leaderboards[leaderboardId] ?: CustomLeaderboardConfig(id = leaderboardId)
@@ -251,7 +260,7 @@ class LeaderboardService(
             leaderboards[leaderboardId] = updatedConfig
 
             try {
-                configManager.saveModuleConfig("leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+                configManager.saveModuleConfig("economy/leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId: ${e.message}")
             }
@@ -260,7 +269,7 @@ class LeaderboardService(
         }, { command -> taskScheduler.runAsync(command) })
     }
 
-    fun unregisterLeaderboard(id: String, rank: Int): CompletableFuture<Boolean> {
+    override fun unregisterLeaderboard(id: String, rank: Int): CompletableFuture<Boolean> {
         val leaderboardId = id.lowercase()
         val key = "${leaderboardId}_$rank"
         val activePodium = activePodiums.remove(key)
@@ -276,7 +285,7 @@ class LeaderboardService(
             leaderboards[leaderboardId] = updatedConfig
 
             try {
-                configManager.saveModuleConfig("leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
+                configManager.saveModuleConfig("economy/leaderboards/$leaderboardId.conf", CustomLeaderboardConfig::class.java, updatedConfig).join()
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId tras remover podio: ${e.message}")
             }
@@ -301,7 +310,7 @@ class LeaderboardService(
         }, { command -> taskScheduler.runAsync(command) })
     }
 
-    fun updatePlayerStats(player: Player) {
+    override fun updatePlayerStats(player: Player) {
         leaderboards.forEach { (id, config) ->
             if (config.placeholder.isNotEmpty()) {
                 val raw = placeholderBridge.parsePlaceholder(player, config.placeholder)
@@ -313,46 +322,45 @@ class LeaderboardService(
 
     private fun saveScore(uuid: UUID, username: String, leaderboardId: String, score: Double) {
         val profile = profileRegistry.getProfile(uuid)
+        val db = databaseService.getDatabase("leaderboards")
         val userIdFuture = if (profile != null) {
             CompletableFuture.completedFuture(profile.internalId)
         } else {
-            databaseService.querySingleAsync(
+            db.querySingle(
                 "SELECT id FROM core_users WHERE uuid = ?",
-                preparer = { stmt -> stmt.setString(1, uuid.toString()) },
-                mapper = { rs -> rs.getInt("id") }
+                { rs -> rs.getInt("id") },
+                uuid.toString()
             ).thenCompose { id ->
                 if (id != null) {
                     CompletableFuture.completedFuture(id)
                 } else {
-                    CompletableFuture.supplyAsync {
-                        databaseService.transaction { conn ->
-                            val insertSql = "INSERT INTO core_users (uuid, username) VALUES (?, ?)"
-                            conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
-                                stmt.setString(1, uuid.toString())
-                                stmt.setString(2, username)
-                                stmt.executeUpdate()
-                                stmt.generatedKeys.use { gk ->
-                                    if (gk.next()) gk.getInt(1) else throw java.sql.SQLException("No key")
+                    val insertFuture = CompletableFuture<Int>()
+                    db.executeTransaction { conn ->
+                        val insertSql = "INSERT INTO core_users (uuid, username) VALUES (?, ?)"
+                        conn.prepareStatement(insertSql, java.sql.Statement.RETURN_GENERATED_KEYS).use { stmt ->
+                            stmt.setString(1, uuid.toString())
+                            stmt.setString(2, username)
+                            stmt.executeUpdate()
+                            stmt.generatedKeys.use { gk ->
+                                if (gk.next()) {
+                                    insertFuture.complete(gk.getInt(1))
+                                } else {
+                                    insertFuture.completeExceptionally(java.sql.SQLException("No key"))
                                 }
                             }
                         }
+                    }.exceptionally { ex ->
+                        insertFuture.completeExceptionally(ex)
+                        null
                     }
+                    insertFuture
                 }
             }
         }
 
         userIdFuture.thenAccept { userId ->
-            val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
-            val upsertSql = if (isMySQL) {
-                "INSERT INTO player_scores (user_id, leaderboard_id, score) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE score = VALUES(score)"
-            } else {
-                "INSERT INTO player_scores (user_id, leaderboard_id, score) VALUES (?, ?, ?) ON CONFLICT(user_id, leaderboard_id) DO UPDATE SET score = excluded.score"
-            }
-            databaseService.executeAsync(upsertSql) { stmt ->
-                stmt.setInt(1, userId)
-                stmt.setString(2, leaderboardId)
-                stmt.setDouble(3, score)
-            }
+            val upsertSql = "INSERT INTO player_scores (user_id, leaderboard_id, score) VALUES (?, ?, ?) ON CONFLICT(user_id, leaderboard_id) DO UPDATE SET score = excluded.score"
+            db.executeUpdate(upsertSql, userId, leaderboardId, score)
         }.exceptionally { e ->
             plugin.logger.severe("Error al guardar puntuación en la base de datos: ${e.message}")
             null
@@ -367,21 +375,22 @@ class LeaderboardService(
             ORDER BY s.score DESC 
             LIMIT 10
         """.trimIndent()
-        return databaseService.queryAsync(
+        val db = databaseService.getDatabase("leaderboards")
+        return db.query(
             sql,
-            preparer = { stmt -> stmt.setString(1, leaderboardId) },
-            mapper = { rs ->
+            { rs ->
                 val username = rs.getString("username")
                 val score = rs.getDouble("score")
                 java.util.AbstractMap.SimpleEntry(username, score) as Map.Entry<String, Double>
-            }
+            },
+            leaderboardId
         ).exceptionally { e ->
             plugin.logger.severe("Error al consultar el top 10 en la base de datos: ${e.message}")
             emptyList()
         }
     }
 
-    fun refreshAllLeaderboards() {
+    override fun refreshAllLeaderboards() {
         leaderboards.keys.forEach { id ->
             getTop10(id).thenAccept { topData ->
                 refreshLeaderboard(id, topData)
@@ -419,7 +428,7 @@ class LeaderboardService(
                     
                     // Actualizar cabeza usando ItemBuilder
                     if (profile != null) {
-                        val skull = ItemBuilder(Material.PLAYER_HEAD)
+                        val skull = itemBuilderFactory.createSkull()
                             .skullProfile(profile)
                             .build()
                         stand.setItem(EquipmentSlot.HEAD, skull)
@@ -475,7 +484,8 @@ class LeaderboardService(
                             .replace("<player>", entry.key)
                             .replace("<balance>", String.format("%.2f", entry.value))
                     } else {
-                        (messagesConfig.leaderboards["vacant"] ?: "<gray>#<pos> - Vacante</gray>")
+                        messageService.getRawTemplate(CoreMessages.LEADERBOARD_VACANT)
+                            .ifEmpty { "<gray>#<pos> - Vacante</gray>" }
                             .replace("<pos>", rank.toString())
                     }
                     entryDisplay.text(miniMessage.deserialize(text))
@@ -520,7 +530,7 @@ class LeaderboardService(
         updatePlayerStats(event.player)
     }
 
-    fun reloadLeaderboards(): CompletableFuture<Void> {
+    override fun reloadLeaderboards(): CompletableFuture<Void> {
         return CompletableFuture.runAsync({
             loadAllLeaderboards()
             

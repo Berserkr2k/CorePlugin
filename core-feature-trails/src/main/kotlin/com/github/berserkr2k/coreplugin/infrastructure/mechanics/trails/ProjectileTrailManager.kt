@@ -1,11 +1,10 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 
-import com.github.berserkr2k.coreplugin.common.gui.MenuConfig
-import com.github.berserkr2k.coreplugin.common.gui.FillerConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
-import com.github.berserkr2k.coreplugin.infrastructure.database.*
+import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -13,7 +12,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
 
-import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig
 
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 
@@ -21,19 +20,37 @@ class ProjectileTrailManager(
     private val plugin: Plugin,
     private val databaseService: DatabaseService,
     private val configManager: ModularConfigManager,
-    private val profileRegistry: ProfileRegistry
-) {
+    private val profileRegistry: ProfileRegistry,
+    private val folderProvider: com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+) : com.github.berserkr2k.coreplugin.api.feature.trails.ProjectileTrailService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     val trails = ConcurrentHashMap<String, TrailConfig>()
     
-    private val trailsFolder = plugin.dataFolder.resolve("trails")
+    private val trailsFolder = folderProvider.getFeatureFolder("trails").resolve("trails").toFile()
 
-    val selectorConfig: MenuConfig by lazy {
-        configManager.loadModuleConfig("menus/trails-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig()).join()
-    }
+    var selectorConfig = MenuConfig(
+        title = "<gold><bold>Estelas de Proyectil</bold></gold>",
+        size = 27,
+        filler = FillerConfig(
+            enabled = true,
+            item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
+        )
+    )
+        private set
 
     init {
         setupTrailsFolder()
         loadAllTrails()
+        loadSelectorConfig().join()
+    }
+
+    private fun loadSelectorConfig(): CompletableFuture<Void> {
+        return configManager.loadModuleConfig("menus/trails-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig())
+            .thenAccept { this.selectorConfig = it }
+    }
+
+    override suspend fun reload() {
+        loadAllTrails()
+        loadSelectorConfig().join()
     }
 
     private fun setupTrailsFolder() {
@@ -260,20 +277,20 @@ class ProjectileTrailManager(
 
     private fun saveDefaultTrail(file: File, config: TrailConfig) {
         try {
-            configManager.saveModuleConfig("trails/${file.name}", TrailConfig::class.java, config).join()
+            configManager.saveModuleConfig("trails/trails/${file.name}", TrailConfig::class.java, config).join()
         } catch (e: Exception) {
             plugin.logger.severe("Fallo al guardar estela por defecto: ${e.message}")
         }
     }
 
-    fun loadAllTrails() {
+    override fun loadAllTrails() {
         trails.clear()
         val files = trailsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
 
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val config = configManager.loadModuleConfig("trails/${file.name}", TrailConfig::class.java, TrailConfig(id = id)).join()
+                val config = configManager.loadModuleConfig("trails/trails/${file.name}", TrailConfig::class.java, TrailConfig(id = id)).join()
                 
                 val finalId = if (config.id.isNotEmpty()) config.id.lowercase() else id
                 trails[finalId] = config
@@ -316,21 +333,21 @@ class ProjectileTrailManager(
         )
     }
 
-    fun getActiveTrail(uuid: UUID): String? {
+    override fun getActiveTrail(uuid: UUID): String? {
         return profileRegistry.getProfile(uuid)?.activeTrailId
     }
 
     // Cargar estela de base de datos de manera asíncrona
-    fun loadPlayerTrail(uuid: UUID): CompletableFuture<String?> {
+    override fun loadPlayerTrail(uuid: UUID): CompletableFuture<String?> {
         val sql = """
             SELECT t.trail_id FROM core_player_projectile_trails t
             JOIN core_users u ON t.user_id = u.id
             WHERE u.uuid = ?
         """.trimIndent()
-        return databaseService.querySingleAsync(
+        return databaseService.getDatabase("trails").querySingle(
             sql,
-            preparer = { stmt -> stmt.setString(1, uuid.toString()) },
-            mapper = { rs -> rs.getString("trail_id") }
+            { rs -> rs.getString("trail_id") },
+            uuid.toString()
         ).thenApply { trailId ->
             if (trailId != null) {
                 profileRegistry.getProfile(uuid)?.setTrail(trailId)
@@ -343,41 +360,35 @@ class ProjectileTrailManager(
     }
 
     // Guardar estela de base de datos de manera asíncrona
-    fun savePlayerTrail(uuid: UUID, trailId: String?): CompletableFuture<Void> {
+    override fun savePlayerTrail(uuid: UUID, trailId: String?): CompletableFuture<Void> {
         val profile = profileRegistry.getProfile(uuid)
         if (profile != null) {
             profile.setTrail(trailId)
             return CompletableFuture.completedFuture(null)
         }
 
-        return CompletableFuture.runAsync {
-            databaseService.getConnection().use { conn ->
-                var userId = -1
-                conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { stmt ->
-                    stmt.setString(1, uuid.toString())
-                    stmt.executeQuery().use { rs ->
-                        if (rs.next()) userId = rs.getInt("id")
-                    }
+        val db = databaseService.getDatabase("trails")
+        return db.executeTransaction { conn ->
+            var userId = -1
+            conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { stmt ->
+                stmt.setString(1, uuid.toString())
+                stmt.executeQuery().use { rs ->
+                    if (rs.next()) userId = rs.getInt("id")
                 }
-                if (userId == -1) return@runAsync
+            }
+            if (userId == -1) return@executeTransaction
 
-                if (trailId == null) {
-                    conn.prepareStatement("DELETE FROM core_player_projectile_trails WHERE user_id = ?").use { stmt ->
-                        stmt.setInt(1, userId)
-                        stmt.executeUpdate()
-                    }
-                } else {
-                    val isMySQL = databaseService.config.driver.equals("mysql", ignoreCase = true)
-                    val upsertSql = if (isMySQL) {
-                        "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE trail_id = VALUES(trail_id)"
-                    } else {
-                        "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET trail_id = excluded.trail_id"
-                    }
-                    conn.prepareStatement(upsertSql).use { stmt ->
-                        stmt.setInt(1, userId)
-                        stmt.setString(2, trailId)
-                        stmt.executeUpdate()
-                    }
+            if (trailId == null) {
+                conn.prepareStatement("DELETE FROM core_player_projectile_trails WHERE user_id = ?").use { stmt ->
+                    stmt.setInt(1, userId)
+                    stmt.executeUpdate()
+                }
+            } else {
+                val upsertSql = "INSERT INTO core_player_projectile_trails (user_id, trail_id) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET trail_id = excluded.trail_id"
+                conn.prepareStatement(upsertSql).use { stmt ->
+                    stmt.setInt(1, userId)
+                    stmt.setString(2, trailId)
+                    stmt.executeUpdate()
                 }
             }
         }.exceptionally { e ->

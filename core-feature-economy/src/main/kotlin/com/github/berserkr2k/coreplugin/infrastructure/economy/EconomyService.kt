@@ -1,8 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.economy
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
-import com.github.berserkr2k.coreplugin.infrastructure.database.*
+import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -20,8 +19,9 @@ class EconomyService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
     private val databaseService: DatabaseService,
-    private val profileRegistry: ProfileRegistry
-) : com.github.berserkr2k.coreplugin.api.economy.EconomyService {
+    private val profileRegistry: ProfileRegistry,
+    private val folderProvider: com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+) : com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     override val currencies = ConcurrentHashMap<String, CurrencyConfig>()
     val initFuture = CompletableFuture<Void>()
 
@@ -35,8 +35,12 @@ class EconomyService(
         }
     }
 
+    override suspend fun reload() {
+        setupCurrencies()
+    }
+
     private fun setupCurrencies() {
-        val currenciesFolder = File(plugin.dataFolder, "currencies")
+        val currenciesFolder = folderProvider.getFeatureFolder("economy").resolve("currencies").toFile()
         if (!currenciesFolder.exists()) {
             currenciesFolder.mkdirs()
             // Escribir divisas predeterminadas
@@ -44,9 +48,10 @@ class EconomyService(
             writeDefaultCurrencyFile(File(currenciesFolder, "points.conf"), "points", "Puntos", "🔶", "balance_points", "0", "5000000", false, null)
         }
 
+        currencies.clear()
         val configFiles = currenciesFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
         for (file in configFiles) {
-            val relativePath = "currencies/${file.name}"
+            val relativePath = "economy/currencies/${file.name}"
             try {
                 val loadedConfig = configManager.loadModuleConfig(relativePath, CurrencyConfig::class.java, CurrencyConfig()).join()
                 currencies[loadedConfig.id] = loadedConfig
@@ -123,14 +128,13 @@ class EconomyService(
             WHERE u.uuid = ? AND e.currency_id = ?
         """.trimIndent()
 
-        return databaseService.querySingle(
+        val db = databaseService.getDatabase("economy")
+        return db.querySingle(
             sql,
-            preparer = { stmt -> 
-                stmt.setString(1, uuid.toString())
-                stmt.setString(2, currencyId.lowercase())
-            },
-            mapper = { rs -> rs.getBigDecimal(1) }
-        ) ?: BigDecimal(currency.initialBalance)
+            { rs -> rs.getBigDecimal(1) },
+            uuid.toString(),
+            currencyId.lowercase()
+        ).join() ?: BigDecimal(currency.initialBalance)
     }
 
     /**
@@ -140,6 +144,7 @@ class EconomyService(
     fun modifyBalance(uuid: UUID, currencyId: String, amount: BigDecimal, type: String): CompletableFuture<Boolean> {
         val currency = currencies[currencyId] ?: return CompletableFuture.completedFuture(false)
         val profile = profileRegistry.getProfile(uuid)
+        val db = databaseService.getDatabase("economy")
 
         if (profile != null) {
             // JUGADOR ONLINE -> Operación en caché instantánea (0ms Spigot Tick)
@@ -154,23 +159,22 @@ class EconomyService(
             profile.setBalance(currencyId, finalBal)
 
             // Registrar transacción en la BD de forma asíncrona para auditoría
-            databaseService.executeAsync(
+            db.executeUpdate(
                 "INSERT INTO economy_transactions (sender_uuid, receiver_uuid, currency_id, amount, transaction_type, initial_balance, final_balance, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                preparer = { stmt ->
-                    stmt.setString(1, null)
-                    stmt.setString(2, uuid.toString())
-                    stmt.setString(3, currencyId)
-                    stmt.setBigDecimal(4, amount.abs())
-                    stmt.setString(5, type)
-                    stmt.setBigDecimal(6, current)
-                    stmt.setBigDecimal(7, finalBal)
-                    stmt.setLong(8, System.currentTimeMillis())
-                }
+                "System", // Indicar que no hay emisor
+                uuid.toString(),
+                currencyId,
+                amount.abs(),
+                type,
+                current,
+                finalBal,
+                System.currentTimeMillis()
             )
             return CompletableFuture.completedFuture(true)
         } else {
             // JUGADOR OFFLINE -> Transacción SQL relacional directa
-            return databaseService.transactionAsync { conn ->
+            val resultFuture = CompletableFuture<Boolean>()
+            db.executeTransaction { conn ->
                 // Obtener ID del usuario
                 var userId = -1
                 conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { stmt ->
@@ -183,7 +187,8 @@ class EconomyService(
                 }
 
                 if (userId == -1) {
-                    return@transactionAsync false // El usuario no está registrado en el core
+                    resultFuture.complete(false)
+                    return@executeTransaction // El usuario no está registrado en el core
                 }
 
                 // Obtener saldo actual
@@ -217,11 +222,13 @@ class EconomyService(
 
                 // Registrar Log
                 writeTransaction(conn, null, uuid, currency.id, amount.abs(), type, current, finalBal)
-                true
+                resultFuture.complete(true)
             }.exceptionally { e ->
                 plugin.logger.severe("Fallo en modifyBalance offline para $uuid ($currencyId): ${e.message}")
-                false
+                resultFuture.complete(false)
+                null
             }
+            return resultFuture
         }
     }
 
@@ -254,6 +261,7 @@ class EconomyService(
 
         val senderProfile = profileRegistry.getProfile(sender)
         val receiverProfile = profileRegistry.getProfile(receiver)
+        val db = databaseService.getDatabase("economy")
 
         if (senderProfile != null && receiverProfile != null) {
             // Ambos online -> Operar en memoria atómicamente
@@ -270,18 +278,16 @@ class EconomyService(
                 receiverProfile.setBalance(currencyId, newRBal)
 
                 // Guardar registro de transacción asíncrono para logs
-                databaseService.executeAsync(
+                db.executeUpdate(
                     "INSERT INTO economy_transactions (sender_uuid, receiver_uuid, currency_id, amount, transaction_type, initial_balance, final_balance, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    preparer = { stmt ->
-                        stmt.setString(1, sender.toString())
-                        stmt.setString(2, receiver.toString())
-                        stmt.setString(3, currencyId)
-                        stmt.setBigDecimal(4, amount)
-                        stmt.setString(5, "P2P")
-                        stmt.setBigDecimal(6, sBal)
-                        stmt.setBigDecimal(7, newSBal)
-                        stmt.setLong(8, System.currentTimeMillis())
-                    }
+                    sender.toString(),
+                    receiver.toString(),
+                    currencyId,
+                    amount,
+                    "P2P",
+                    sBal,
+                    newSBal,
+                    System.currentTimeMillis()
                 )
                 return CompletableFuture.completedFuture(true)
             }
@@ -289,8 +295,9 @@ class EconomyService(
             // Al menos uno offline -> Bloqueo y transacción SQL relacional
             val first = if (sender.toString() < receiver.toString()) sender else receiver
             val second = if (first == sender) receiver else sender
+            val resultFuture = CompletableFuture<Boolean>()
 
-            return databaseService.transactionAsync { conn ->
+            db.executeTransaction { conn ->
                 var senderId = -1
                 var receiverId = -1
 
@@ -368,11 +375,13 @@ class EconomyService(
                 // Actualizar cachés si corresponde
                 senderProfile?.setBalance(currencyId, newSBal)
                 receiverProfile?.setBalance(currencyId, newRBal)
-                true
+                resultFuture.complete(true)
             }.exceptionally { e ->
                 plugin.logger.severe("Fallo en transferencia P2P entre $sender y $receiver: ${e.message}")
-                false
+                resultFuture.complete(false)
+                null
             }
+            return resultFuture
         }
     }
 
@@ -409,9 +418,8 @@ class EconomyService(
     fun purgeInactiveRecords(daysThreshold: Int): CompletableFuture<Int> {
         val thresholdMillis = System.currentTimeMillis() - (daysThreshold.toLong() * 24 * 60 * 60 * 1000)
         val sql = "DELETE FROM core_users WHERE last_login < ?"
-        return databaseService.executeAsync(sql) { ps ->
-            ps.setTimestamp(1, java.sql.Timestamp(thresholdMillis))
-        }
+        val db = databaseService.getDatabase("economy")
+        return db.executeUpdate(sql, java.sql.Timestamp(thresholdMillis))
     }
 
     /**

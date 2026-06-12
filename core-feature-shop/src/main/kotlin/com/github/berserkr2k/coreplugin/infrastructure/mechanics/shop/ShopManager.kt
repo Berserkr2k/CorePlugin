@@ -1,8 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
-import com.github.berserkr2k.coreplugin.infrastructure.database.*
+import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -12,15 +11,16 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
 class ShopManager(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
     private val databaseService: DatabaseService,
     private val registry: ServiceRegistry
-) {
+) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     lateinit var marketConfig: MarketConfig
         private set
@@ -34,6 +34,7 @@ class ShopManager(
         private set
 
     val initFuture = CompletableFuture<Void>()
+    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
 
     init {
         purgeOldMarketTransactions().thenCompose {
@@ -49,14 +50,19 @@ class ShopManager(
         }
     }
 
+    override suspend fun reload() {
+        loadConfigurations().join()
+        refreshMarketCache()
+    }
+
     fun loadConfigurations(): CompletableFuture<Void> {
         val future = CompletableFuture<Void>()
         configManager.loadModuleConfig("shops/market.conf", MarketConfig::class.java, MarketConfig())
             .thenAccept { loadedMarket ->
                 this.marketConfig = loadedMarket
                 
-                // Crear carpetas de shops/categories si no existen
-                val categoriesDir = File(plugin.dataFolder, "shops/categories")
+                // Crear carpetas de shops/shops si no existen
+                val categoriesDir = folderProvider.getFeatureFolder("shops").resolve("shops").toFile()
                 if (!categoriesDir.exists()) {
                     categoriesDir.mkdirs()
                     // Escribir categorías por defecto
@@ -84,7 +90,7 @@ class ShopManager(
                 
                 val files = categoriesDir.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
                 val futures = files.map { file ->
-                    val relativePath = "shops/categories/${file.name}"
+                    val relativePath = "shops/shops/${file.name}"
                     configManager.loadModuleConfig(relativePath, ShopConfig::class.java, ShopConfig())
                         .thenAccept { category ->
                             categories[category.shopId] = category
@@ -136,10 +142,11 @@ $itemsStr
         val threshold = now - windowMillis
         
         val query = "SELECT item_id, transaction_type, SUM(quantity) FROM market_transactions WHERE timestamp >= ? GROUP BY item_id, transaction_type"
-        return databaseService.queryAsync(
+        val db = databaseService.getDatabase("shops")
+        return db.query(
             query,
-            preparer = { ps -> ps.setLong(1, threshold) },
-            mapper = { rs -> Triple(rs.getString(1), rs.getString(2), rs.getInt(3)) }
+            { rs -> Triple(rs.getString(1), rs.getString(2), rs.getInt(3)) },
+            threshold
         ).thenAccept { results ->
             results.forEach { (itemId, type, sum) ->
                 if (type.equals("BUY", ignoreCase = true)) {
@@ -160,9 +167,8 @@ $itemsStr
     fun purgeOldMarketTransactions(): CompletableFuture<Void> {
         val sevenDaysAgo = System.currentTimeMillis() - (7L * 24L * 60L * 60L * 1000L)
         val sql = "DELETE FROM market_transactions WHERE timestamp < ?"
-        return databaseService.executeAsync(sql) { ps ->
-            ps.setLong(1, sevenDaysAgo)
-        }.thenRun {
+        val db = databaseService.getDatabase("shops")
+        return db.executeUpdate(sql, sevenDaysAgo).thenRun {
             plugin.logger.info("✔ Market transactions database purge completed. Deleted records older than 7 days.")
         }.exceptionally { e ->
             plugin.logger.severe("Failed to purge old market transactions: ${e.message}")
@@ -178,7 +184,8 @@ $itemsStr
         val tempBuy = ConcurrentHashMap<String, Int>()
         val tempSell = ConcurrentHashMap<String, Int>()
         
-        databaseService.transactionAsync { conn ->
+        val db = databaseService.getDatabase("shops")
+        db.executeTransaction { conn ->
             // Cargar volumen de transacciones de la ventana activa
             val query = "SELECT item_id, transaction_type, SUM(quantity) FROM market_transactions WHERE timestamp >= ? GROUP BY item_id, transaction_type"
             conn.prepareStatement(query).use { ps ->
@@ -230,30 +237,29 @@ $itemsStr
         }
         
         // Impacto asíncrono e inmutable en base de datos
-        return CompletableFuture.runAsync {
-            databaseService.getConnection().use { conn ->
-                var userId = -1
-                conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { ps ->
-                    ps.setString(1, player.uniqueId.toString())
-                    ps.executeQuery().use { rs ->
-                        if (rs.next()) {
-                            userId = rs.getInt(1)
-                        }
+        val db = databaseService.getDatabase("shops")
+        return db.executeTransaction { conn ->
+            var userId = -1
+            conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { ps ->
+                ps.setString(1, player.uniqueId.toString())
+                ps.executeQuery().use { rs ->
+                    if (rs.next()) {
+                        userId = rs.getInt(1)
                     }
                 }
-                
-                if (userId != -1) {
-                    val sql = "INSERT INTO market_transactions (user_id, shop_id, item_id, transaction_type, quantity, total_price, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
-                    conn.prepareStatement(sql).use { ps ->
-                        ps.setInt(1, userId)
-                        ps.setString(2, shopId)
-                        ps.setString(3, itemId)
-                        ps.setString(4, type.uppercase())
-                        ps.setInt(5, quantity)
-                        ps.setBigDecimal(6, totalPrice)
-                        ps.setLong(7, System.currentTimeMillis())
-                        ps.executeUpdate()
-                    }
+            }
+            
+            if (userId != -1) {
+                val sql = "INSERT INTO market_transactions (user_id, shop_id, item_id, transaction_type, quantity, total_price, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                conn.prepareStatement(sql).use { ps ->
+                    ps.setInt(1, userId)
+                    ps.setString(2, shopId)
+                    ps.setString(3, itemId)
+                    ps.setString(4, type.uppercase())
+                    ps.setInt(5, quantity)
+                    ps.setBigDecimal(6, totalPrice)
+                    ps.setLong(7, System.currentTimeMillis())
+                    ps.executeUpdate()
                 }
             }
         }.thenAccept { }.exceptionally { e ->
@@ -271,10 +277,10 @@ $itemsStr
             ORDER BY t.timestamp DESC
         """.trimIndent()
 
-        return databaseService.queryAsync(
+        val db = databaseService.getDatabase("shops")
+        return db.query(
             sql,
-            preparer = { ps -> ps.setString(1, uuid.toString()) },
-            mapper = { rs ->
+            { rs ->
                 MarketTransactionRecord(
                     shopId = rs.getString(1),
                     itemId = rs.getString(2),
@@ -283,7 +289,8 @@ $itemsStr
                     totalPrice = rs.getBigDecimal(5),
                     timestamp = rs.getLong(6)
                 )
-            }
+            },
+            uuid.toString()
         )
     }
 

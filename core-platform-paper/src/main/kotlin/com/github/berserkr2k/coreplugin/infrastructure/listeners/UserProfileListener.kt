@@ -11,7 +11,7 @@ import org.bukkit.plugin.Plugin
 class UserProfileListener(
     private val plugin: Plugin,
     private val profileRegistry: ProfileRegistry,
-    private val stateService: com.github.berserkr2k.coreplugin.api.state.PlayerStateService
+    private val stateService: com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 ) : Listener {
 
     @EventHandler

@@ -1,12 +1,11 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
-import com.github.berserkr2k.coreplugin.infrastructure.database.DatabaseService
-import com.github.berserkr2k.coreplugin.infrastructure.database.*
-import com.github.berserkr2k.coreplugin.api.economy.EconomyService
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
+import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
-import com.github.berserkr2k.coreplugin.common.gui.toItemStack
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -23,35 +22,40 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
-import com.github.berserkr2k.coreplugin.api.scheduler.Task
+import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
-sealed class ClaimResult {
-    data class Success(val message: String) : ClaimResult()
-    data class Failure(val reason: String) : ClaimResult()
-}
+import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 
 class KitService(
     private val plugin: Plugin,
     private val configManager: ModularConfigManager,
     private val databaseService: DatabaseService,
     private val economyService: EconomyService,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val profileRegistry: ProfileRegistry,
     private val registry: ServiceRegistry
-) {
+) : com.github.berserkr2k.coreplugin.api.feature.kits.KitService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     val kits = ConcurrentHashMap<String, KitConfig>()
-    private val kitsFolder = plugin.dataFolder.resolve("kits")
+    
+    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
+    private val kitsFolder = folderProvider.getFeatureFolder("kits").resolve("kits").toFile()
     
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+    private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
 
     init {
         loadAllKits()
     }
 
-    fun loadAllKits() {
+    override suspend fun reload() {
+        loadAllKits()
+    }
+
+    override fun loadAllKits() {
         kits.clear()
         if (!kitsFolder.exists()) {
             kitsFolder.mkdirs()
@@ -59,7 +63,7 @@ class KitService(
 
         val starterFile = kitsFolder.resolve("starter.conf")
         if (!starterFile.exists()) {
-            configManager.loadModuleConfig("kits/starter.conf", KitConfig::class.java, KitConfig()).join()
+            configManager.loadModuleConfig("kits/kits/starter.conf", KitConfig::class.java, KitConfig()).join()
         }
 
         val confFiles = kitsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
@@ -67,7 +71,7 @@ class KitService(
         for (file in confFiles) {
             val kitId = file.nameWithoutExtension.lowercase()
             try {
-                val kitConfig = configManager.loadModuleConfig("kits/${file.name}", KitConfig::class.java, KitConfig()).join()
+                val kitConfig = configManager.loadModuleConfig("kits/kits/${file.name}", KitConfig::class.java, KitConfig()).join()
                 kits[kitId] = kitConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar el kit desde ${file.name}: ${e.message}")
@@ -76,7 +80,7 @@ class KitService(
         plugin.logger.info("¡Se han cargado ${kits.size} kits con éxito!")
     }
 
-    fun getRemainingCooldown(uuid: UUID, kitId: String): Long {
+    override fun getRemainingCooldown(uuid: UUID, kitId: String): Long {
         val config = kits[kitId.lowercase()] ?: return 0L
         val profile = profileRegistry.getProfile(uuid) ?: return 0L
         val lastClaimed = profile.getCooldown(kitId)
@@ -85,7 +89,7 @@ class KitService(
         return if (remaining > 0) remaining else 0L
     }
 
-    fun formatTime(seconds: Long): String {
+    override fun formatTime(seconds: Long): String {
         val h = seconds / 3600
         val m = (seconds % 3600) / 60
         val s = seconds % 60
@@ -98,7 +102,7 @@ class KitService(
 
     fun buildItemStack(config: ItemConfig): ItemStack? {
         return try {
-            config.toItemStack()
+            itemBuilderFactory.builder(config).build()
         } catch (e: Exception) {
             null
         }
@@ -126,14 +130,14 @@ class KitService(
         return maxOf(0, slotsUsed + neededSlots)
     }
 
-    fun claimKit(player: Player, kitId: String, isGift: Boolean): CompletableFuture<ClaimResult> {
+    override fun claimKit(player: Player, kitId: String, isGift: Boolean): CompletableFuture<ClaimResult> {
         return CompletableFuture.supplyAsync({
-            val config = kits[kitId.lowercase()] ?: return@supplyAsync ClaimResult.Failure(messagesConfig.utility["kit-not-found"] ?: "<red>El kit especificado no existe.</red>")
+            val config = kits[kitId.lowercase()] ?: return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.NOT_FOUND).ifEmpty { "<red>El kit especificado no existe.</red>" })
             val profile = profileRegistry.getProfile(player.uniqueId) ?: return@supplyAsync ClaimResult.Failure("<red>Tu perfil no está cargado en el sistema.</red>")
 
             if (!isGift) {
                 if (!player.hasPermission(config.permission)) {
-                    return@supplyAsync ClaimResult.Failure(messagesConfig.utility["no-permission"] ?: "<red>No tienes permiso para esto.</red>")
+                    return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.NO_PERMISSION).ifEmpty { "<red>No tienes permiso para esto.</red>" })
                 }
 
                 val remaining = getRemainingCooldown(player.uniqueId, kitId)
@@ -141,7 +145,7 @@ class KitService(
                                 player.hasPermission("core.kits.bypass.cooldown.${kitId.lowercase()}")
                 if (remaining > 0 && !hasBypass) {
                     val formattedTime = formatTime(remaining)
-                    val msg = (messagesConfig.utility["kit-cooldown"] ?: "<red>Debes esperar <time> para volver a reclamar este kit.</red>")
+                    val msg = (messageService.getRawTemplate(KitMessages.COOLDOWN).ifEmpty { "<red>Debes esperar <time> para volver a reclamar este kit.</red>" })
                         .replace("<time>", formattedTime)
                     return@supplyAsync ClaimResult.Failure(msg)
                 }
@@ -150,7 +154,7 @@ class KitService(
                     val costBD = BigDecimal(config.cost)
                     val currentBal = economyService.getBalance(player.uniqueId, config.currency)
                     if (currentBal < costBD) {
-                        return@supplyAsync ClaimResult.Failure(messagesConfig.utility["kit-insufficient-funds"] ?: "<red>No tienes dinero suficiente para comprar este kit.</red>")
+                        return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.INSUFFICIENT_FUNDS).ifEmpty { "<red>No tienes dinero suficiente para comprar este kit.</red>" })
                     }
                 }
             }
@@ -160,14 +164,14 @@ class KitService(
 
             val emptySlots = player.inventory.storageContents.count { it == null || it.type == Material.AIR }
             if (emptySlots < requiredSlots) {
-                return@supplyAsync ClaimResult.Failure((messagesConfig.utility["kit-no-space"] ?: "<red>No tienes espacio suficiente en el inventario (<required> ranuras libres requeridas).</red>").replace("<required>", requiredSlots.toString()))
+                return@supplyAsync ClaimResult.Failure((messageService.getRawTemplate(KitMessages.NO_SPACE).ifEmpty { "<red>No tienes espacio suficiente en el inventario (<required> ranuras libres requeridas).</red>" }).replace("<required>", requiredSlots.toString()))
             }
 
             if (!isGift && config.cost > 0.0) {
                 val costBD = BigDecimal(config.cost)
                 val success = economyService.withdrawCacheBehind(player.uniqueId, config.currency, costBD, "KIT_PURCHASE_$kitId").join()
                 if (!success) {
-                    return@supplyAsync ClaimResult.Failure(messagesConfig.utility["kit-purchase-failed"] ?: "<red>Hubo un fallo al procesar la compra del kit.</red>")
+                    return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.PURCHASE_FAILED).ifEmpty { "<red>Hubo un fallo al procesar la compra del kit.</red>" })
                 }
             }
 
@@ -204,7 +208,7 @@ class KitService(
                 }
             })
  
-            ClaimResult.Success(messagesConfig.utility["kit-claimed"] ?: "<green>¡Has reclamado tu kit con éxito!</green>")
+            ClaimResult.Success(messageService.getRawTemplate(KitMessages.CLAIMED).ifEmpty { "<green>¡Has reclamado tu kit con éxito!</green>" })
         }, { command -> taskScheduler.runAsync(command) })
     }
 }
