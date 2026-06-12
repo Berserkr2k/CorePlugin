@@ -31,6 +31,7 @@ dependencies {
     compileOnly("net.milkbowl.vault:VaultUnlockedAPI:2.16")
 
     // ArchUnit for testing modular boundaries
+    testImplementation(libs.paper.modern)
     testImplementation("com.tngtech.archunit:archunit-junit5:1.3.0")
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")

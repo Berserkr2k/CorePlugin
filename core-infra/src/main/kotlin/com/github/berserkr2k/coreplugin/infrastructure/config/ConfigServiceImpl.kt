@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 
 class ConfigServiceImpl(
-    private val baseDir: Path,
+    private val basePath: Path,
     private val plugin: Plugin = org.bukkit.Bukkit.getServicesManager().load(ServiceRegistry::class.java)?.get(Plugin::class.java)
         ?: throw IllegalStateException("Plugin instance not found in ServiceRegistry"),
     private val taskScheduler: TaskScheduler = org.bukkit.Bukkit.getServicesManager().load(ServiceRegistry::class.java)?.get(TaskScheduler::class.java)
@@ -29,12 +29,12 @@ class ConfigServiceImpl(
     override fun getCustomConfig(featureId: String, fileName: String): FeatureConfig {
         val cacheKey = "${featureId.lowercase()}:$fileName"
         return configs.computeIfAbsent(cacheKey) {
-            val fileDir = baseDir.resolve("features").resolve(featureId.lowercase())
-            val file = fileDir.resolve(fileName)
+            val path = basePath.resolve("features").resolve(featureId.lowercase()).resolve(fileName)
             
-            if (Files.notExists(file)) {
-                if (Files.notExists(fileDir)) {
-                    Files.createDirectories(fileDir)
+            if (Files.notExists(path)) {
+                val parentDir = path.parent
+                if (parentDir != null && Files.notExists(parentDir)) {
+                    Files.createDirectories(parentDir)
                 }
                 
                 // Intentar buscar e inyectar el recurso desde el .jar
@@ -53,23 +53,18 @@ class ConfigServiceImpl(
                         ?: plugin::class.java.classLoader.getResourceAsStream(fileName)
                 }
                 
-                val parentDir = file.parent
-                if (parentDir != null && Files.notExists(parentDir)) {
-                    Files.createDirectories(parentDir)
-                }
-
                 if (resourceStream != null) {
                     resourceStream.use { input ->
-                        Files.copy(input, file, StandardCopyOption.REPLACE_EXISTING)
+                        Files.copy(input, path, StandardCopyOption.REPLACE_EXISTING)
                     }
                 } else {
-                    if (Files.notExists(file)) {
-                        Files.createFile(file)
+                    if (Files.notExists(path)) {
+                        Files.createFile(path)
                     }
                 }
             }
             
-            HoconFeatureConfig(file, executor)
+            HoconFeatureConfig(path, executor)
         }
     }
 }

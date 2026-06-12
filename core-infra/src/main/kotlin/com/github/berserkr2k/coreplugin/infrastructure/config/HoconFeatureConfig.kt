@@ -9,7 +9,7 @@ import java.util.concurrent.Executor
 
 class HoconFeatureConfig(
     private val file: Path,
-    private val executor: Executor
+    private val executor: Executor = Executor { command -> command.run() }
 ) : FeatureConfig {
     private val loader = HoconConfigurationLoader.builder()
         .path(file)

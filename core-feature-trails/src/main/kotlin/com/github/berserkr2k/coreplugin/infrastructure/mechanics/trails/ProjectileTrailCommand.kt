@@ -1,6 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.incendo.cloud.CommandManager
@@ -28,7 +29,7 @@ class ProjectileTrailCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
+                        sender.sendRawMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
                         return@handler
                     }
                     guis.openTrailSelector(sender)
@@ -41,7 +42,7 @@ class ProjectileTrailCommand(
                 .handler { context ->
                     val sender = context.sender()
                     if (sender !is Player) {
-                        sender.sendMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
+                        sender.sendRawMessage(ColorUtility.parse("<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"))
                         return@handler
                     }
                     guis.openTrailSelector(sender)
@@ -57,7 +58,7 @@ class ProjectileTrailCommand(
                 .handler { context ->
                     val sender = context.sender()
                     trailManager.loadAllTrails()
-                    sender.sendMessage(ColorUtility.parse("<green>¡Configuraciones de Estelas de Proyectiles recargadas con éxito en tiempo real!</green>"))
+                    sender.sendRawMessage(ColorUtility.parse("<green>¡Configuraciones de Estelas de Proyectiles recargadas con éxito en tiempo real!</green>"))
                 }
         )
 
@@ -76,13 +77,13 @@ class ProjectileTrailCommand(
 
                     val config = trailManager.trails[trailId]
                     if (config == null) {
-                        sender.sendMessage(ColorUtility.parse("<red>La estela especificada '$trailId' no existe.</red>"))
+                        sender.sendRawMessage(ColorUtility.parse("<red>La estela especificada '$trailId' no existe.</red>"))
                         return@handler
                     }
 
                     trailManager.savePlayerTrail(target.uniqueId, trailId).thenRun {
-                        sender.sendMessage(ColorUtility.parse("<green>¡Estela '${config.displayName}' equipada con éxito a ${target.name}!</green>"))
-                        target.sendMessage(ColorUtility.parse("<green>¡Se te ha equipado la estela '${config.displayName}' por un administrador!</green>"))
+                        sender.sendRawMessage(ColorUtility.parse("<green>¡Estela '${config.displayName}' equipada con éxito a ${target.name}!</green>"))
+                        target.sendRawMessage(ColorUtility.parse("<green>¡Se te ha equipado la estela '${config.displayName}' por un administrador!</green>"))
                     }
                 }
         )
@@ -99,8 +100,8 @@ class ProjectileTrailCommand(
                     val target = context.get<Player>("target")
 
                     trailManager.savePlayerTrail(target.uniqueId, null).thenRun {
-                        sender.sendMessage(ColorUtility.parse("<green>¡Se ha removido la estela de ${target.name} con éxito!</green>"))
-                        target.sendMessage(ColorUtility.parse("<yellow>Tu estela de partículas ha sido removida por un administrador.</yellow>"))
+                        sender.sendRawMessage(ColorUtility.parse("<green>¡Se ha removido la estela de ${target.name} con éxito!</green>"))
+                        target.sendRawMessage(ColorUtility.parse("<yellow>Tu estela de partículas ha sido removida por un administrador.</yellow>"))
                     }
                 }
         )

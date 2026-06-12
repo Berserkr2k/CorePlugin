@@ -5,6 +5,7 @@ import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -166,9 +167,9 @@ class KitGuis(
                         p.closeInventory()
                         kitService.claimKit(p, kitId, false).thenAccept { result ->
                             when (result) {
-                                is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
+                                is ClaimResult.Success -> p.sendRawMessage(ColorUtility.parse(result.message))
                                 is ClaimResult.Failure -> {
-                                    p.sendMessage(ColorUtility.parse(result.reason))
+                                    p.sendRawMessage(ColorUtility.parse(result.reason))
                                     p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
                                 }
                             }
@@ -314,9 +315,9 @@ class KitGuis(
                 p.closeInventory()
                 kitService.claimKit(p, kitId, false).thenAccept { result ->
                     when (result) {
-                        is ClaimResult.Success -> p.sendMessage(ColorUtility.parse(result.message))
+                        is ClaimResult.Success -> p.sendRawMessage(ColorUtility.parse(result.message))
                         is ClaimResult.Failure -> {
-                            p.sendMessage(ColorUtility.parse(result.reason))
+                            p.sendRawMessage(ColorUtility.parse(result.reason))
                             p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 1.0f)
                         }
                     }

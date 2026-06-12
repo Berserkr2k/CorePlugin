@@ -1,6 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
@@ -70,8 +71,8 @@ class KitCommand(
 
                     kitService.claimKit(sender, kitId, false).thenAccept { result ->
                         when (result) {
-                            is ClaimResult.Success -> sender.sendMessage(ColorUtility.parse(result.message))
-                            is ClaimResult.Failure -> sender.sendMessage(ColorUtility.parse(result.reason))
+                            is ClaimResult.Success -> sender.sendRawMessage(ColorUtility.parse(result.message))
+                            is ClaimResult.Failure -> sender.sendRawMessage(ColorUtility.parse(result.reason))
                         }
                     }
                 }
@@ -94,7 +95,7 @@ class KitCommand(
                                 messageService.send(target, KitMessages.GIVE_SUCCESS_RECEIVER, PlaceholderContext.of("kit" to kitId))
                             }
                             is ClaimResult.Failure -> {
-                                sender.sendMessage(ColorUtility.parse("<red>Error al entregar kit: ${result.reason}</red>"))
+                                sender.sendRawMessage(ColorUtility.parse("<red>Error al entregar kit: ${result.reason}</red>"))
                             }
                         }
                     }

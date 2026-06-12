@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions.listener
 
 import com.github.berserkr2k.coreplugin.infrastructure.regions.command.PlayerSelectionSession
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import org.bukkit.Material
 import org.bukkit.event.EventHandler
 import org.bukkit.event.Listener
@@ -31,12 +32,12 @@ class SelectionListener(
             event.isCancelled = true
             val sel = session.getSelection(player.uniqueId)
             sel.pos1 = block.location
-            player.sendMessage("§a[!] Posición 1 establecida en ${block.x}, ${block.y}, ${block.z}.")
+            player.sendRawMessage("§a[!] Posición 1 establecida en ${block.x}, ${block.y}, ${block.z}.")
         } else if (event.action == Action.RIGHT_CLICK_BLOCK) {
             event.isCancelled = true
             val sel = session.getSelection(player.uniqueId)
             sel.pos2 = block.location
-            player.sendMessage("§a[!] Posición 2 establecida en ${block.x}, ${block.y}, ${block.z}.")
+            player.sendRawMessage("§a[!] Posición 2 establecida en ${block.x}, ${block.y}, ${block.z}.")
         }
     }
 }

@@ -60,3 +60,11 @@ object ColorUtility {
         return sb.toString()
     }
 }
+
+fun org.bukkit.command.CommandSender.sendRawMessage(component: Component) {
+    (this as net.kyori.adventure.audience.Audience).sendMessage(component)
+}
+
+fun org.bukkit.command.CommandSender.sendRawMessage(text: String) {
+    (this as net.kyori.adventure.audience.Audience).sendMessage(Component.text(text))
+}

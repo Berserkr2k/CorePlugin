@@ -11,6 +11,7 @@ import net.kyori.adventure.bossbar.BossBar
 import net.kyori.adventure.title.Title
 import net.kyori.adventure.util.Ticks
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 
@@ -33,9 +34,9 @@ class BroadcastCommand(
                     val message = context.get<String>("message")
                     val component = ColorUtility.parse(message)
                     Bukkit.getOnlinePlayers().forEach { player ->
-                        player.sendMessage(component)
+                        player.sendRawMessage(component)
                     }
-                    Bukkit.getConsoleSender().sendMessage(component)
+                    Bukkit.getConsoleSender().sendRawMessage(component)
                 }
         )
 

@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import net.kyori.adventure.text.minimessage.MiniMessage
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 
 class DebugCommand(
     private val plugin: Plugin,
@@ -54,7 +55,7 @@ class DebugCommand(
                         sb.append(" <gray>⚡ <gold>$padded</gold>: $count keys loaded</gray>\n")
                     }
                     sb.append("<dark_gray>======================================================</dark_gray>")
-                    sender.sendMessage(mm.deserialize(sb.toString()))
+                    sender.sendRawMessage(mm.deserialize(sb.toString()))
                 }
         )
 
@@ -73,7 +74,7 @@ class DebugCommand(
                         sb.append(" <gray>⚡ <gold>Config File</gold>: $cfg</gray>\n")
                     }
                     sb.append("<dark_gray>======================================================</dark_gray>")
-                    sender.sendMessage(mm.deserialize(sb.toString()))
+                    sender.sendRawMessage(mm.deserialize(sb.toString()))
                 }
         )
 
@@ -82,7 +83,7 @@ class DebugCommand(
             debugBuilder.literal("reload")
                 .handler { context ->
                     val sender = context.sender()
-                    sender.sendMessage(mm.deserialize("<gold>⚙️ Iniciando recarga asíncrona de todos los módulos...</gold>"))
+                    sender.sendRawMessage(mm.deserialize("<gold>⚙️ Iniciando recarga asíncrona de todos los módulos...</gold>"))
                     
                     coroutineScope.launch {
                         try {
@@ -100,9 +101,9 @@ class DebugCommand(
                             sb.append("<dark_gray>------------------------------------------------------</dark_gray>\n")
                             sb.append(" <gray>⚡ <gold>Tiempo Total Transcurrido</gold>: <green>${totalTime}ms</green></gray>\n")
                             sb.append("<dark_gray>======================================================</dark_gray>")
-                            sender.sendMessage(mm.deserialize(sb.toString()))
+                            sender.sendRawMessage(mm.deserialize(sb.toString()))
                         } catch (e: Exception) {
-                            sender.sendMessage(mm.deserialize("<red>❌ Falló la recarga asíncrona: ${e.message}</red>"))
+                            sender.sendRawMessage(mm.deserialize("<red>❌ Falló la recarga asíncrona: ${e.message}</red>"))
                             plugin.logger.severe("Error durante debug reload: ${e.message}")
                             e.printStackTrace()
                         }

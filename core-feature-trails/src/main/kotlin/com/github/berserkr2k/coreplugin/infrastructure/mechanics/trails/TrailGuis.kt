@@ -4,6 +4,7 @@ import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
@@ -83,7 +84,7 @@ class TrailGuis(
                     if (hasPerm) {
                         trailManager.savePlayerTrail(p.uniqueId, trailId).thenRun {
                             p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
-                            p.sendMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
+                            p.sendRawMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
                             // Reabrir regionalmente en sincronismo
                             regionTaskScheduler.runAtLocation(p.location, Runnable {
                                 openTrailSelector(p)
@@ -91,7 +92,7 @@ class TrailGuis(
                         }
                     } else {
                         p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                        p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
+                        p.sendRawMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
                     }
                 }
                 .build()
@@ -156,7 +157,7 @@ class TrailGuis(
                         Sound.BLOCK_LAVA_EXTINGUISH
                     }
                     p.playSound(p.location, soundEnum, 1.0f, 1.5f)
-                    p.sendMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
+                    p.sendRawMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
                     // Reabrir regionalmente
                     regionTaskScheduler.runAtLocation(p.location, Runnable {
                         openTrailSelector(p)

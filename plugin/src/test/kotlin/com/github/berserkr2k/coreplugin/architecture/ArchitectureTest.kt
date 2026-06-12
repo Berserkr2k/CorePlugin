@@ -7,9 +7,13 @@ import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes
 import com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses
 import com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.slices
 import com.tngtech.archunit.core.domain.JavaClass
+import com.tngtech.archunit.core.domain.JavaMethodCall
+import com.tngtech.archunit.base.DescribedPredicate
 import com.tngtech.archunit.lang.ArchCondition
 import com.tngtech.archunit.lang.ConditionEvents
 import com.tngtech.archunit.lang.SimpleConditionEvent
+import org.bukkit.entity.Player
+import org.bukkit.command.CommandSender
 
 @AnalyzeClasses(packages = ["com.github.berserkr2k.coreplugin"])
 class ArchitectureTest {
@@ -50,4 +54,16 @@ class ArchitectureTest {
     val core_infra_should_not_leak_bukkit_internals: ArchRule = noClasses()
         .that().resideInAPackage("..com.github.berserkr2k.coreplugin.infrastructure.database..")
         .should().dependOnClassesThat().resideInAPackage("..org.bukkit..")
+
+    @ArchTest
+    val features_must_not_use_raw_bukkit_or_paper_messaging_leaks: ArchRule = noClasses()
+        .that().resideInAPackage("..com.github.berserkr2k.coreplugin.infrastructure..")
+        .should().callMethodWhere(object : DescribedPredicate<JavaMethodCall>("calls sendMessage on Player or CommandSender") {
+            override fun test(target: JavaMethodCall): Boolean {
+                return target.name == "sendMessage" && 
+                (target.target.owner.isAssignableTo(Player::class.java) || 
+                 target.target.owner.isAssignableTo(CommandSender::class.java))
+            }
+        })
+        .`as`("Gameplay features must never invoke raw .sendMessage() on Bukkit entities. Use MessageService abstractions instead.")
 }

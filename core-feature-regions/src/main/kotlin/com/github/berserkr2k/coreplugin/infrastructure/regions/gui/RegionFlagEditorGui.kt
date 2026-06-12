@@ -3,6 +3,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions.gui
 import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
 import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
@@ -29,7 +30,7 @@ class RegionFlagEditorGui(
     fun openCategorySelection(player: Player, regionId: String) {
         val dto = regionManager.getRegionDTO(regionId)
         if (dto == null) {
-            player.sendMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
+            player.sendRawMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
             return
         }
 
@@ -104,7 +105,7 @@ class RegionFlagEditorGui(
     fun openFlagsList(player: Player, regionId: String, categoryId: String) {
         val dto = regionManager.getRegionDTO(regionId)
         if (dto == null) {
-            player.sendMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
+            player.sendRawMessage(ColorUtility.parse("<red>❌ La región '$regionId' no existe.</red>"))
             return
         }
 

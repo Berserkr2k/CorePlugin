@@ -1,0 +1,26 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "gradle",
+			"id": "c:\\Users\\Ismael\\IdeaProjects\\CorePluginplugin:shadowJarplugin",
+			"script": "plugin:shadowJar",
+			"description": "Create a combined JAR of project and runtime dependencies",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"project": "plugin",
+			"buildFile": "C:\\Users\\Ismael\\IdeaProjects\\CorePlugin\\plugin\\build.gradle.kts",
+			"rootProject": "CorePlugin",
+			"projectFolder": "c:\\Users\\Ismael\\IdeaProjects\\CorePlugin",
+			"workspaceFolder": "c:\\Users\\Ismael\\IdeaProjects\\CorePlugin",
+			"args": "",
+			"javaDebug": false,
+			"problemMatcher": [
+				"$gradle"
+			],
+			"label": "gradle: plugin:shadowJar"
+		}
+	]
+}

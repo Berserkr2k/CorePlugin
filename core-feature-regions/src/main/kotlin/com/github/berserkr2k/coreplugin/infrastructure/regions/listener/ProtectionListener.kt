@@ -6,6 +6,7 @@ import com.github.berserkr2k.coreplugin.infrastructure.regions.WorldIndexRegistr
 import com.github.berserkr2k.coreplugin.infrastructure.regions.resolver.RegionRuleResolver
 import com.github.berserkr2k.coreplugin.infrastructure.regions.service.RegionManager
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.common.sendRawMessage
 import org.bukkit.Material
 import org.bukkit.GameMode
 import org.bukkit.entity.Player
@@ -589,9 +590,9 @@ class ProtectionListener(
             event.isCancelled = true
             if (shouldSendMessage(flag)) {
                 if (flag == RegionFlags.ENDERPEARL) {
-                    player.sendMessage(ColorUtility.parse("<red>❌ No se permite el uso de enderpearls aquí.</red>"))
+                    player.sendRawMessage(ColorUtility.parse("<red>❌ No se permite el uso de enderpearls aquí.</red>"))
                 } else {
-                    player.sendMessage(ColorUtility.parse("<red>❌ No se permite el teletransporte con fruta de coro aquí.</red>"))
+                    player.sendRawMessage(ColorUtility.parse("<red>❌ No se permite el teletransporte con fruta de coro aquí.</red>"))
                 }
             }
         }
@@ -606,7 +607,7 @@ class ProtectionListener(
         val context = RegionQueryContext(player, player.gameMode, player.hasPermission("core.region.bypass"))
         if (!resolver.isActionAllowed(worldIndex, loc.blockX, loc.blockY, loc.blockZ, RegionFlags.SLEEP, context)) {
             event.isCancelled = true
-            player.sendMessage(ColorUtility.parse("<red>❌ No tienes permiso para dormir aquí.</red>"))
+            player.sendRawMessage(ColorUtility.parse("<red>❌ No tienes permiso para dormir aquí.</red>"))
         }
     }
 
