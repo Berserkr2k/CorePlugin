@@ -5,37 +5,65 @@ import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.event.inventory.ClickType
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
+import java.io.File
 
 class KitGuis(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val kitService: KitService,
-    private val serviceRegistry: ServiceRegistry
+    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
+    private val kitService: KitService
 ) {
-    private val menuService = serviceRegistry.get(MenuService::class.java)!!
-    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
-
     var selectorConfig: MenuConfig = createDefaultSelectorConfig()
         private set
     
     var showcaseConfig: MenuConfig = createDefaultShowcaseConfig()
         private set
 
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
+
     init {
         reload()
     }
 
+    private fun <T : Any> loadMenuConfig(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
+    }
+
     fun reload() {
-        selectorConfig = configManager.loadModuleConfig("menus/kits-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig()).join()
-        showcaseConfig = configManager.loadModuleConfig("menus/kits-showcase.conf", MenuConfig::class.java, createDefaultShowcaseConfig()).join()
+        val selectorFile = File(plugin.dataFolder, "menus/kits-selector.conf")
+        val showcaseFile = File(plugin.dataFolder, "menus/kits-showcase.conf")
+        selectorConfig = loadMenuConfig(selectorFile, MenuConfig::class.java, createDefaultSelectorConfig())
+        showcaseConfig = loadMenuConfig(showcaseFile, MenuConfig::class.java, createDefaultShowcaseConfig())
     }
 
     private fun createDefaultSelectorConfig(): MenuConfig {
@@ -72,7 +100,7 @@ class KitGuis(
         )
     }
 
-    fun openKitSelector(player: Player) {
+    fun openKitSelector(player: Player, menuService: MenuService, itemBuilderFactory: ItemBuilderFactory) {
         val builder = menuService.createBuilder()
             .title(ColorUtility.parse(selectorConfig.title))
             .slots(selectorConfig.size)
@@ -133,7 +161,7 @@ class KitGuis(
                 .icon(kitIcon)
                 .onClick { p, clickType ->
                     if (clickType == ClickType.RIGHT) {
-                        openKitShowcase(p, kitId)
+                        openKitShowcase(p, kitId, menuService, itemBuilderFactory)
                     } else {
                         p.closeInventory()
                         kitService.claimKit(p, kitId, false).thenAccept { result ->
@@ -175,7 +203,7 @@ class KitGuis(
         builder.build().open(player)
     }
 
-    fun openKitShowcase(player: Player, kitId: String) {
+    fun openKitShowcase(player: Player, kitId: String, menuService: MenuService, itemBuilderFactory: ItemBuilderFactory) {
         val config = kitService.kits[kitId.lowercase()] ?: return
         val items = config.items.mapNotNull { kitService.buildItemStack(it) }
 
@@ -242,7 +270,7 @@ class KitGuis(
                         p.playSound(p.location, Sound.valueOf(sound.uppercase()), 1.0f, 1.0f)
                     } catch (e: Exception) {}
                 }
-                openKitSelector(p)
+                openKitSelector(p, menuService, itemBuilderFactory)
             }
             .build()
         builder.button(slots - 9, backBtn)

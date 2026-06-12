@@ -194,6 +194,7 @@ class CorePlugin(
             // Registro centralizado de las nuevas features modulares
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.warps.WarpFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.kits.KitFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -387,20 +388,7 @@ class CorePlugin(
         }
 
         // 10. Inicializar Módulo Premium de Kits
-        initEconomyDependentModule("Kits Premium") {
-            val kService = com.github.berserkr2k.coreplugin.infrastructure.kits.KitService(this, configManager, databaseService!!, economyService!!, messageRegistry, profileRegistry!!, serviceRegistry)
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.feature.kits.KitService::class.java, kService)
-            val kGuis = com.github.berserkr2k.coreplugin.infrastructure.kits.KitGuis(this, configManager, kService, serviceRegistry)
-            com.github.berserkr2k.coreplugin.infrastructure.kits.KitCommand(this, commandManager, kService, kGuis, messageRegistry)
-
-            val kitsReloadable = object : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
-                override suspend fun reload() {
-                    kService.reload()
-                    kGuis.reload()
-                }
-            }
-            reloadCoordinator.register("kits", kitsReloadable)
-        }
+        // Lógica migrada al Kernel central de ciclo de vida en onEnable()
 
         // 11. Inicializar Módulo Premium de Estelas de Partículas (Projectile Trails)
         initDbDependentModule("Estelas de Proyectil") {

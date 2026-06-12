@@ -1,9 +1,13 @@
 package com.github.berserkr2k.coreplugin.infrastructure.kits
 
-import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
-import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
+import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
+import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
@@ -14,8 +18,9 @@ import org.bukkit.Particle
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
-import org.bukkit.enchantments.Enchantment
-import org.bukkit.NamespacedKey
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import java.io.File
 import java.math.BigDecimal
 import java.util.UUID
@@ -27,25 +32,37 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
-import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
+class KitStateContainer(
+    var activeWarmup: Task? = null
+) : StateContainer
+
+val KIT_STATE = StateContainerType { KitStateContainer() }
 
 class KitService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val databaseService: DatabaseService,
-    private val economyService: EconomyService,
+    private val featureConfig: FeatureConfig,
     private val messageService: MessageService,
-    private val profileRegistry: ProfileRegistry,
-    private val registry: ServiceRegistry
-) : com.github.berserkr2k.coreplugin.api.feature.kits.KitService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
+    private val taskScheduler: TaskScheduler,
+    private val stateService: PlayerStateService
+) : org.bukkit.event.Listener, com.github.berserkr2k.coreplugin.api.feature.kits.KitService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     val kits = ConcurrentHashMap<String, KitConfig>()
     
-    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
-    private val kitsFolder = folderProvider.getFeatureFolder("kits").resolve("kits").toFile()
+    private val registry: ServiceRegistry by lazy {
+        Bukkit.getServicesManager().load(ServiceRegistry::class.java)
+            ?: throw IllegalStateException("ServiceRegistry not found")
+    }
     
-    private val taskScheduler = registry.get(TaskScheduler::class.java)
-    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
-    private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
+    private val folderProvider by lazy { registry.get(FeatureFolderProvider::class.java)!! }
+    private val kitsFolder by lazy { folderProvider.getFeatureFolder("kits").resolve("kits").toFile() }
+    
+    private val regionTaskScheduler by lazy { registry.get(RegionTaskScheduler::class.java) }
+    private val itemBuilderFactory by lazy { registry.get(ItemBuilderFactory::class.java)!! }
+    private val economyService by lazy { registry.get(EconomyService::class.java) }
+    private val profileRegistry by lazy { registry.get(ProfileRegistry::class.java) }
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
 
     init {
         loadAllKits()
@@ -53,6 +70,30 @@ class KitService(
 
     override suspend fun reload() {
         loadAllKits()
+    }
+
+    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
     }
 
     override fun loadAllKits() {
@@ -63,7 +104,7 @@ class KitService(
 
         val starterFile = kitsFolder.resolve("starter.conf")
         if (!starterFile.exists()) {
-            configManager.loadModuleConfig("kits/kits/starter.conf", KitConfig::class.java, KitConfig()).join()
+            loadHoconFile(starterFile, KitConfig::class.java, KitConfig())
         }
 
         val confFiles = kitsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
@@ -71,7 +112,7 @@ class KitService(
         for (file in confFiles) {
             val kitId = file.nameWithoutExtension.lowercase()
             try {
-                val kitConfig = configManager.loadModuleConfig("kits/kits/${file.name}", KitConfig::class.java, KitConfig()).join()
+                val kitConfig = loadHoconFile(file, KitConfig::class.java, KitConfig())
                 kits[kitId] = kitConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar el kit desde ${file.name}: ${e.message}")
