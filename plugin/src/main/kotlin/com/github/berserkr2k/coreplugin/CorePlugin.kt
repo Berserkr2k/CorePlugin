@@ -99,6 +99,7 @@ class CorePlugin(
     private var scoreboardService: ScoreboardService? = null
     private var regionManager: RegionManager? = null
     private var spawnService: SpawnService? = null
+    private var featureManager: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager? = null
 
     override fun onEnable() {
         val registry = SimpleServiceRegistry()
@@ -151,6 +152,7 @@ class CorePlugin(
 
         placeholderBridge = LegacyPlaceholderBridge()
         configManager = ModularConfigManager(this, dataFolderPath)
+        registry.register(ModularConfigManager::class.java, configManager)
 
         // Inicializar el MenuManager para prevención de robos y duplicados
         com.github.berserkr2k.coreplugin.common.gui.MenuManager.init(this)
@@ -217,8 +219,10 @@ class CorePlugin(
 
         val stateService = serviceRegistry.get(PlayerStateService::class.java)
         val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
+        val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
         val messageRegistry = serviceRegistry.get(MessageService::class.java)!!
         val folderProvider = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
+        val configService = serviceRegistry.get(ConfigService::class.java)
 
         // 1. Inicializar Base de Datos (Módulo SQL)
         initModule("Base de Datos") {
@@ -432,16 +436,20 @@ class CorePlugin(
 
         // 16. Inicializar Módulo de Punto de Aparición (Spawn)
         initModule("Punto de Aparición (Spawn)") {
-            val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)!!
-            val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
-            val stateService = serviceRegistry.get(PlayerStateService::class.java)!!
-            
-            val sService = SpawnService(this, configManager, taskScheduler, regionTaskScheduler, stateService, messageRegistry)
-            spawnService = sService
-            // Eliminado del ServiceRegistry público por ser feature interna
-
-            server.pluginManager.registerEvents(SpawnListener(sService, regionTaskScheduler), this)
-            SpawnCommand(commandManager, sService, messageRegistry)
+            val context = com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext(
+                plugin = this,
+                registry = serviceRegistry,
+                commandManager = commandManager,
+                taskScheduler = taskScheduler,
+                regionTaskScheduler = regionTaskScheduler,
+                messageService = messageRegistry,
+                configService = configService,
+                databaseService = databaseService
+            )
+            val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)
+            this.featureManager = manager
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
+            manager.enableAll()
         }
 
         // Register reloadables in reloadCoordinator
@@ -470,7 +478,6 @@ class CorePlugin(
         reloadCoordinator.register("economy", economyReloadable)
 
         regionManager?.let { reloadCoordinator.register("regions", it) }
-        spawnService?.let { reloadCoordinator.register("spawn", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }
         shopManager?.let { reloadCoordinator.register("shops", it) }
         warpService?.let { reloadCoordinator.register("warps", it) }
@@ -580,6 +587,10 @@ class CorePlugin(
         }
         configManager.shutdown()
         shutdownList.add(" <gray>🔌 <red>Configuraciones</red> : <gold>[ CERRADO ]</gold> (Deteniendo hilos...)</gray>")
+        featureManager?.let {
+            it.disableAll()
+            shutdownList.add(" <gray>🔌 <red>Features</red>        : <gold>[ DESACTIVADO ]</gold> (Lifecycle shutdown...)</gray>")
+        }
 
         val sbShutdown = java.lang.StringBuilder()
         sbShutdown.append("\n<dark_gray>======================================================</dark_gray>\n")
