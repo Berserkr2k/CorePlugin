@@ -87,7 +87,6 @@ class CorePlugin(
     private var tablistService: TablistService? = null
     private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
-    private var scoreboardService: ScoreboardService? = null
     private var regionManager: RegionManager? = null
     private var spawnService: SpawnService? = null
     private var featureManager: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager? = null
@@ -191,6 +190,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.chat.ChatFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -340,13 +340,7 @@ class CorePlugin(
         // 13. Inicializar Módulo de Teletransporte (Warps)
         // Lógica migrada al Kernel central de ciclo de vida en onEnable()
 
-        // 14. Inicializar Módulo de Scoreboard Modular
-        initModule("Scoreboard Modular") {
-            val sService = ScoreboardService(this, configManager, placeholderBridge, serviceRegistry)
-            scoreboardService = sService
-            // Eliminado del ServiceRegistry público por ser feature interna
-            ScoreboardCommand(this, commandManager, sService, messageRegistry)
-        }
+
 
         // 15. Inicializar Módulo de Regiones y Protecciones
         initModule("Regiones y Protecciones") {
@@ -380,7 +374,6 @@ class CorePlugin(
                 }
                 anvilModule?.reload()
                 tablistService?.reload()
-                scoreboardService?.reload()
             }
         }
         reloadCoordinator.register("core", coreReloadable)
@@ -483,10 +476,6 @@ class CorePlugin(
         if (chairListener != null) {
             chairListener?.shutdown()
             shutdownList.add(" <gray>🔌 <red>Sillas</red>          : <gold>[ DESACTIVADO ]</gold> (Desmontando jugadores...)</gray>")
-        }
-        if (scoreboardService != null) {
-            scoreboardService?.shutdown()
-            shutdownList.add(" <gray>🔌 <red>Scoreboards</red>     : <gold>[ DESACTIVADO ]</gold> (Limpiando sidebars...)</gray>")
         }
         if (profileRegistry != null) {
             profileRegistry?.flushAllActive()?.join()

@@ -1,15 +1,11 @@
 package com.github.berserkr2k.coreplugin.infrastructure.scoreboard
 
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import io.papermc.paper.scoreboard.numbers.NumberFormat
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
@@ -19,7 +15,6 @@ import org.bukkit.event.Listener
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.player.PlayerChangedWorldEvent
-import org.bukkit.plugin.Plugin
 import org.bukkit.scoreboard.DisplaySlot
 import org.bukkit.scoreboard.Criteria
 import java.util.UUID
@@ -33,44 +28,70 @@ class ScoreboardStateContainer(
 val SCOREBOARD_STATE_TYPE = StateContainerType { ScoreboardStateContainer() }
 
 class ScoreboardService(
-    private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val placeholderBridge: LegacyPlaceholderBridge,
-    private val serviceRegistry: ServiceRegistry
+    private val plugin: org.bukkit.plugin.Plugin,
+    private val featureConfig: com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig,
+    private val taskScheduler: TaskScheduler,
+    private val stateService: PlayerStateService,
+    private val messageService: com.github.berserkr2k.coreplugin.api.core.message.MessageService
 ) : Listener, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
-    private val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
-    private val stateService = serviceRegistry.get(PlayerStateService::class.java)
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+    private val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)
+    private val placeholderBridge = registry.get(com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge::class.java)
 
     lateinit var config: ScoreboardModuleConfig
         private set
+
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private val mapper = mapperFactory.get(ScoreboardModuleConfig::class.java)
+
+    private fun getRootNode(): org.spongepowered.configurate.CommentedConfigurationNode {
+        val field = featureConfig.javaClass.getDeclaredField("rootNode")
+        field.isAccessible = true
+        return field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
+    }
+
+    private fun loadConfig() {
+        val rootNode = getRootNode()
+        this.config = mapper.load(rootNode) ?: ScoreboardModuleConfig()
+    }
 
     private val playerLineCounts = ConcurrentHashMap<UUID, Int>()
     private val titleFrameIndexes = ConcurrentHashMap<UUID, Int>()
     private var updateTask: Task? = null
 
     init {
-        reloadConfig().join()
-        plugin.server.pluginManager.registerEvents(this, plugin)
+        loadConfig()
+        if (config.enabled) {
+            startUpdateTask()
+        }
     }
 
     override suspend fun reload() {
-        reloadConfig().join()
+        featureConfig.reload()
+        loadConfig()
     }
 
     fun reloadConfig(): CompletableFuture<Void> {
-        return configManager.loadModuleConfig("core/scoreboard.conf", ScoreboardModuleConfig::class.java, ScoreboardModuleConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                if (loadedConfig.enabled) {
+        return CompletableFuture.runAsync({
+            featureConfig.reload()
+            loadConfig()
+            if (this.config.enabled) {
+                taskScheduler.runSync {
                     startUpdateTask()
-                    plugin.logger.info("¡Configuración de Scoreboard cargada y actualizada con éxito!")
-                } else {
-                    stopUpdateTask()
-                    plugin.logger.info("Módulo de Scoreboard desactivado en configuración.")
                 }
+                plugin.logger.info("¡Configuración de Scoreboard cargada y actualizada con éxito!")
+            } else {
+                taskScheduler.runSync {
+                    stopUpdateTask()
+                }
+                plugin.logger.info("Módulo de Scoreboard desactivado en configuración.")
             }
+        }, { taskScheduler.runAsync(it) })
     }
 
     private fun startUpdateTask() {
@@ -283,7 +304,11 @@ class ScoreboardService(
         }
     }
 
-    fun shutdown() {
+    fun stopTasks() {
         stopUpdateTask()
+    }
+
+    fun shutdown() {
+        stopTasks()
     }
 }

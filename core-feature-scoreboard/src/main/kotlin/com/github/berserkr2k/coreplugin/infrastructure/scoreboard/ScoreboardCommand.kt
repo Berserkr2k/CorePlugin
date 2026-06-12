@@ -5,11 +5,9 @@ import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
-import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 
 class ScoreboardCommand(
-    private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val scoreboardService: ScoreboardService,
     private val messageService: MessageService
