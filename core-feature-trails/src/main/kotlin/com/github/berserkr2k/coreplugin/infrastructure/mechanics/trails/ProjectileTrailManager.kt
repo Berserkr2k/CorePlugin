@@ -3,8 +3,6 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
 import com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import org.bukkit.Bukkit
 import org.bukkit.plugin.Plugin
 import java.io.File
@@ -14,15 +12,65 @@ import java.util.concurrent.CompletableFuture
 
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig
 
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
-
 class ProjectileTrailManager(
     private val plugin: Plugin,
-    private val databaseService: DatabaseService,
-    private val configManager: ModularConfigManager,
-    private val profileRegistry: ProfileRegistry,
-    private val folderProvider: com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
+    private val config: com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig,
+    private val taskScheduler: com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler,
+    private val messageService: com.github.berserkr2k.coreplugin.api.core.message.MessageService
 ) : com.github.berserkr2k.coreplugin.api.feature.trails.ProjectileTrailService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
+
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+    private val databaseService = registry.get(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java)
+    private val profileRegistry = registry.get(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java)
+    private val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
+
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
+    }
+
+    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        mapper.save(instance, root)
+        loader.save(root)
+    }
     val trails = ConcurrentHashMap<String, TrailConfig>()
     
     private val trailsFolder = folderProvider.getFeatureFolder("trails").resolve("trails").toFile()
@@ -37,6 +85,8 @@ class ProjectileTrailManager(
     )
         private set
 
+    private val selectorConfigFile = folderProvider.getFeatureFolder("trails").resolve("menus").resolve("trails-selector.conf").toFile()
+
     init {
         setupTrailsFolder()
         loadAllTrails()
@@ -44,8 +94,9 @@ class ProjectileTrailManager(
     }
 
     private fun loadSelectorConfig(): CompletableFuture<Void> {
-        return configManager.loadModuleConfig("menus/trails-selector.conf", MenuConfig::class.java, createDefaultSelectorConfig())
-            .thenAccept { this.selectorConfig = it }
+        return CompletableFuture.runAsync({
+            this.selectorConfig = loadHoconFile(selectorConfigFile, MenuConfig::class.java, createDefaultSelectorConfig())
+        }, { taskScheduler.runAsync(it) })
     }
 
     override suspend fun reload() {
@@ -275,9 +326,9 @@ class ProjectileTrailManager(
         }
     }
 
-    private fun saveDefaultTrail(file: File, config: TrailConfig) {
+    private fun saveDefaultTrail(file: File, trailConfig: TrailConfig) {
         try {
-            configManager.saveModuleConfig("trails/trails/${file.name}", TrailConfig::class.java, config).join()
+            saveHoconFile(file, TrailConfig::class.java, trailConfig)
         } catch (e: Exception) {
             plugin.logger.severe("Fallo al guardar estela por defecto: ${e.message}")
         }
@@ -290,12 +341,12 @@ class ProjectileTrailManager(
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val config = configManager.loadModuleConfig("trails/trails/${file.name}", TrailConfig::class.java, TrailConfig(id = id)).join()
+                val loadedConfig = loadHoconFile(file, TrailConfig::class.java, TrailConfig(id = id))
                 
-                val finalId = if (config.id.isNotEmpty()) config.id.lowercase() else id
-                trails[finalId] = config
+                val finalId = if (loadedConfig.id.isNotEmpty()) loadedConfig.id.lowercase() else id
+                trails[finalId] = loadedConfig
                 if (finalId != id) {
-                    trails[id] = config
+                    trails[id] = loadedConfig
                 }
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la estela desde ${file.name}: ${e.message}")

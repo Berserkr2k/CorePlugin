@@ -190,6 +190,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.kits.KitFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.chat.ChatFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -325,15 +326,7 @@ class CorePlugin(
         // 10. Inicializar Módulo Premium de Kits
         // Lógica migrada al Kernel central de ciclo de vida en onEnable()
 
-        // 11. Inicializar Módulo Premium de Estelas de Partículas (Projectile Trails)
-        initDbDependentModule("Estelas de Proyectil") {
-            val folderProvider = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
-            val trailManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailManager(this, databaseService!!, configManager, profileRegistry!!, folderProvider)
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.feature.trails.ProjectileTrailService::class.java, trailManager)
-            val trailGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailGuis(this, configManager, trailManager, serviceRegistry)
-            server.pluginManager.registerEvents(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailListener(this, trailManager, serviceRegistry), this)
-            com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailCommand(this, commandManager, trailManager, trailGuis)
-        }
+
 
         // 12. Inicializar Módulo Premium de Tiendas de Mercado Dinámico
         initEconomyDependentModule("Tiendas de Mercado") {
@@ -404,10 +397,7 @@ class CorePlugin(
         shopManager?.let { reloadCoordinator.register("shops", it) }
         utilityService?.let { reloadCoordinator.register("utility", it) }
 
-        val trailService = serviceRegistry.getOptional(com.github.berserkr2k.coreplugin.api.feature.trails.ProjectileTrailService::class.java)
-        if (trailService != null && trailService is com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable) {
-            reloadCoordinator.register("trails", trailService)
-        }
+
 
         // Register DebugCommand
         val fRegistry = messageRegistry as? com.github.berserkr2k.coreplugin.infrastructure.message.FeatureMessageRegistry

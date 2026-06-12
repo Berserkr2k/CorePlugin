@@ -16,17 +16,14 @@ import org.bukkit.util.Vector
 
 import org.bukkit.event.player.PlayerJoinEvent
 import org.bukkit.event.player.PlayerQuitEvent
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 
 class ProjectileTrailListener(
     private val plugin: Plugin,
     private val trailManager: ProjectileTrailManager,
-    private val registry: ServiceRegistry
+    private val taskScheduler: TaskScheduler
 ) : Listener {
  
-    private val taskScheduler = registry.get(TaskScheduler::class.java)
-
     private val trailKey = NamespacedKey(plugin, "projectile_trail_id")
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)

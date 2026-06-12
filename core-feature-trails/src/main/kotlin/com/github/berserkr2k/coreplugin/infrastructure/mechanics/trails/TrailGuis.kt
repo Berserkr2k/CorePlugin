@@ -4,23 +4,16 @@ import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
-import org.bukkit.plugin.Plugin
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 
 class TrailGuis(
-    private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
     private val trailManager: ProjectileTrailManager,
-    private val serviceRegistry: ServiceRegistry
+    private val regionTaskScheduler: com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler,
+    private val menuService: MenuService,
+    private val itemBuilderFactory: ItemBuilderFactory
 ) {
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
-    private val menuService = serviceRegistry.get(MenuService::class.java)!!
-    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
 
     fun openTrailSelector(player: Player) {
         val selectorConfig = trailManager.selectorConfig

@@ -3,18 +3,25 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
-import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.bukkit.parser.PlayerParser.playerParser
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 
 class ProjectileTrailCommand(
-    private val plugin: Plugin,
     private val manager: CommandManager<CommandSender>,
     private val trailManager: ProjectileTrailManager,
-    private val guis: TrailGuis
+    private val messageService: com.github.berserkr2k.coreplugin.api.core.message.MessageService,
+    private val menuService: com.github.berserkr2k.coreplugin.api.framework.menu.MenuService,
+    private val itemBuilderFactory: com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 ) {
+    private val guis: TrailGuis
+
     init {
+        val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+            ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+        val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)
+
+        this.guis = TrailGuis(trailManager, regionTaskScheduler, menuService, itemBuilderFactory)
         // 1. /trail (Abrir selector gráfico)
         manager.command(
             manager.commandBuilder("trail")
