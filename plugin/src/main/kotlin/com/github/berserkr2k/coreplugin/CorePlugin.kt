@@ -49,9 +49,6 @@ class CorePlugin(
 
     private var databaseService: DatabaseServiceImpl? = null
     private var profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry? = null
-    private var anvilModule: AnvilModule? = null
-    private var chairListener: ChairListener? = null
-    private var tablistService: TablistService? = null
     private var featureManager: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager? = null
 
     override fun onEnable() {
@@ -155,15 +152,12 @@ class CorePlugin(
 
         // 5. Inicializar Módulo de Interfaces (Tablist, Bossbars)
         val tablist = TablistService(this, placeholderBridge, registry)
-        tablistService = tablist
 
         // 6. Inicializar Módulo de Yunques
         val anvil = AnvilModule(this, registry)
-        anvilModule = anvil
 
         // 7. Inicializar Módulo "Misc" (Escaleras como Sillas)
         val cListener = ChairListener(this, messageRegistry, registry)
-        chairListener = cListener
         server.pluginManager.registerEvents(cListener, this)
 
         // 8. Registrar reloadables en reloadCoordinator
@@ -175,7 +169,7 @@ class CorePlugin(
                         fRegistry.registerFeature(featureId)
                     }
                 }
-                anvilModule?.reload()
+                anvil.reload()
                 tablist.reload()
             }
         }
