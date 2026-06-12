@@ -5,8 +5,39 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 @ConfigSerializable
 data class MessagesConfig(
     val leaderboards: Map<String, String> = mapOf(
+        "only-players" to "<red>Solo jugadores pueden ejecutar este comando.</red>",
+        "registered" to "<green>¡ArmorStand registrado con éxito como podio para '<id>' (Top <rank>)!</green>",
+        "created" to "<green>¡Nuevo ArmorStand de podio creado para '<id>' (Top <rank>)!</green>",
+        "deleted" to "<green>¡Podio para '<id>' (Top <rank>) eliminado con éxito!</green>",
+        "not-found" to "<red>No se encontró ningún podio para la clasificación '<id>' con Rank <rank>.</red>",
+        "reloaded" to "<green>✔ ¡Configuraciones de clasificaciones recargadas y actualizadas con éxito!</green>",
+        "vara-recibida" to "<green>¡Has recibido la Vara de Edición!</green>",
+        "copied" to "<green>✔ ¡Propiedades físicas y de pose copiadas al portapapeles!</green>",
+        "no-clipboard" to "<red>❌ No tienes ajustes copiados en el portapapeles.</red>",
+        "pasted-all" to "<green>✔ ¡Ajustes y equipamiento pegados con éxito!</green>",
+        "pasted-pose" to "<green>✔ ¡Ajustes de pose aplicados! (Los objetos no se duplicaron por seguridad en Supervivencia)</green>",
+        "write-name" to "<gold>✏ Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>",
+        "scale-changed" to "<green>✔ Escala de ajuste cambiada a <scale>.</green>",
+        "equip-synced" to "<green>✔ ¡El equipamiento del ArmorStand se ha sincronizado exitosamente!</green>",
+        "pose-tool" to "<green>✔ ¡Recibiste la <gold>Herramienta de Pose</gold>! Ajusta libremente. Sneak + Click Derecho para volver.</green>",
         "loading" to "<gold>Cargando datos del podio...</gold>",
         "vacant" to "<gray>#<pos> - Vacante</gray>"
+    ),
+    val holograms: Map<String, String> = mapOf(
+        "only-players" to "<red>Solo jugadores pueden ejecutar este comando.</red>",
+        "created" to "<green>¡Holograma '<id>' creado con éxito en tu posición!</green>",
+        "deleted" to "<green>¡Holograma '<id>' eliminado con éxito!</green>",
+        "not-found" to "<red>No se encontró ningún holograma activo con el ID '<id>'.</red>",
+        "list-empty" to "<yellow>No hay hologramas activos en el servidor.</yellow>",
+        "list-header" to "<gold><bold>Hologramas Activos (<size>):</bold></gold>",
+        "list-item" to " <gray>-</gray> <yellow><id></yellow> <gray>(Mundo: <world>, X: <x>, Y: <y>, Z: <z>)</gray>",
+        "edit-success" to "<green>¡Holograma '<id>' editado con éxito!</green>",
+        "move-success" to "<green>¡Holograma '<id>' trasladado a tu posición actual!</green>",
+        "center-success" to "<green>¡Holograma '<id>' centrado en el bloque (X: <x>, Z: <z>)!</green>",
+        "center-error" to "<red>Error al intentar trasladar el holograma '<id>'.</red>",
+        "reload-start" to "<yellow>Recargando hologramas desde la configuración...</yellow>",
+        "reload-success" to "<green>¡Todos los hologramas han sido recargados exitosamente!</green>",
+        "reload-error" to "<red>Error crítico al recargar hologramas: <error></red>"
     ),
     val economy: Map<String, String> = mapOf(
         "no-permission-other" to "<red>No tienes permiso para ver la billetera de otros jugadores.</red>",
@@ -118,7 +149,25 @@ data class MessagesConfig(
         "lore-separator" to "<gray>──────────────────────────────</gray>",
         "lore-volume" to "<gray>Volumen (24h): <gold><volume> uds.</gold>",
         "lore-trend" to "<gray>Tendencia:     <trend>",
-        "lore-click" to "<yellow>▶ Haz clic para transaccionar</yellow>"
+        "lore-click" to "<yellow>▶ Haz clic para transaccionar</yellow>",
+        "quantity-gui-title" to "<dark_gray>Transacción Simétrica</dark_gray>",
+        "buy-max-name" to "<green><bold>Comprar Máximo</bold></green>",
+        "buy-max-lore" to "<gray>Llena tu inventario con este ítem.</gray>\n\n<gray>Cantidad a comprar: <gold><qty> uds.</gold></gray>\n<gray>Costo Estimado:    <green><price></green></gray>\n\n<yellow>▶ Haz clic para comprar</yellow>",
+        "sell-all-name" to "<red><bold>Vender Todo</bold></red>",
+        "sell-all-lore" to "<gray>Vacía tu inventario de este ítem.</gray>\n\n<gray>Cantidad a vender: <gold><qty> uds.</gold></gray>\n<gray>Valor Estimado:    <red><price></red></gray>\n\n<yellow>▶ Haz clic para vender</yellow>",
+        "buy-qty-name" to "<green><bold>Comprar <qty></bold></green>",
+        "buy-qty-lore" to "<gray>Compra una cantidad de <qty> unidades.</gray>\n\n<gray>Costo Total: <green><price></green></gray>\n\n<yellow>▶ Haz clic para comprar</yellow>",
+        "sell-qty-name" to "<red><bold>Vender <qty></bold></red>",
+        "sell-qty-lore" to "<gray>Vende una cantidad de <qty> unidades.</gray>\n\n<gray>Valor Total: <red><price></red></gray>\n\n<yellow>▶ Haz clic para vender</yellow>",
+        "buy-disabled-name" to "<red>Compra Deshabilitada</red>",
+        "sell-disabled-name" to "<red>Venta Deshabilitada</red>",
+        "quantity-gui-background-material" to "GRAY_STAINED_GLASS_PANE",
+        "quantity-gui-divisor-material" to "BLACK_STAINED_GLASS_PANE",
+        "buy-qty-material" to "GREEN_STAINED_GLASS_PANE",
+        "sell-qty-material" to "RED_STAINED_GLASS_PANE",
+        "buy-max-material" to "EMERALD_BLOCK",
+        "sell-all-material" to "REDSTONE_BLOCK",
+        "disabled-material" to "RED_STAINED_GLASS_PANE"
     ),
     val chat: Map<String, String> = mapOf(
         "socialspy-enabled" to "<green>SocialSpy habilitado.</green>",
@@ -178,7 +227,18 @@ data class MessagesConfig(
         "no-armor-stand-interaction" to "<red>❌ No tienes permiso para interactuar con soportes de armadura aquí.</red>",
         "no-entity-interaction" to "<red>❌ No tienes permiso para interactuar con entidades aquí.</red>",
         "no-container-interaction" to "<red>❌ No tienes permiso para usar contenedores aquí.</red>",
-        "no-item-frame-interaction" to "<red>❌ No tienes permiso para interactuar con marcos de ítems aquí.</red>"
+        "no-item-frame-interaction" to "<red>❌ No tienes permiso para interactuar con marcos de ítems aquí.</red>",
+        "selection-pos1" to "<green>[!] Posición 1 establecida en <x>, <y>, <z>.</green>",
+        "selection-pos2" to "<green>[!] Posición 2 establecida en <x>, <y>, <z>.</green>",
+        "deleted" to "<green>✔ Región '<id>' eliminada de forma permanente.</green>",
+        "reloaded" to "<green>[!] Configuración de regiones recargada de disco y Spatial Index reconstruido con éxito.</green>",
+        "not-in-region" to "<red>❌ No te encuentras dentro de ninguna región registrada.</red>",
+        "console-only-id" to "<red>❌ Debes especificar la id de la región desde la consola.</red>",
+        "flags-list" to "<yellow>Banderas individuales:</yellow>\n<gray>- PVP, BLOCK_BREAK, BLOCK_PLACE, INTERACT, CHEST_ACCESS, ENDERCHEST_ACCESS, ANVIL_USE, ENCHANTING_USE\n- USE_WITHOUT_BREAK, BLOCK_PHYSICS, ITEM_DROP, ITEM_PICKUP, PROJECTILE_DAMAGE, PLAYER_COLLISION, MOB_TARGETING\n- LIQUID_FLOW, FALL_DAMAGE, ELYTRA_USAGE, REDSTONE_INTERACTION, VEHICLE_USAGE, EXP_GAIN, HUNGER_LOSS, HOSTILE_SPAWN, PASSIVE_SPAWN\n- ARMOR_STAND_INTERACTION, ENTITY_INTERACTION, CONTAINER_INTERACTION, ITEM_FRAME_INTERACTION</gray>\n<yellow>Categorías de Banderas:</yellow>\n<gray>- COMBAT_FLAGS, WORLD_FLAGS, INTERACTION_FLAGS, PLAYER_FLAGS, ENTITY_FLAGS</gray>",
+        "region-info" to "<dark_gray>===========================================</dark_gray>\n<gold><bold>Región:</bold></gold> <yellow><id></yellow>\n<gray>Prioridad:</gray> <white><priority></white>\n<gray>Mundo:</gray> <white><world></white>\n<gray>Límites:</gray> <white>(<min_x>, <min_y>, <min_z>) -> (<max_x>, <max_y>, <max_z>)</white>\n<gray>Banderas Permitidas:</gray> <green><allow_flags></green>\n<gray>Banderas Denegadas:</gray> <red><deny_flags></red>\n<dark_gray>===========================================</dark_gray>",
+        "debug-here-header" to "<yellow>Regiones activas aquí (Count: <count>):</yellow>",
+        "debug-here-item" to "<gray>- <id> (Prio: <priority>)</gray>",
+        "debug-flags" to "<yellow>Bypass general: <bypass>\nGameMode: <gamemode></yellow>"
     ),
     val spawn: Map<String, String> = mapOf(
         "not-configured" to "<red>❌ El spawn no está configurado o el mundo de destino no existe.</red>",
@@ -186,7 +246,8 @@ data class MessagesConfig(
         "success" to "<green>✔ ¡Teletransportado al spawn con éxito!</green>",
         "warmup" to "<yellow>⚡ Teletransportándote al spawn en <time> segundos... ¡No te muevas ni recibas daño!</yellow>",
         "cancelled-movement" to "<red>❌ Teletransportación cancelada por movimiento.</red>",
-        "cancelled-damage" to "<red>❌ Teletransportación cancelada por daño recibido.</red>"
+        "cancelled-damage" to "<red>❌ Teletransportación cancelada por daño recibido.</red>",
+        "failure" to "<red>❌ No se pudo realizar la teletransportación.</red>"
     )
 )
 

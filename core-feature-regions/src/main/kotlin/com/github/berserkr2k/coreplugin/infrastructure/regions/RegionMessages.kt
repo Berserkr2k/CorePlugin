@@ -1,0 +1,53 @@
+package com.github.berserkr2k.coreplugin.infrastructure.regions
+
+import com.github.berserkr2k.coreplugin.api.core.message.MessageKey
+
+enum class RegionMessages(override val path: String) : MessageKey {
+    SELECTION_INCOMPLETE("selection-incomplete"),
+    COMPILING("compiling"),
+    CREATED("created"),
+    REGION_NOT_FOUND("region-not-found"),
+    NO_BREAK("no-break"),
+    NO_PLACE("no-place"),
+    NO_PVP("no-pvp"),
+    NO_INTERACT("no-interact"),
+    NO_DAMAGE_ANIMALS("no-damage-animals"),
+    NO_VEHICLE_PLACE("no-vehicle-place"),
+    SELECTION_POS1("selection-pos1"),
+    SELECTION_POS2("selection-pos2"),
+    DELETED("deleted"),
+    RELOADED("reloaded"),
+    NOT_IN_REGION("not-in-region"),
+    CONSOLE_ONLY_ID("console-only-id"),
+    REGION_INFO("region-info"),
+    DEBUG_HERE_HEADER("debug-here-header"),
+    DEBUG_HERE_ITEM("debug-here-item"),
+    DEBUG_FLAGS("debug-flags");
+
+    override val feature: String = "regions"
+
+    companion object {
+        val defaults = mapOf(
+            "selection-incomplete" to "<red>❌ Error: Selección incompleta. Usa la herramienta de selección.</red>",
+            "compiling" to "<yellow>⚡ Compilando datos geométricos y guardando configuración...</yellow>",
+            "created" to "<green>✔ Región '<id>' creada e inyectada con éxito y protegida por defecto.</green>",
+            "region-not-found" to "<red>❌ La región '<id>' no existe.</red>",
+            "no-break" to "<red>❌ No tienes permiso para romper bloques aquí.</red>",
+            "no-place" to "<red>❌ No tienes permiso para colocar bloques aquí.</red>",
+            "no-pvp" to "<red>❌ No se permite el PVP en esta región.</red>",
+            "no-interact" to "<red>❌ No tienes permiso para interactuar aquí.</red>",
+            "no-damage-animals" to "<red>❌ No se permite dañar animales en esta región.</red>",
+            "no-vehicle-place" to "<red>❌ No se permite colocar vehículos en esta región.</red>",
+            "selection-pos1" to "<green>[!] Posición 1 establecida en <x>, <y>, <z>.</green>",
+            "selection-pos2" to "<green>[!] Posición 2 establecida en <x>, <y>, <z>.</green>",
+            "deleted" to "<green>✔ Región '<id>' eliminada de forma permanente.</green>",
+            "reloaded" to "<green>[!] Configuración de regiones recargada de disco y Spatial Index reconstruido con éxito.</green>",
+            "not-in-region" to "<red>❌ No te encuentras dentro de ninguna región registrada.</red>",
+            "console-only-id" to "<red>❌ Debes especificar la id de la región desde la consola.</red>",
+            "region-info" to "<dark_gray>===========================================</dark_gray>\n<gold><bold>Región:</bold></gold> <yellow><id></yellow>\n<gray>Prioridad:</gray> <white><priority></white>\n<gray>Mundo:</gray> <white><world></white>\n<gray>Límites:</gray> <white>(<min_x>, <min_y>, <min_z>) -> (<max_x>, <max_y>, <max_z>)</white>\n<gray>Banderas Permitidas:</gray> <green><allow_flags></green>\n<gray>Banderas Denegadas:</gray> <red><deny_flags></red>\n<dark_gray>===========================================</dark_gray>",
+            "debug-here-header" to "<yellow>Regiones activas aquí (Count: <count>):</yellow>",
+            "debug-here-item" to "<gray>- <id> (Prio: <priority>)</gray>",
+            "debug-flags" to "<yellow>Bypass general: <bypass>\nGameMode: <gamemode></yellow>"
+        )
+    }
+}
