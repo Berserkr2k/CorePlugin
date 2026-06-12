@@ -6,8 +6,16 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 data class UtilityConfig(
     val fly: FlySettings = FlySettings(),
     val anvil: AnvilSettings = AnvilSettings(),
-    val bossbar: BossBarSettings = BossBarSettings()
+    val bossbar: BossBarSettings = BossBarSettings(),
+    val title: TitleSettings = TitleSettings()
 ) {
+    @ConfigSerializable
+    data class TitleSettings(
+        val fadeInTicks: Int = 10,
+        val stayTicks: Int = 70,
+        val fadeOutTicks: Int = 20
+    )
+
     @ConfigSerializable
     data class FlySettings(
         val allowedWorlds: List<String> = listOf("world", "world_nether", "world_the_end")

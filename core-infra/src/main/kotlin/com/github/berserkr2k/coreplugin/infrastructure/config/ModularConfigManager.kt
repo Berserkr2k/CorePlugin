@@ -16,6 +16,8 @@ class ModularConfigManager(private val plugin: Plugin, private val configDirecto
     private val loadedConfigs = ConcurrentHashMap<String, Any>()
     private val loaders = ConcurrentHashMap<String, ConfigurationLoader<CommentedConfigurationNode>>()
 
+    fun getLoadedConfigs(): Set<String> = loadedConfigs.keys
+
     private val mapperFactory = ObjectMapper.factoryBuilder()
         .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
         .build()

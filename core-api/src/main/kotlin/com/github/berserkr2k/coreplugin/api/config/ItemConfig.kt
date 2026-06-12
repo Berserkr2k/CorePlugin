@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.infrastructure.config
+package com.github.berserkr2k.coreplugin.api.config
 
 import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
