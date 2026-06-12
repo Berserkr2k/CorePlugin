@@ -85,7 +85,6 @@ class CorePlugin(
     private var leaderboardService: LeaderboardService? = null
     private var chairListener: ChairListener? = null
     private var tablistService: TablistService? = null
-    private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
     private var regionManager: RegionManager? = null
     private var spawnService: SpawnService? = null
@@ -191,6 +190,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.ProjectileTrailFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.UtilityFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -306,22 +306,7 @@ class CorePlugin(
 
         // 8. Módulo de Economía Multi-Divisa migrado a EconomyFeature
 
-        // 9. Inicializar Módulo de Utilidades Modulares
-        initModule("Utilidades Modulares") {
-            val uService = UtilityService(this, configManager, messageRegistry, serviceRegistry)
-            utilityService = uService
-            serviceRegistry.register(UtilityService::class.java, uService)
-            FlyCommand(this, commandManager, uService, messageRegistry)
-            SpeedCommand(this, commandManager, messageRegistry)
-            HatCommand(this, commandManager, messageRegistry)
-            FeedCommand(this, commandManager, messageRegistry)
-            HealCommand(this, commandManager, messageRegistry)
-            AnvilCommand(this, commandManager, uService, messageRegistry)
-            EnderChestCommand(this, commandManager, messageRegistry)
-            ExpCommand(this, commandManager, messageRegistry)
-            BroadcastCommand(this, commandManager, uService, messageRegistry)
-            SendTitleCommand(this, commandManager, uService, messageRegistry)
-        }
+
 
         // 10. Inicializar Módulo Premium de Kits
         // Lógica migrada al Kernel central de ciclo de vida en onEnable()
@@ -388,7 +373,6 @@ class CorePlugin(
         regionManager?.let { reloadCoordinator.register("regions", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }
         shopManager?.let { reloadCoordinator.register("shops", it) }
-        utilityService?.let { reloadCoordinator.register("utility", it) }
 
 
 

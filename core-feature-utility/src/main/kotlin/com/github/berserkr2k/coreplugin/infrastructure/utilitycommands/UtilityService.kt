@@ -1,12 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import com.github.berserkr2k.coreplugin.infrastructure.config.UtilityConfig
-import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import org.bukkit.Bukkit
 import org.bukkit.entity.Player
 import org.bukkit.event.EventHandler
@@ -20,38 +15,51 @@ import java.util.concurrent.CompletableFuture
 
 class UtilityService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val messageService: MessageService,
-    private val serviceRegistry: ServiceRegistry
+    private val featureConfig: com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 ) : Listener, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
-    val taskScheduler = serviceRegistry.get(TaskScheduler::class.java)
-    val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+    val taskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler::class.java)
+    val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)
+    private val messageService = registry.get(com.github.berserkr2k.coreplugin.api.core.message.MessageService::class.java)
 
     lateinit var config: UtilityConfig
         private set
 
+    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private val mapper = mapperFactory.get(UtilityConfig::class.java)
+
+    private fun getRootNode(): org.spongepowered.configurate.CommentedConfigurationNode {
+        val field = featureConfig.javaClass.getDeclaredField("rootNode")
+        field.isAccessible = true
+        return field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
+    }
+
+    private fun loadConfig() {
+        val rootNode = getRootNode()
+        this.config = mapper.load(rootNode) ?: UtilityConfig()
+    }
+
     init {
-        // Cargar configuración de utilidades síncronamente al iniciar
-        reloadConfig().join()
-        
-        // Registrar listener de control de vuelo
+        loadConfig()
         plugin.server.pluginManager.registerEvents(this, plugin)
     }
 
     override suspend fun reload() {
-        reloadConfig().join()
+        featureConfig.reload()
+        loadConfig()
     }
 
-    /**
-     * Recarga el archivo de configuración utility/utility.conf
-     */
     fun reloadConfig(): CompletableFuture<Void> {
-        return configManager.loadModuleConfig("utility/utility.conf", UtilityConfig::class.java, UtilityConfig())
-            .thenAccept { loadedConfig ->
-                this.config = loadedConfig
-                plugin.logger.info("¡Configuración de Utilidades recargada con éxito!")
-            }
+        return CompletableFuture.runAsync({
+            featureConfig.reload()
+            loadConfig()
+            plugin.logger.info("¡Configuración de Utilidades recargada con éxito!")
+        }, { taskScheduler.runAsync(it) })
     }
 
     /**
