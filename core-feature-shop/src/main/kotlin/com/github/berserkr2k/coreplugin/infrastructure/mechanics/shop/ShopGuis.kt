@@ -26,14 +26,17 @@ class ShopGuis(
     private val plugin: Plugin,
     private val shopManager: ShopManager,
     private val messageService: MessageService,
-    private val serviceRegistry: ServiceRegistry
+    private val menuService: MenuService,
+    private val itemFactory: ItemBuilderFactory
 ) {
-    private val economyService by lazy {
-        serviceRegistry.get(EconomyService::class.java)
-    }
+    private val serviceRegistry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    private val economyService = serviceRegistry.get(EconomyService::class.java)
+        ?: throw IllegalStateException("EconomyService not found")
+
     private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
-    private val menuService = serviceRegistry.get(MenuService::class.java)!!
-    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
+    private val itemBuilderFactory = itemFactory
 
     init {
         // Registrar acciones dinámicas para abrir las tiendas de forma local al instanciar el menú
@@ -119,9 +122,9 @@ class ShopGuis(
                 val backName = getMsg("back-item-name")
                 val backLore = listOf(getMsg("back-item-lore"))
 
-                val backItem = itemBuilderFactory.builder(backMat)
-                    .displayName(backName)
-                    .lore(backLore)
+                val backItem = itemFactory.create(backMat)
+                    .name(ColorUtility.parse(backName))
+                    .lore(backLore.map { ColorUtility.parse(it) })
                     .build()
 
                 val backSlot = size - 5
@@ -166,9 +169,9 @@ class ShopGuis(
                             .replace("<date>", dateStr)
                     }
 
-                    val item = itemBuilderFactory.builder(mat)
-                        .displayName(displayName)
-                        .lore(lore)
+                    val item = itemFactory.create(mat)
+                        .name(ColorUtility.parse(displayName))
+                        .lore(lore.map { ColorUtility.parse(it) })
                         .build()
 
                     val btn = Button.builder().icon(item).build()

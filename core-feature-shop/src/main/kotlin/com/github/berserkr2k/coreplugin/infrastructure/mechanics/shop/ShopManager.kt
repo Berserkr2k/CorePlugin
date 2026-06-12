@@ -1,27 +1,37 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
-import org.bukkit.Bukkit
+import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.plugin.Plugin
 import java.io.File
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
-import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
-import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 
 class ShopManager(
-    private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val databaseService: DatabaseService,
-    private val registry: ServiceRegistry
-) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
-    private val taskScheduler = registry.get(TaskScheduler::class.java)
+    val plugin: Plugin,
+    private val config: FeatureConfig,
+    private val economyService: EconomyService,
+    private val messageService: MessageService
+) : com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable, org.bukkit.event.Listener {
+
+    private val serviceRegistry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+
+    private val databaseService = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java)
+        ?: throw IllegalStateException("DatabaseService not found")
+
+    private val taskScheduler = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler::class.java)
+        ?: throw IllegalStateException("TaskScheduler not found")
+
+    private val folderProvider = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
+        ?: throw IllegalStateException("FeatureFolderProvider not found")
+
     lateinit var marketConfig: MarketConfig
         private set
     
@@ -34,7 +44,10 @@ class ShopManager(
         private set
 
     val initFuture = CompletableFuture<Void>()
-    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
 
     init {
         purgeOldMarketTransactions().thenCompose {
@@ -51,21 +64,24 @@ class ShopManager(
     }
 
     override suspend fun reload() {
+        config.reload()
         loadConfigurations().join()
         refreshMarketCache()
     }
 
     fun loadConfigurations(): CompletableFuture<Void> {
         val future = CompletableFuture<Void>()
-        configManager.loadModuleConfig("shops/market.conf", MarketConfig::class.java, MarketConfig())
-            .thenAccept { loadedMarket ->
-                this.marketConfig = loadedMarket
+        taskScheduler.runAsync {
+            try {
+                val field = config.javaClass.getDeclaredField("rootNode")
+                field.isAccessible = true
+                val rootNode = field.get(config) as org.spongepowered.configurate.CommentedConfigurationNode
+                val mapper = mapperFactory.get(MarketConfig::class.java)
+                this.marketConfig = mapper.load(rootNode) ?: MarketConfig()
                 
-                // Crear carpetas de shops/shops si no existen
-                val categoriesDir = folderProvider.getFeatureFolder("shops").resolve("shops").toFile()
+                val categoriesDir = folderProvider.getFeatureFolder("shop").resolve("shops").toFile()
                 if (!categoriesDir.exists()) {
                     categoriesDir.mkdirs()
-                    // Escribir categorías por defecto
                     writeDefaultCategory(File(categoriesDir, "blocks.conf"), "blocks", "<yellow>Bloques</yellow>", listOf(
                         ShopItemConfig("STONE", "2.0", guiSlot = 10),
                         ShopItemConfig("COBBLESTONE", "1.0", guiSlot = 11),
@@ -89,23 +105,32 @@ class ShopManager(
                 }
                 
                 val files = categoriesDir.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
-                val futures = files.map { file ->
-                    val relativePath = "shops/shops/${file.name}"
-                    configManager.loadModuleConfig(relativePath, ShopConfig::class.java, ShopConfig())
-                        .thenAccept { category ->
+                categories.clear()
+                for (file in files) {
+                    try {
+                        val loader = HoconConfigurationLoader.builder()
+                            .path(file.toPath())
+                            .defaultOptions { options ->
+                                options.serializers { builder ->
+                                    builder.registerAnnotatedObjects(mapperFactory)
+                                }
+                            }
+                            .build()
+                        val root = loader.load()
+                        val shopMapper = mapperFactory.get(ShopConfig::class.java)
+                        val category = shopMapper.load(root)
+                        if (category != null && category.shopId.isNotEmpty()) {
                             categories[category.shopId] = category
                         }
+                    } catch (e: Exception) {
+                        plugin.logger.severe("Error al cargar la categoría desde el archivo ${file.name}: ${e.message}")
+                    }
                 }
-                CompletableFuture.allOf(*futures.toTypedArray()).thenRun {
-                    future.complete(null)
-                }.exceptionally { ex ->
-                    future.completeExceptionally(ex)
-                    null
-                }
-            }.exceptionally { ex ->
+                future.complete(null)
+            } catch (ex: Exception) {
                 future.completeExceptionally(ex)
-                null
             }
+        }
         return future
     }
 

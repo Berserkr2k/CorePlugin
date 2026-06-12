@@ -77,7 +77,6 @@ class CorePlugin(
     private var hologramService: HologramService? = null
     private var chairListener: ChairListener? = null
     private var tablistService: TablistService? = null
-    private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
     private var spawnService: SpawnService? = null
     private var featureManager: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager? = null
 
@@ -194,6 +193,7 @@ class CorePlugin(
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.UtilityFeature())
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -300,14 +300,7 @@ class CorePlugin(
 
 
 
-        // 12. Inicializar Módulo Premium de Tiendas de Mercado Dinámico
-        initEconomyDependentModule("Tiendas de Mercado") {
-            val sManager = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager(this, configManager, databaseService!!, serviceRegistry)
-            shopManager = sManager
-            // Eliminado del ServiceRegistry público por ser feature interna
-            val sGuis = com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopGuis(this, sManager, messageRegistry, serviceRegistry)
-            com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopCommand(this, commandManager, sManager, sGuis, messageRegistry)
-        }
+
 
         // 13. Inicializar Módulo de Teletransporte (Warps)
         // Lógica migrada al Kernel central de ciclo de vida en onEnable()
@@ -337,7 +330,6 @@ class CorePlugin(
         // Leaderboard reload coordinator registered via LeaderboardFeature
 
         hologramService?.let { reloadCoordinator.register("holograms", it) }
-        shopManager?.let { reloadCoordinator.register("shops", it) }
 
 
 

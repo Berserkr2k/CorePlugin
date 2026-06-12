@@ -3,19 +3,28 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.common.ColorUtility
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuService
+import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
-import org.bukkit.plugin.Plugin
 import org.incendo.cloud.CommandManager
 import org.incendo.cloud.parser.standard.StringParser.stringParser
 
 class ShopCommand(
-    private val plugin: Plugin,
-    private val manager: CommandManager<CommandSender>,
+    private val commandManager: CommandManager<CommandSender>,
     private val shopManager: ShopManager,
-    private val shopGuis: ShopGuis,
-    private val messageService: MessageService
+    private val messageService: MessageService,
+    private val menuService: MenuService,
+    private val itemFactory: ItemBuilderFactory
 ) {
+    private val manager = commandManager
+    private val shopGuis = ShopGuis(
+        plugin = shopManager.plugin,
+        shopManager = shopManager,
+        messageService = messageService,
+        menuService = menuService,
+        itemFactory = itemFactory
+    )
 
     init {
         registerShopCommand()
