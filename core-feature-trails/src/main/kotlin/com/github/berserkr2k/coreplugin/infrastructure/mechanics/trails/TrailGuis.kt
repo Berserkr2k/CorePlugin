@@ -1,20 +1,16 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails
 
-import com.github.berserkr2k.coreplugin.common.gui.CustomMenu
-import com.github.berserkr2k.coreplugin.common.gui.ItemBuilder
-import com.github.berserkr2k.coreplugin.common.gui.toItemStack
-import com.github.berserkr2k.coreplugin.common.gui.MenuItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.framework.item.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import org.bukkit.Bukkit
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
 import org.bukkit.Material
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
-
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 
 class TrailGuis(
     private val plugin: Plugin,
@@ -22,21 +18,21 @@ class TrailGuis(
     private val trailManager: ProjectileTrailManager,
     private val serviceRegistry: ServiceRegistry
 ) {
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
+    private val menuService = serviceRegistry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
+
     fun openTrailSelector(player: Player) {
         val selectorConfig = trailManager.selectorConfig
-        val menu = CustomMenu(
-            ColorUtility.parse(selectorConfig.title),
-            selectorConfig.size,
-            plugin
-        )
+        val builder = menuService.createBuilder()
+            .title(ColorUtility.parse(selectorConfig.title))
+            .slots(selectorConfig.size)
 
         // Rellenar con paneles decorativos
         if (selectorConfig.filler.enabled) {
-            val fillerItem = selectorConfig.filler.item.toItemStack()
-            for (i in 0 until selectorConfig.size) {
-                menu.setItem(i, fillerItem.clone())
-            }
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+            val fillerButton = Button.builder().icon(fillerItem).build()
+            builder.fill(fillerButton)
         }
 
         val activeTrail = trailManager.getActiveTrail(player.uniqueId)
@@ -56,7 +52,6 @@ class TrailGuis(
             val trailId = config.id
             val hasPerm = player.hasPermission(config.permission)
             val isActive = activeTrail == trailId
-
             val baseItem = config.item
 
             val loreLines = mutableListOf<String>()
@@ -79,44 +74,50 @@ class TrailGuis(
                 }
             }
 
-            val icon = ItemBuilder.fromConfig(baseItem)
+            val icon = itemBuilderFactory.builder(baseItem)
                 .lore(loreLines)
                 .glow(isActive)
                 .build()
 
-            menu.setItem(slot, icon) { p, _ ->
-                if (isActive) {
-                    p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
-                    return@setItem
-                }
-
-                if (hasPerm) {
-                    trailManager.savePlayerTrail(p.uniqueId, trailId).thenRun {
-                        p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
-                        p.sendMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
-                        // Reabrir regionalmente en sincronismo
-                        regionTaskScheduler.runAtLocation(p.location, Runnable {
-                            openTrailSelector(p)
-                        })
+            val btn = Button.builder()
+                .icon(icon)
+                .onClick { p ->
+                    if (isActive) {
+                        p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
+                        return@onClick
                     }
-                } else {
-                    p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                    p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
+
+                    if (hasPerm) {
+                        trailManager.savePlayerTrail(p.uniqueId, trailId).thenRun {
+                            p.playSound(p.location, Sound.BLOCK_AMETHYST_BLOCK_CHIME, 1.0f, 1.2f)
+                            p.sendMessage(ColorUtility.parse("<green>¡Has equipado la estela ${config.displayName}!</green>"))
+                            // Reabrir regionalmente en sincronismo
+                            regionTaskScheduler.runAtLocation(p.location, Runnable {
+                                openTrailSelector(p)
+                            })
+                        }
+                    } else {
+                        p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
+                        p.sendMessage(ColorUtility.parse("<red>No tienes permisos para usar esta estela.</red>"))
+                    }
                 }
-            }
+                .build()
+            builder.button(slot, btn)
         }
 
         if (selectorConfig.paginated) {
-            menu.placePaginatedItems(
+            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
+            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
+            builder.placePaginatedItems(
                 selectorConfig,
                 sortedTrails,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                prevArrow,
+                nextArrow
             ) { trailConfig, slot ->
                 drawTrail(trailConfig, slot)
             }
         } else {
-            menu.placeDynamicItems(
+            builder.placeDynamicItems(
                 selectorConfig,
                 sortedTrails,
                 { it.guiSlot },
@@ -144,30 +145,34 @@ class TrailGuis(
         )
 
         val clearSlot = clearBtnConfig.slots.firstOrNull() ?: 22
-        val clearItem = ItemBuilder.fromConfig(clearBtnConfig.item).build()
+        val clearItem = itemBuilderFactory.builder(clearBtnConfig.item).build()
 
-        menu.setItem(clearSlot, clearItem) { p, _ ->
-            if (activeTrail == null) {
-                p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
-                return@setItem
-            }
-
-            trailManager.savePlayerTrail(p.uniqueId, null).thenRun {
-                val soundEnum = try {
-                    val snd = clearBtnConfig.sound
-                    if (snd != null) Sound.valueOf(snd.uppercase()) else Sound.BLOCK_LAVA_EXTINGUISH
-                } catch (e: Exception) {
-                    Sound.BLOCK_LAVA_EXTINGUISH
+        val clearBtn = Button.builder()
+            .icon(clearItem)
+            .onClick { p ->
+                if (activeTrail == null) {
+                    p.playSound(p.location, Sound.BLOCK_NOTE_BLOCK_PLING, 1.0f, 0.5f)
+                    return@onClick
                 }
-                p.playSound(p.location, soundEnum, 1.0f, 1.5f)
-                p.sendMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
-                // Reabrir regionalmente
-                regionTaskScheduler.runAtLocation(p.location, Runnable {
-                    openTrailSelector(p)
-                })
-            }
-        }
 
-        menu.open(player)
+                trailManager.savePlayerTrail(p.uniqueId, null).thenRun {
+                    val soundEnum = try {
+                        val snd = clearBtnConfig.sound
+                        if (snd != null) Sound.valueOf(snd.uppercase()) else Sound.BLOCK_LAVA_EXTINGUISH
+                    } catch (e: Exception) {
+                        Sound.BLOCK_LAVA_EXTINGUISH
+                    }
+                    p.playSound(p.location, soundEnum, 1.0f, 1.5f)
+                    p.sendMessage(ColorUtility.parse("<yellow>Has removido tu estela de partículas.</yellow>"))
+                    // Reabrir regionalmente
+                    regionTaskScheduler.runAtLocation(p.location, Runnable {
+                        openTrailSelector(p)
+                    })
+                }
+            }
+            .build()
+        builder.button(clearSlot, clearBtn)
+
+        builder.build().open(player)
     }
 }

@@ -1,12 +1,12 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import com.github.berserkr2k.coreplugin.common.ColorUtility
-import com.github.berserkr2k.coreplugin.common.gui.*
-import com.github.berserkr2k.coreplugin.infrastructure.config.getShops
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
-import com.github.berserkr2k.coreplugin.api.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.framework.menu.*
+import com.github.berserkr2k.coreplugin.api.framework.item.*
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
 import com.github.berserkr2k.coreplugin.common.TransactionLockManager
+import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound
@@ -20,23 +20,39 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
-import com.github.berserkr2k.coreplugin.api.scheduler.RegionTaskScheduler
+import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 
 class ShopGuis(
     private val plugin: Plugin,
     private val shopManager: ShopManager,
     private val economyService: EconomyService,
-    private val messagesConfig: MessagesConfig,
+    private val messageService: MessageService,
     private val serviceRegistry: ServiceRegistry
 ) {
-    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)
+    private val regionTaskScheduler = serviceRegistry.get(RegionTaskScheduler::class.java)!!
+    private val menuService = serviceRegistry.get(MenuService::class.java)!!
+    private val itemBuilderFactory = serviceRegistry.get(ItemBuilderFactory::class.java)!!
 
     init {
         // Registrar acciones dinámicas para abrir las tiendas de forma local al instanciar el menú
     }
 
     private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
-        return messagesConfig.getShops(key, *placeholders)
+        val enumKey = try {
+            ShopMessages.valueOf(key.uppercase().replace("-", "_"))
+        } catch (e: Exception) {
+            null
+        }
+        if (enumKey == null) {
+            plugin.logger.warning("No se encontró clave enum ShopMessages para '$key'")
+            return ""
+        }
+        val raw = messageService.getRawTemplate(enumKey)
+        var msg = raw
+        for (ph in placeholders) {
+            msg = msg.replace("<${ph.first}>", ph.second.toString())
+        }
+        return msg
     }
 
 
@@ -45,28 +61,30 @@ class ShopGuis(
             player.sendMessage(ColorUtility.parse(getMsg("market-regulating")))
             return
         }
-
+ 
         val config = shopManager.marketConfig.categoriesMenu
         val title = ColorUtility.parse(config.title)
         val size = config.size
         
-        val menu = CustomMenu(title, size, plugin)
+        val builder = menuService.createBuilder()
+            .title(title)
+            .slots(size)
         
         // Registrar acciones locales dinámicas asociadas al menú
         config.items.forEach { (shopId, _) ->
             if (shopId == "history") {
-                menu.registerLocalAction("open_shop_history") { p, _ ->
+                builder.registerAction("open_shop_history") { p ->
                     openHistoryMenu(p)
                 }
             } else {
-                menu.registerLocalAction("open_shop_$shopId") { p, _ ->
+                builder.registerAction("open_shop_$shopId") { p ->
                     openCategoryMenu(p, shopId)
                 }
             }
         }
-
-        menu.loadFromConfig(config)
-        menu.open(player)
+ 
+        builder.loadFromConfig(config)
+        builder.build().open(player)
     }
 
     fun openHistoryMenu(player: Player) {
@@ -82,14 +100,15 @@ class ShopGuis(
                 val config = shopManager.marketConfig.historyMenu
                 val title = ColorUtility.parse(config.title)
                 val size = config.size
-                val menu = CustomMenu(title, size, plugin)
+                val builder = menuService.createBuilder()
+                    .title(title)
+                    .slots(size)
 
                 // Fondo de cristal gris (o el configurado en filler)
                 if (config.filler.enabled) {
-                    val filler = ItemBuilder.fromConfig(config.filler.item).build()
-                    for (i in 0 until size) {
-                        menu.setItem(i, filler.clone())
-                    }
+                    val filler = itemBuilderFactory.builder(config.filler.item).build()
+                    val fillerBtn = Button.builder().icon(filler).build()
+                    builder.fill(fillerBtn)
                 }
 
                 // Botón de retorno al selector
@@ -98,22 +117,26 @@ class ShopGuis(
                 val backName = getMsg("back-item-name")
                 val backLore = listOf(getMsg("back-item-lore"))
 
-                val backItem = ItemBuilder(backMat)
+                val backItem = itemBuilderFactory.builder(backMat)
                     .displayName(backName)
                     .lore(backLore)
                     .build()
 
                 val backSlot = size - 5
-                menu.setItem(backSlot, backItem) { p, _ ->
-                    openCategoriesMenu(p)
-                }
+                val backBtn = Button.builder()
+                    .icon(backItem)
+                    .onClick { p -> openCategoriesMenu(p) }
+                    .build()
+                builder.button(backSlot, backBtn)
 
                 // Elementos paginados
-                menu.placePaginatedItems(
+                val prevArrow = itemBuilderFactory.builder(config.previousPageItem).build()
+                val nextArrow = itemBuilderFactory.builder(config.nextPageItem).build()
+                builder.placePaginatedItems(
                     config,
                     history,
-                    config.previousPageItem,
-                    config.nextPageItem
+                    prevArrow,
+                    nextArrow
                 ) { record, slot ->
                     val matName = record.itemId.substringBefore("_").uppercase()
                     val mat = Material.matchMaterial(matName) ?: org.bukkit.Material.PAPER
@@ -141,15 +164,16 @@ class ShopGuis(
                             .replace("<date>", dateStr)
                     }
 
-                    val item = ItemBuilder(mat)
+                    val item = itemBuilderFactory.builder(mat)
                         .displayName(displayName)
                         .lore(lore)
                         .build()
 
-                    menu.setItem(slot, item, null)
+                    val btn = Button.builder().icon(item).build()
+                    builder.button(slot, btn)
                 }
 
-                menu.open(player)
+                builder.build().open(player)
             })
         }.exceptionally { ex ->
             plugin.logger.severe("Fallo al abrir historial de transacciones para ${player.name}: ${ex.message}")
@@ -163,36 +187,43 @@ class ShopGuis(
             player.sendMessage(ColorUtility.parse(getMsg("market-regulating")))
             return
         }
-
+ 
         val categoryConfig = shopManager.categories[shopId] ?: return
         val size = categoryConfig.guiSize
         val title = ColorUtility.parse(categoryConfig.displayName)
-
-        val menu = CustomMenu(title, size, plugin)
-
+ 
+        val builder = menuService.createBuilder()
+            .title(title)
+            .slots(size)
+ 
         // Fondo de cristal gris
-        val filler = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ").toItemStack()
-        for (i in 0 until size) {
-            menu.setItem(i, filler.clone())
-        }
-
+        val filler = itemBuilderFactory.builder(
+            ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
+        ).build()
+        val fillerBtn = Button.builder().icon(filler).build()
+        builder.fill(fillerBtn)
+ 
         // Botón de retorno al selector configurable
         val backMatStr = categoryConfig.backItemMaterial ?: getMsg("back-item-material")
         val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
         val backName = categoryConfig.backItemName ?: getMsg("back-item-name")
         val backLoreStr = if (categoryConfig.backItemLore.isNotEmpty()) categoryConfig.backItemLore else listOf(getMsg("back-item-lore"))
-
-        val backItem = ItemConfig(
-            material = backMat.name,
-            displayName = backName,
-            lore = backLoreStr
-        ).toItemStack()
-
+ 
+        val backItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = backMat.name,
+                displayName = backName,
+                lore = backLoreStr
+            )
+        ).build()
+ 
         val backSlot = size - 5
-        menu.setItem(backSlot, backItem) { p, _ ->
-            openCategoriesMenu(p)
-        }
-
+        val backBtn = Button.builder()
+            .icon(backItem)
+            .onClick { p -> openCategoriesMenu(p) }
+            .build()
+        builder.button(backSlot, backBtn)
+ 
         if (categoryConfig.paginated) {
             // Utilizar el sistema de paginación de CustomMenu mapeando los parámetros de ShopConfig
             val dummyMenuConfig = MenuConfig(
@@ -206,58 +237,71 @@ class ShopGuis(
                 nextPageItem = categoryConfig.nextPageItem,
                 items = mapOf("back" to MenuItemConfig(slots = listOf(backSlot))) // Proteger el slot de volver
             )
-
-            menu.placePaginatedItems(
+ 
+            val prevArrow = itemBuilderFactory.builder(categoryConfig.previousPageItem).build()
+            val nextArrow = itemBuilderFactory.builder(categoryConfig.nextPageItem).build()
+            builder.placePaginatedItems(
                 dummyMenuConfig,
                 categoryConfig.items,
-                categoryConfig.previousPageItem,
-                categoryConfig.nextPageItem
+                prevArrow,
+                nextArrow
             ) { itemConfig, slot ->
-                val baseItem = ItemConfig(
-                    material = itemConfig.material,
-                    customModelData = itemConfig.customModelData,
-                    enchantments = itemConfig.enchantments
-                ).toItemStack()
-
+                val baseItem = itemBuilderFactory.builder(
+                    ItemConfig(
+                        material = itemConfig.material,
+                        customModelData = itemConfig.customModelData,
+                        enchantments = itemConfig.enchantments
+                    )
+                ).build()
+ 
                 val enrichedItem = enrichItemLore(itemConfig, baseItem)
-                menu.setItem(slot, enrichedItem) { p, _ ->
-                    openQuantitySubGui(p, shopId, itemConfig)
-                }
+                val btn = Button.builder()
+                    .icon(enrichedItem)
+                    .onClick { p -> openQuantitySubGui(p, shopId, itemConfig) }
+                    .build()
+                builder.button(slot, btn)
             }
         } else {
             // Cargar ítems de la categoría de forma clásica
+            val occupiedSlots = mutableSetOf<Int>()
+            occupiedSlots.add(backSlot)
+ 
             categoryConfig.items.forEach { itemConfig ->
-                val baseItem = ItemConfig(
-                    material = itemConfig.material,
-                    customModelData = itemConfig.customModelData,
-                    enchantments = itemConfig.enchantments
-                ).toItemStack()
-
+                val baseItem = itemBuilderFactory.builder(
+                    ItemConfig(
+                        material = itemConfig.material,
+                        customModelData = itemConfig.customModelData,
+                        enchantments = itemConfig.enchantments
+                    )
+                ).build()
+ 
                 val enrichedItem = enrichItemLore(itemConfig, baseItem)
                 val suggestedSlot = itemConfig.guiSlot
-
-                val targetSlot = if (suggestedSlot in 0 until size && suggestedSlot != backSlot) suggestedSlot else {
+ 
+                val targetSlot = if (suggestedSlot in 0 until size && suggestedSlot != backSlot) {
+                    suggestedSlot
+                } else {
                     var foundSlot = -1
                     for (s in 10 until size - 9) {
-                        if (s == backSlot) continue
-                        val item = menu.inventory.getItem(s)
-                        if (item == null || item.type == Material.GRAY_STAINED_GLASS_PANE) {
-                            foundSlot = s
-                            break
-                        }
+                        if (s == backSlot || s in occupiedSlots) continue
+                        foundSlot = s
+                        break
                     }
                     foundSlot
                 }
-
+ 
                 if (targetSlot != -1) {
-                    menu.setItem(targetSlot, enrichedItem) { p, _ ->
-                        openQuantitySubGui(p, shopId, itemConfig)
-                    }
+                    occupiedSlots.add(targetSlot)
+                    val btn = Button.builder()
+                        .icon(enrichedItem)
+                        .onClick { p -> openQuantitySubGui(p, shopId, itemConfig) }
+                        .build()
+                    builder.button(targetSlot, btn)
                 }
             }
         }
-
-        menu.open(player)
+ 
+        builder.build().open(player)
     }
 
     private fun enrichItemLore(item: ShopItemConfig, itemStack: ItemStack): ItemStack {
@@ -320,54 +364,64 @@ class ShopGuis(
     }
 
     fun openQuantitySubGui(player: Player, shopId: String, itemConfig: ShopItemConfig) {
-        val title = ColorUtility.parse("<dark_gray>Transacción Simétrica</dark_gray>")
-        val menu = CustomMenu(title, 27, plugin)
-
+        val title = ColorUtility.parse(getMsg("quantity-gui-title"))
+        val builder = menuService.createBuilder()
+            .title(title)
+            .slots(27)
+ 
         // Rellenar fondo decorativo
-        val filler = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ").toItemStack()
-        for (i in 0 until 27) {
-            menu.setItem(i, filler.clone())
-        }
-
+        val filler = itemBuilderFactory.builder(
+            ItemConfig(material = getMsg("quantity-gui-background-material"), displayName = " ")
+        ).build()
+        builder.fill(Button.builder().icon(filler).build())
+ 
         // Slot 4: Item previsualizador inerte con su lore de identidad enriquecido
-        val baseItem = ItemConfig(
-            material = itemConfig.material,
-            customModelData = itemConfig.customModelData,
-            enchantments = itemConfig.enchantments
-        ).toItemStack()
+        val baseItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = itemConfig.material,
+                customModelData = itemConfig.customModelData,
+                enchantments = itemConfig.enchantments
+            )
+        ).build()
         val previewItem = enrichItemLore(itemConfig, baseItem.clone())
-        menu.setItem(4, previewItem)
-
+        builder.button(4, Button.builder().icon(previewItem).build())
+ 
         // Slot 13: Divisor Central Tintado
-        val divisor = ItemConfig(material = "BLACK_STAINED_GLASS_PANE", displayName = " ").toItemStack()
-        menu.setItem(13, divisor)
-
+        val divisor = itemBuilderFactory.builder(
+            ItemConfig(material = getMsg("quantity-gui-divisor-material"), displayName = " ")
+        ).build()
+        builder.button(13, Button.builder().icon(divisor).build())
+ 
         // Slot 22: Botón de Volver configurable
         val backMatStr = getMsg("back-item-material")
         val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
         val backName = getMsg("back-item-name")
         val backLoreStr = listOf(getMsg("back-item-lore"))
-
-        val backItem = ItemConfig(
-            material = backMat.name,
-            displayName = backName,
-            lore = backLoreStr
-        ).toItemStack()
-
-        menu.setItem(22, backItem) { p, _ ->
-            openCategoryMenu(p, shopId)
-        }
-
+ 
+        val backItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = backMat.name,
+                displayName = backName,
+                lore = backLoreStr
+            )
+        ).build()
+ 
+        val backBtn = Button.builder()
+            .icon(backItem)
+            .onClick { p -> openCategoryMenu(p, shopId) }
+            .build()
+        builder.button(22, backBtn)
+ 
         // --- COMPRAS ( Slots 10, 11, 12 ) ---
-        setupBuyButton(menu, 10, 1, itemConfig, shopId)
-        setupBuyButton(menu, 11, 32, itemConfig, shopId)
-        setupBuyButton(menu, 12, 64, itemConfig, shopId)
-
+        setupBuyButton(builder, 10, 1, itemConfig, shopId)
+        setupBuyButton(builder, 11, 32, itemConfig, shopId)
+        setupBuyButton(builder, 12, 64, itemConfig, shopId)
+ 
         // --- VENTAS ( Slots 16, 15, 14 ) ---
-        setupSellButton(menu, 16, 1, itemConfig, shopId)
-        setupSellButton(menu, 15, 32, itemConfig, shopId)
-        setupSellButton(menu, 14, 64, itemConfig, shopId)
-
+        setupSellButton(builder, 16, 1, itemConfig, shopId)
+        setupSellButton(builder, 15, 32, itemConfig, shopId)
+        setupSellButton(builder, 14, 64, itemConfig, shopId)
+ 
         // --- COMPRAR MÁXIMO ( Slot 21 ) ---
         if (itemConfig.allowBuy) {
             val playerBal = economyService.getBalance(player.uniqueId, shopManager.marketConfig.currencyId)
@@ -375,103 +429,105 @@ class ShopGuis(
             val count = maxBuyRes.first
             val totalCost = maxBuyRes.second
             
-            val maxBuyItem = ItemConfig(
-                material = "EMERALD_BLOCK",
-                displayName = "<green><bold>Comprar Máximo</bold></green>",
-                lore = listOf(
-                    "<gray>Llena tu inventario con este ítem.</gray>",
-                    "",
-                    "<gray>Cantidad a comprar: <gold>$count uds.</gold>",
-                    "<gray>Costo Estimado:    <green>${economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)}</green>",
-                    "",
-                    "<yellow>▶ Haz clic para comprar</yellow>"
+            val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)
+            val rawLore = getMsg("buy-max-lore", "qty" to count.toString(), "price" to formattedPrice)
+            val maxBuyItem = itemBuilderFactory.builder(
+                ItemConfig(
+                    material = getMsg("buy-max-material"),
+                    displayName = getMsg("buy-max-name"),
+                    lore = rawLore.split("\n")
                 )
-            ).toItemStack()
+            ).build()
             
-            menu.setItem(21, maxBuyItem) { p, _ ->
-                executePurchase(p, shopId, itemConfig, true)
-            }
+            val maxBuyBtn = Button.builder()
+                .icon(maxBuyItem)
+                .onClick { p -> executePurchase(p, shopId, itemConfig, true) }
+                .build()
+            builder.button(21, maxBuyBtn)
         }
-
+ 
         // --- VENDER TODO ( Slot 23 ) ---
         if (itemConfig.allowSell) {
             val itemsCount = getPlayerItemCount(player, baseItem)
             val sellRes = shopManager.simulateBulkSell(itemConfig, itemsCount)
             val totalVal = sellRes.first
-
-            val sellAllItem = ItemConfig(
-                material = "REDSTONE_BLOCK",
-                displayName = "<red><bold>Vender Todo</bold></red>",
-                lore = listOf(
-                    "<gray>Vacía tu inventario de este ítem.</gray>",
-                    "",
-                    "<gray>Cantidad a vender: <gold>$itemsCount uds.</gold>",
-                    "<gray>Valor Estimado:    <red>${economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)}</red>",
-                    "",
-                    "<yellow>▶ Haz clic para vender</yellow>"
+ 
+            val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)
+            val rawLore = getMsg("sell-all-lore", "qty" to itemsCount.toString(), "price" to formattedPrice)
+            val sellAllItem = itemBuilderFactory.builder(
+                ItemConfig(
+                    material = getMsg("sell-all-material"),
+                    displayName = getMsg("sell-all-name"),
+                    lore = rawLore.split("\n")
                 )
-            ).toItemStack()
-
-            menu.setItem(23, sellAllItem) { p, _ ->
-                executeSale(p, shopId, itemConfig, true)
-            }
+            ).build()
+ 
+            val sellAllBtn = Button.builder()
+                .icon(sellAllItem)
+                .onClick { p -> executeSale(p, shopId, itemConfig, true) }
+                .build()
+            builder.button(23, sellAllBtn)
         }
-
-        menu.open(player)
+ 
+        builder.build().open(player)
     }
-
-    private fun setupBuyButton(menu: CustomMenu, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
+ 
+    private fun setupBuyButton(builder: MenuBuilder, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
         if (!item.allowBuy) {
-            val disabled = ItemConfig(material = "RED_STAINED_GLASS_PANE", displayName = "<red>Compra Deshabilitada</red>").toItemStack()
-            menu.setItem(slot, disabled)
+            val disabled = itemBuilderFactory.builder(
+                ItemConfig(material = getMsg("disabled-material"), displayName = getMsg("buy-disabled-name"))
+            ).build()
+            builder.button(slot, Button.builder().icon(disabled).build())
             return
         }
-
+ 
         val sim = shopManager.simulateBulkBuy(item, qty)
         val totalCost = sim.first
-
-        val btn = ItemConfig(
-            material = "GREEN_STAINED_GLASS_PANE",
-            displayName = "<green><bold>Comprar $qty</bold></green>",
-            lore = listOf(
-                "<gray>Compra una cantidad de $qty unidades.</gray>",
-                "",
-                "<gray>Costo Total: <green>${economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)}</green>",
-                "",
-                "<yellow>▶ Haz clic para comprar</yellow>"
+ 
+        val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)
+        val rawLore = getMsg("buy-qty-lore", "qty" to qty.toString(), "price" to formattedPrice)
+        val btn = itemBuilderFactory.builder(
+            ItemConfig(
+                material = getMsg("buy-qty-material"),
+                displayName = getMsg("buy-qty-name").replace("<qty>", qty.toString()),
+                lore = rawLore.split("\n")
             )
-        ).toItemStack()
-
-        menu.setItem(slot, btn) { p, _ ->
-            executePurchase(p, shopId, item, false, qty)
-        }
+        ).build()
+ 
+        val button = Button.builder()
+            .icon(btn)
+            .onClick { p -> executePurchase(p, shopId, item, false, qty) }
+            .build()
+        builder.button(slot, button)
     }
-
-    private fun setupSellButton(menu: CustomMenu, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
+ 
+    private fun setupSellButton(builder: MenuBuilder, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
         if (!item.allowSell) {
-            val disabled = ItemConfig(material = "RED_STAINED_GLASS_PANE", displayName = "<red>Venta Deshabilitada</red>").toItemStack()
-            menu.setItem(slot, disabled)
+            val disabled = itemBuilderFactory.builder(
+                ItemConfig(material = getMsg("disabled-material"), displayName = getMsg("sell-disabled-name"))
+            ).build()
+            builder.button(slot, Button.builder().icon(disabled).build())
             return
         }
-
+ 
         val sim = shopManager.simulateBulkSell(item, qty)
         val totalVal = sim.first
-
-        val btn = ItemConfig(
-            material = "RED_STAINED_GLASS_PANE",
-            displayName = "<red><bold>Vender $qty</bold></red>",
-            lore = listOf(
-                "<gray>Vende una cantidad de $qty unidades.</gray>",
-                "",
-                "<gray>Valor Total: <red>${economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)}</red>",
-                "",
-                "<yellow>▶ Haz clic para vender</yellow>"
+ 
+        val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)
+        val rawLore = getMsg("sell-qty-lore", "qty" to qty.toString(), "price" to formattedPrice)
+        val btn = itemBuilderFactory.builder(
+            ItemConfig(
+                material = getMsg("sell-qty-material"),
+                displayName = getMsg("sell-qty-name").replace("<qty>", qty.toString()),
+                lore = rawLore.split("\n")
             )
-        ).toItemStack()
-
-        menu.setItem(slot, btn) { p, _ ->
-            executeSale(p, shopId, item, false, qty)
-        }
+        ).build()
+ 
+        val button = Button.builder()
+            .icon(btn)
+            .onClick { p -> executeSale(p, shopId, item, false, qty) }
+            .build()
+        builder.button(slot, button)
     }
 
     // --- PIPELINE DE TRANSACCIÓN DE COMPRA COMPLETO Y SEGURO ---
@@ -482,11 +538,13 @@ class ShopGuis(
             return
         }
 
-        val baseItem = ItemConfig(
-            material = itemConfig.material,
-            customModelData = itemConfig.customModelData,
-            enchantments = itemConfig.enchantments
-        ).toItemStack()
+        val baseItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = itemConfig.material,
+                customModelData = itemConfig.customModelData,
+                enchantments = itemConfig.enchantments
+            )
+        ).build()
 
         // 1. Validar Espacio en Inventario (Main Thread)
         val space = getInventorySpace(player, baseItem)
@@ -573,11 +631,13 @@ class ShopGuis(
             return
         }
 
-        val baseItem = ItemConfig(
-            material = itemConfig.material,
-            customModelData = itemConfig.customModelData,
-            enchantments = itemConfig.enchantments
-        ).toItemStack()
+        val baseItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = itemConfig.material,
+                customModelData = itemConfig.customModelData,
+                enchantments = itemConfig.enchantments
+            )
+        ).build()
 
         // 1. Obtener y Validar ítems físicos que posee en Inventario (Main Thread)
         val ownedItems = mutableListOf<Pair<ItemStack, BigDecimal>>() // stack to durability factor
@@ -744,11 +804,13 @@ class ShopGuis(
     }
 
     private fun calculateMaxPurchase(player: Player, item: ShopItemConfig, playerBalance: BigDecimal): Pair<Int, BigDecimal> {
-        val baseItem = ItemConfig(
-            material = item.material,
-            customModelData = item.customModelData,
-            enchantments = item.enchantments
-        ).toItemStack()
+        val baseItem = itemBuilderFactory.builder(
+            ItemConfig(
+                material = item.material,
+                customModelData = item.customModelData,
+                enchantments = item.enchantments
+            )
+        ).build()
         
         val space = getInventorySpace(player, baseItem)
         if (space <= 0) return Pair(0, BigDecimal.ZERO)

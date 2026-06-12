@@ -12,41 +12,11 @@ import org.bukkit.inventory.Inventory
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import net.kyori.adventure.text.Component
-import org.spongepowered.configurate.objectmapping.ConfigSerializable
+import com.github.berserkr2k.coreplugin.api.config.ItemConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig
+import com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig
 import java.util.concurrent.ConcurrentHashMap
-import com.github.berserkr2k.coreplugin.infrastructure.config.ItemConfig
-
-@ConfigSerializable
-data class FillerConfig(
-    val enabled: Boolean = true,
-    val item: ItemConfig = ItemConfig(
-        material = "GRAY_STAINED_GLASS_PANE",
-        displayName = " "
-    )
-)
-
-@ConfigSerializable
-data class MenuItemConfig(
-    val slots: List<Int> = emptyList(),
-    val item: ItemConfig = ItemConfig(),
-    val action: String? = null,
-    val sound: String? = null,
-    val permission: String? = null
-)
-
-@ConfigSerializable
-data class MenuConfig(
-    val title: String = "<gold>Menú</gold>",
-    val size: Int = 27,
-    val filler: FillerConfig = FillerConfig(),
-    val items: Map<String, MenuItemConfig> = emptyMap(),
-    val paginated: Boolean = false,
-    val dynamicSlots: List<Int> = emptyList(),
-    val previousPageSlot: Int? = null,
-    val nextPageSlot: Int? = null,
-    val previousPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Página Anterior</yellow>"),
-    val nextPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página</yellow>")
-)
 
 object MenuActionRegistry {
     private val globalActions = ConcurrentHashMap<String, (Player, InventoryClickEvent) -> Unit>()
@@ -143,22 +113,25 @@ class CustomMenu(
                 if (slot in 0 until slots) {
                     setItem(slot, itemStack.clone()) { player, event ->
                         // Verificar permiso
-                        if (menuItemConfig.permission != null && !player.hasPermission(menuItemConfig.permission)) {
+                        val permission = menuItemConfig.permission
+                        val sound = menuItemConfig.sound
+                        val action = menuItemConfig.action
+                        if (permission != null && !player.hasPermission(permission)) {
                             player.sendMessage(ColorUtility.parse("<red>❌ No tienes permiso para usar esto.</red>"))
                             return@setItem
                         }
 
                         // Sonido
-                        if (menuItemConfig.sound != null) {
+                        if (sound != null) {
                             try {
-                                val soundEnum = org.bukkit.Sound.valueOf(menuItemConfig.sound.uppercase())
+                                val soundEnum = org.bukkit.Sound.valueOf(sound.uppercase())
                                 player.playSound(player.location, soundEnum, 1.0f, 1.0f)
                             } catch (e: Exception) {}
                         }
 
                         // Acción
-                        if (menuItemConfig.action != null) {
-                            val handler = getActionHandler(menuItemConfig.action)
+                        if (action != null) {
+                            val handler = getActionHandler(action)
                             if (handler != null) {
                                 handler(player, event)
                             }
@@ -254,8 +227,8 @@ class CustomMenu(
     fun <T> placePaginatedItems(
         config: MenuConfig,
         items: List<T>,
-        previousPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Página Anterior</yellow>"),
-        nextPageItem: ItemConfig = ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página</yellow>"),
+        previousPageItem: ItemStack,
+        nextPageItem: ItemStack,
         render: (T, Int) -> Unit
     ) {
         val dynamicSlots = config.dynamicSlots.ifEmpty {
@@ -294,7 +267,7 @@ class CustomMenu(
             // 4. Botón de Página Anterior
             config.previousPageSlot?.let { prevSlot ->
                 if (prevSlot in 0 until slots && currentPage > 0) {
-                    val prevBtn = previousPageItem.toItemStack()
+                    val prevBtn = previousPageItem
                     setItem(prevSlot, prevBtn) { p, _ ->
                         previousPage()
                     }
@@ -304,7 +277,7 @@ class CustomMenu(
             // 5. Botón de Siguiente Página
             config.nextPageSlot?.let { nextSlot ->
                 if (nextSlot in 0 until slots && currentPage < totalPages - 1) {
-                    val nextBtn = nextPageItem.toItemStack()
+                    val nextBtn = nextPageItem
                     setItem(nextSlot, nextBtn) { p, _ ->
                         nextPage()
                     }
