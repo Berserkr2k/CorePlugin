@@ -5,20 +5,20 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 import kotlin.system.measureTimeMillis
 
-class ReloadCoordinator(private val logger: Logger) {
+class ReloadCoordinator(private val logger: Logger) : com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator {
     private val reloadables = ConcurrentHashMap<String, Reloadable>()
 
     /**
      * Registra una feature recargable en el coordinador.
      */
-    fun register(featureId: String, reloadable: Reloadable) {
+    override fun register(featureId: String, reloadable: Reloadable) {
         reloadables[featureId.lowercase()] = reloadable
     }
 
     /**
      * Recarga una feature específica de forma asíncrona.
      */
-    suspend fun reloadFeature(featureId: String): Long {
+    override suspend fun reloadFeature(featureId: String): Long {
         val fid = featureId.lowercase()
         val reloadable = reloadables[fid] ?: throw IllegalArgumentException("La feature '$featureId' no está registrada o no es recargable.")
         
@@ -37,7 +37,7 @@ class ReloadCoordinator(private val logger: Logger) {
     /**
      * Recarga todas las features registradas respetando el orden de dependencias.
      */
-    suspend fun reloadAll(): Map<String, Long> {
+    override suspend fun reloadAll(): Map<String, Long> {
         val metrics = mutableMapOf<String, Long>()
         
         // Orden recomendado para evitar desalineación de dependencias

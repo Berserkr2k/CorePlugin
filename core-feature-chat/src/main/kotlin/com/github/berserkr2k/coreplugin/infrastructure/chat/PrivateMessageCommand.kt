@@ -3,7 +3,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.chat
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
 import org.bukkit.Bukkit

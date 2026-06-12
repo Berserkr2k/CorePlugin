@@ -1,12 +1,12 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import org.spongepowered.configurate.hocon.HoconConfigurationLoader
 import org.spongepowered.configurate.objectmapping.ObjectMapper
 import org.spongepowered.configurate.util.NamingSchemes
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
-
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilder
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import org.bukkit.Bukkit
@@ -33,7 +33,7 @@ import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+// Imported from api.core.user package
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
@@ -62,7 +62,7 @@ class LeaderboardService(
     private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
     private val messageService = registry.get(MessageService::class.java)!!
     private val profileRegistry = registry.get(ProfileRegistry::class.java)!!
-    private val placeholderBridge = registry.get(LegacyPlaceholderBridge::class.java)!!
+    private val placeholderBridge = registry.get(PlaceholderService::class.java)!!
 
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()

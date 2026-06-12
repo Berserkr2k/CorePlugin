@@ -10,7 +10,8 @@ import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
 import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
 import org.bukkit.Bukkit
 import org.bukkit.Material
 import org.bukkit.Sound

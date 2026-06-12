@@ -38,7 +38,7 @@ class ScoreboardService(
     private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
         ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
     private val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)
-    private val placeholderBridge = registry.get(com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge::class.java)
+    private val placeholderBridge = registry.get(com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService::class.java)
 
     lateinit var config: ScoreboardModuleConfig
         private set

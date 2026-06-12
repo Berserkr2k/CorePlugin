@@ -1,6 +1,5 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuService
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.common.ColorUtility

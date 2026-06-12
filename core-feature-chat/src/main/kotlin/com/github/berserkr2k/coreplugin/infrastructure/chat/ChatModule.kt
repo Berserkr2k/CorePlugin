@@ -1,6 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.chat
 
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
 import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig
 import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
@@ -11,8 +12,8 @@ import org.bukkit.plugin.Plugin
 class ChatModule(
     private val plugin: Plugin,
     private val featureConfig: FeatureConfig,
-    private val papiBridge: LegacyPlaceholderBridge,
-    private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
+    private val papiBridge: PlaceholderService,
+    private val profileRegistry: ProfileRegistry,
     private val messageService: MessageService,
     private val taskScheduler: TaskScheduler,
     private val stateService: PlayerStateService

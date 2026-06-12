@@ -33,7 +33,7 @@ class KitFeature : Feature {
         KitCommand(context.plugin, commandService.manager, service, context.messageService, menuService, itemFactory)
 
         // Registro opcional en el coordinador de recargas
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("kits", service)
     }
 }

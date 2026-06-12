@@ -3,7 +3,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.economy
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Feature
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
 class EconomyFeature : Feature {

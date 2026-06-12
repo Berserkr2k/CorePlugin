@@ -108,6 +108,7 @@ class CorePlugin(
 
         placeholderBridge = LegacyPlaceholderBridge()
         registry.register(LegacyPlaceholderBridge::class.java, placeholderBridge)
+        registry.register(com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService::class.java, placeholderBridge)
         configManager = ModularConfigManager(this, dataFolderPath)
         registry.register(ModularConfigManager::class.java, configManager)
 
@@ -148,6 +149,7 @@ class CorePlugin(
         profileRegistry = reg
         
         registry.register(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java, db)
+        registry.register(com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry::class.java, reg)
         registry.register(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java, reg)
 
         server.pluginManager.registerEvents(

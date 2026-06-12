@@ -2,8 +2,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.chat
 
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Feature
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
+import com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator
 
 class ChatFeature : Feature {
     override val id = "chat"
@@ -14,15 +15,13 @@ class ChatFeature : Feature {
     override fun onEnable(context: FeatureContext) {
         val config = context.configService.getConfig("chat")
         val profileRegistry = context.getService(ProfileRegistry::class.java)
-        
-        // Extraemos el bridge de placeholders antiguo (temporal hasta su refactor)
-        val placeholderBridge = context.getService(LegacyPlaceholderBridge::class.java)
+        val placeholderService = context.getService(PlaceholderService::class.java)
 
         // Inicialización purificada del módulo sin pasarle el ServiceRegistry crudo
         val service = ChatModule(
             context.plugin,
             config,
-            placeholderBridge,
+            placeholderService,
             profileRegistry,
             context.messageService,
             context.taskScheduler,
@@ -36,7 +35,7 @@ class ChatFeature : Feature {
         ColorCommand(context.plugin, commandService.manager, profileRegistry, context.configService, context.messageService, context.registry)
 
         // Registrar en el coordinador de recargas si implementa Reloadable
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(ReloadCoordinator::class.java)
         reloadCoordinator?.register("chat", service)
     }
 }

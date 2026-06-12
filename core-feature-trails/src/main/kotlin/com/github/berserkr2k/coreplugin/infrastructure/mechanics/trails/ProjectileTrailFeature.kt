@@ -39,7 +39,7 @@ class ProjectileTrailFeature : Feature {
         ProjectileTrailCommand(commandService.manager, manager, context.messageService, menuService, itemFactory)
 
         // 5. Register into the reload coordinator if it is present
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("trails", manager)
     }
 

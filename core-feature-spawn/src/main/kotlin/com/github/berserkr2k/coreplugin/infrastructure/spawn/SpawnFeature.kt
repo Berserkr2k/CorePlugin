@@ -30,7 +30,7 @@ class SpawnFeature : Feature {
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)
         SpawnCommand(commandService.manager, service, context.messageService)
 
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("spawn", service)
     }
 }

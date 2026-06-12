@@ -31,7 +31,7 @@ class ScoreboardFeature : Feature {
         ScoreboardCommand(commandService.manager, service, context.messageService)
 
         // 4. Register into the global reload coordinator if it is present
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("scoreboard", service)
     }
 

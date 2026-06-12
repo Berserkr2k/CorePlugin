@@ -11,6 +11,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
 
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
 
 class ProjectileTrailManager(
     private val plugin: Plugin,
@@ -22,7 +24,7 @@ class ProjectileTrailManager(
     private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
         ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
     private val databaseService = registry.get(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java)
-    private val profileRegistry = registry.get(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java)
+    private val profileRegistry = registry.get(ProfileRegistry::class.java)
     private val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
 
     private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()

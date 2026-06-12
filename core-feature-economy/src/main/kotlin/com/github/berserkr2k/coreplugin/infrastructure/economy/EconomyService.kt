@@ -2,7 +2,8 @@ package com.github.berserkr2k.coreplugin.infrastructure.economy
 
 import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
-import com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
 import org.bukkit.plugin.Plugin
 import java.io.File
 import java.math.BigDecimal

@@ -1,6 +1,8 @@
 package com.github.berserkr2k.coreplugin.domain.user
 
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CompletableFuture
@@ -9,14 +11,14 @@ import java.util.logging.Logger
 class ProfileRegistry(
     private val databaseService: DatabaseService,
     private val logger: Logger
-) {
+) : ProfileRegistry {
     private val profiles = ConcurrentHashMap<UUID, UserProfile>()
 
-    fun getProfile(uuid: UUID): UserProfile? {
+    override fun getProfile(uuid: UUID): UserProfile? {
         return profiles[uuid]
     }
 
-    fun getActiveProfiles(): Collection<UserProfile> {
+    override fun getActiveProfiles(): Collection<UserProfile> {
         return profiles.values
     }
 
@@ -24,7 +26,7 @@ class ProfileRegistry(
      * Carga de forma asíncrona un perfil de usuario. Si ya está en caché, lo retorna directamente.
      * Si no existe, realiza un INSERT en core_users y carga su saldo, cooldowns y estelas.
      */
-    fun loadProfile(uuid: UUID, username: String): CompletableFuture<UserProfile> {
+    override fun loadProfile(uuid: UUID, username: String): CompletableFuture<UserProfile> {
         val cached = profiles[uuid]
         if (cached != null) {
             return CompletableFuture.completedFuture(cached)
@@ -121,16 +123,16 @@ class ProfileRegistry(
         }
     }
 
-    fun acquireSyncLock(uuid: UUID) {
+    override fun acquireSyncLock(uuid: UUID) {
         val sql = "INSERT INTO player_sync_locks (uuid, locked_at) VALUES (?, ?) ON CONFLICT(uuid) DO UPDATE SET locked_at = excluded.locked_at"
         databaseService.getDatabase("core").executeUpdate(sql, uuid.toString(), System.currentTimeMillis()).join()
     }
 
-    fun releaseSyncLock(uuid: UUID) {
+    override fun releaseSyncLock(uuid: UUID) {
         databaseService.getDatabase("core").executeUpdate("DELETE FROM player_sync_locks WHERE uuid = ?", uuid.toString()).join()
     }
 
-    fun isSyncLocked(uuid: UUID): Boolean {
+    override fun isSyncLocked(uuid: UUID): Boolean {
         val lockedAt = databaseService.getDatabase("core").querySingle(
             "SELECT locked_at FROM player_sync_locks WHERE uuid = ?",
             { rs -> rs.getLong("locked_at") },
@@ -150,7 +152,7 @@ class ProfileRegistry(
      * Guarda la información de un usuario y lo remueve del caché en memoria.
      * Adquiere un bloqueo temporal para sincronización cross-server.
      */
-    fun unloadAndSave(uuid: UUID): CompletableFuture<Void> {
+    override fun unloadAndSave(uuid: UUID): CompletableFuture<Void> {
         val profile = profiles.remove(uuid) ?: return CompletableFuture.completedFuture(null)
         
         acquireSyncLock(uuid)
@@ -169,7 +171,7 @@ class ProfileRegistry(
     /**
      * Guarda en lote (Batch Execution) todos los perfiles marcados como sucios (dirty) sin removerlos de memoria.
      */
-    fun flushAllActive(): CompletableFuture<Void> {
+    override fun flushAllActive(): CompletableFuture<Void> {
         val dirtyProfiles = profiles.values.filter { it.isDirty }
         if (dirtyProfiles.isEmpty()) {
             return CompletableFuture.completedFuture(null)

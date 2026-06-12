@@ -2,7 +2,9 @@ package com.github.berserkr2k.coreplugin.infrastructure.chat
 
 import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig
 import com.github.berserkr2k.coreplugin.domain.chat.ChatConfig.ChatFormatSection
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
+import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
+import com.github.berserkr2k.coreplugin.api.core.user.UserProfile
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
@@ -33,8 +35,8 @@ val CHAT_STATE_TYPE = StateContainerType { ChatStateContainer() }
 
 class ModernChatModuleListener(
     @Volatile var chatConfig: ChatConfig,
-    private val papiBridge: LegacyPlaceholderBridge,
-    private val profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry,
+    private val papiBridge: PlaceholderService,
+    private val profileRegistry: ProfileRegistry,
     private val stateService: PlayerStateService,
     private val messageService: MessageService
 ) : Listener, ChatRenderer {

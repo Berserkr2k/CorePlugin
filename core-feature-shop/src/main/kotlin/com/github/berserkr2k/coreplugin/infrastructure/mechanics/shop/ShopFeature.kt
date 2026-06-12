@@ -37,7 +37,7 @@ class ShopFeature : Feature {
         ShopCommand(commandService.manager, manager, context.messageService, menuService, itemFactory)
 
         // 4. Register into the global reload coordinator if present
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("shop", manager)
     }
 

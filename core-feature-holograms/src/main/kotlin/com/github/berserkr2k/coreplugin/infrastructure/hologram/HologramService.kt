@@ -1,7 +1,5 @@
 package com.github.berserkr2k.coreplugin.infrastructure.hologram
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.plugin.Plugin
@@ -19,12 +17,13 @@ import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvide
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
-
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 
 class HologramService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
-    private val placeholderBridge: LegacyPlaceholderBridge,
+    private val placeholderService: com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService,
     private val registry: ServiceRegistry
 ) : com.github.berserkr2k.coreplugin.api.feature.holograms.HologramService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     private val activeHolograms = ConcurrentHashMap<String, ModernHologram>()
@@ -36,6 +35,10 @@ class HologramService(
     
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
 
     init {
         // 1. Crear carpeta de hologramas si no existe, y poblar con default si está vacía
@@ -68,6 +71,35 @@ class HologramService(
         }
     }
 
+    private fun loadConfig(file: java.io.File, id: String): HologramConfig {
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(HologramConfig::class.java)
+        return mapper.load(root) ?: HologramConfig(id = id)
+    }
+
+    private fun saveConfig(file: java.io.File, config: HologramConfig) {
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(HologramConfig::class.java)
+        mapper.save(config, root)
+        loader.save(root)
+    }
+
     fun loadAllHolograms() {
         shutdown()
         configs.clear()
@@ -80,36 +112,37 @@ class HologramService(
 
         val futures = files.map { file ->
             val id = file.nameWithoutExtension.lowercase()
-            configManager.loadModuleConfig("holograms/holograms/${file.name}", HologramConfig::class.java, HologramConfig(id = id))
-                .thenAccept { loadedConfig ->
-                    configs[id] = loadedConfig
+            java.util.concurrent.CompletableFuture.supplyAsync({
+                loadConfig(file, id)
+            }, { command -> taskScheduler.runAsync(command) }).thenAccept { loadedConfig ->
+                configs[id] = loadedConfig
 
-                    val world = Bukkit.getWorld(loadedConfig.world)
-                    if (world != null) {
-                        val loc = Location(world, loadedConfig.x, loadedConfig.y, loadedConfig.z)
+                val world = Bukkit.getWorld(loadedConfig.world)
+                if (world != null) {
+                    val loc = Location(world, loadedConfig.x, loadedConfig.y, loadedConfig.z)
 
-                        // Limpieza de entidades físicas remanentes de versiones anteriores
-                        regionTaskScheduler.runAtLocation(loc) {
-                            world.getNearbyEntities(loc, 3.0, 5.0, 3.0) { entity ->
-                                entity is TextDisplay || entity is Interaction
-                            }.forEach { it.remove() }
-                        }
+                    // Limpieza de entidades físicas remanentes de versiones anteriores
+                    regionTaskScheduler.runAtLocation(loc) {
+                        world.getNearbyEntities(loc, 3.0, 5.0, 3.0) { entity ->
+                            entity is TextDisplay || entity is Interaction
+                        }.forEach { it.remove() }
+                    }
 
-                        // Inicialización de los hologramas virtuales basados en paquetes
-                        val holo = ModernHologram(id, loc, plugin, placeholderBridge)
-                        holo.clickCommand = loadedConfig.clickCommand
-                        holo.lineSpacing = loadedConfig.lineSpacing
-                        holo.backgroundColor = loadedConfig.backgroundColor
-                        holo.renderDistance = loadedConfig.renderDistance
-                        holo.setup(loadedConfig.lines)
-                        activeHolograms[id] = holo
+                    // Inicialización de los hologramas virtuales basados en paquetes
+                    val holo = ModernHologram(id, loc, plugin, placeholderService)
+                    holo.clickCommand = loadedConfig.clickCommand
+                    holo.lineSpacing = loadedConfig.lineSpacing
+                    holo.backgroundColor = loadedConfig.backgroundColor
+                    holo.renderDistance = loadedConfig.renderDistance
+                    holo.setup(loadedConfig.lines)
+                    activeHolograms[id] = holo
 
-                        // Si es actualizable, programar su propia tarea de actualización
-                        if (loadedConfig.updatable) {
-                            scheduleHologramUpdate(holo, loadedConfig.updateInterval)
-                        }
+                    // Si es actualizable, programar su propia tarea de actualización
+                    if (loadedConfig.updatable) {
+                        scheduleHologramUpdate(holo, loadedConfig.updateInterval)
                     }
                 }
+            }
         }
 
         java.util.concurrent.CompletableFuture.allOf(*futures.toTypedArray()).join()
@@ -177,7 +210,7 @@ class HologramService(
         // Garantizar unicidad del ID
         deleteHologram(id)
 
-        val holo = ModernHologram(id, location, plugin, placeholderBridge)
+        val holo = ModernHologram(id, location, plugin, placeholderService)
         holo.clickCommand = clickCommand
         holo.lineSpacing = lineSpacing ?: 0.28
         holo.backgroundColor = backgroundColor ?: 1073741824
@@ -214,7 +247,7 @@ class HologramService(
             renderDistance = renderDistance ?: 48
         )
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
+        saveConfig(hologramsFolder.resolve("$id.conf"), newConfig)
 
         return holo
     }
@@ -229,7 +262,7 @@ class HologramService(
         val oldConfig = configs[id] ?: return false
         val newConfig = oldConfig.copy(lines = lines)
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
+        saveConfig(hologramsFolder.resolve("$id.conf"), newConfig)
         return true
     }
 
@@ -259,7 +292,7 @@ class HologramService(
             world = newLocation.world.name
         )
         configs[id] = newConfig
-        configManager.saveModuleConfig("holograms/holograms/$id.conf", HologramConfig::class.java, newConfig)
+        saveConfig(hologramsFolder.resolve("$id.conf"), newConfig)
         return true
     }
 

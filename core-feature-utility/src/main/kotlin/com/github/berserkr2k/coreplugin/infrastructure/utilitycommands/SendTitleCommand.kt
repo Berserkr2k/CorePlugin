@@ -1,6 +1,5 @@
 package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
-import com.github.berserkr2k.coreplugin.infrastructure.config.MessagesConfig
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin

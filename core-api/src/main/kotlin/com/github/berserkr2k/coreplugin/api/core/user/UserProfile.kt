@@ -1,4 +1,4 @@
-package com.github.berserkr2k.coreplugin.domain.user
+package com.github.berserkr2k.coreplugin.api.core.user
 
 import java.math.BigDecimal
 import java.util.UUID

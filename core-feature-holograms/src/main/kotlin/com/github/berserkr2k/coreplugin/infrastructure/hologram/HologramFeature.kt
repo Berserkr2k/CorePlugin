@@ -2,8 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.hologram
 
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Feature
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
 import com.github.berserkr2k.coreplugin.api.feature.holograms.HologramService as APIHologramService
 
 class HologramFeature : Feature {
@@ -12,13 +11,11 @@ class HologramFeature : Feature {
     private var hologramService: HologramService? = null
 
     override fun onEnable(context: FeatureContext) {
-        val configManager = context.getService(ModularConfigManager::class.java)
-        val placeholderBridge = context.getService(LegacyPlaceholderBridge::class.java)
+        val placeholderService = context.getService(PlaceholderService::class.java)
 
         val service = HologramService(
             context.plugin,
-            configManager,
-            placeholderBridge,
+            placeholderService,
             context.registry
         )
         this.hologramService = service
@@ -32,8 +29,8 @@ class HologramFeature : Feature {
             context.messageService
         )
 
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
-        reloadCoordinator?.register("hologram", service)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
+        reloadCoordinator?.register("holograms", service)
     }
 
     override fun onDisable(context: FeatureContext) {

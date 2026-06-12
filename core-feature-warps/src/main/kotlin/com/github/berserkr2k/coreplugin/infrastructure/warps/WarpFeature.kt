@@ -32,7 +32,7 @@ class WarpFeature : Feature {
         WarpCommand(context.plugin, commandService.manager, service, context.messageService, context.registry)
 
         // Registrar en el coordinador de retransmisión/recarga en caliente
-        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java)
+        val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("warps", service)
     }
 }

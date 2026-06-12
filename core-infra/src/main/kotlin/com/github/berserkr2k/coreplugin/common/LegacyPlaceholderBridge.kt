@@ -5,7 +5,7 @@ import org.bukkit.entity.Player
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.minimessage.MiniMessage
 
-class LegacyPlaceholderBridge {
+class LegacyPlaceholderBridge : com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService {
 
     private val miniMessage = MiniMessage.miniMessage()
     private val isPapiEnabled = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")
@@ -13,7 +13,7 @@ class LegacyPlaceholderBridge {
     /**
      * Procesa y convierte texto heredado con variables en un componente Adventure de forma segura, soportando tanto MiniMessage como formato heredado.
      */
-    fun parseLegacyStringSecurely(player: Player, text: String): Component {
+    override fun parseLegacyStringSecurely(player: Player, text: String): Component {
         val resolvedText = parsePlaceholder(player, text)
         return ColorUtility.parse(resolvedText)
     }
@@ -21,7 +21,7 @@ class LegacyPlaceholderBridge {
     /**
      * Resuelve asíncronamente un String con placeholders mediante PlaceholderAPI o reemplazos nativos si está deshabilitado.
      */
-    fun parsePlaceholder(player: Player, text: String): String {
+    override fun parsePlaceholder(player: Player, text: String): String {
         return if (isPapiEnabled) {
             PapiHook.setPlaceholders(player, text)
         } else {

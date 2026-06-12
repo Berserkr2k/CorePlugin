@@ -6,7 +6,7 @@ import com.comphenix.protocol.events.PacketContainer
 import com.comphenix.protocol.wrappers.WrappedDataWatcher
 import com.comphenix.protocol.wrappers.WrappedChatComponent
 import com.comphenix.protocol.wrappers.WrappedDataValue
-import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
+import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
 import org.bukkit.Location
 import org.bukkit.entity.EntityType
 import org.bukkit.entity.Player
@@ -23,7 +23,7 @@ class ModernHologram(
     val id: String,
     var location: Location,
     private val plugin: Plugin,
-    private val placeholderBridge: LegacyPlaceholderBridge
+    private val placeholderService: PlaceholderService
 ) {
     var textLines = CopyOnWriteArrayList<String>()
     var clickCommand: String? = null
@@ -48,7 +48,7 @@ class ModernHologram(
     }
 
     private fun parseText(text: String, player: Player): net.kyori.adventure.text.Component {
-        return placeholderBridge.parseLegacyStringSecurely(player, text)
+        return placeholderService.parseLegacyStringSecurely(player, text)
     }
 
     /**
