@@ -8,16 +8,19 @@ import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnMessages
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnConfig
 import com.github.berserkr2k.coreplugin.infrastructure.spawn.PersistedLocation
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
 import net.kyori.adventure.text.Component
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Sound
 import org.bukkit.entity.Player
 import org.bukkit.plugin.Plugin
+import org.spongepowered.configurate.CommentedConfigurationNode
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import java.util.UUID
 
 class SpawnStateContainer(
@@ -28,7 +31,7 @@ val SPAWN_STATE = StateContainerType { SpawnStateContainer() }
 
 class SpawnService(
     private val plugin: Plugin,
-    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
+    private val featureConfig: FeatureConfig,
     private val taskScheduler: TaskScheduler,
     private val regionTaskScheduler: RegionTaskScheduler,
     private val playerStateService: PlayerStateService,
@@ -37,24 +40,30 @@ class SpawnService(
     lateinit var config: SpawnConfig
         private set
 
-    private val configManager: ModularConfigManager by lazy {
-        Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
-            ?.get(ModularConfigManager::class.java)
-            ?: throw IllegalStateException("ModularConfigManager not registered in ServiceRegistry")
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
+
+    private val mapper = mapperFactory.get(SpawnConfig::class.java)
+
+    private fun getRootNode(): CommentedConfigurationNode {
+        val field = featureConfig.javaClass.getDeclaredField("rootNode")
+        field.isAccessible = true
+        return field.get(featureConfig) as CommentedConfigurationNode
+    }
+
+    private fun loadConfig() {
+        val rootNode = getRootNode()
+        this.config = mapper.load(rootNode) ?: SpawnConfig()
     }
 
     init {
-        configManager.loadModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, SpawnConfig())
-            .thenAccept { loaded ->
-                this.config = loaded
-            }
+        loadConfig()
     }
 
     override suspend fun reload() {
-        configManager.loadModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, SpawnConfig())
-            .thenAccept { loaded ->
-                this.config = loaded
-            }.join()
+        featureConfig.reload()
+        loadConfig()
     }
 
     private fun getSpawnState(uuid: UUID): SpawnStateContainer {
@@ -100,8 +109,11 @@ class SpawnService(
         updatedWorlds[loc.world.name] = currentWorldSettings.copy(spawnLocation = pLoc)
 
         val newConfig = config.copy(worlds = updatedWorlds)
-        config = newConfig
-        configManager.saveModuleConfig("spawn/spawn.conf", SpawnConfig::class.java, newConfig)
+        this.config = newConfig
+        
+        val rootNode = getRootNode()
+        mapper.save(newConfig, rootNode)
+        featureConfig.save().join()
         
         // Update Bukkit world spawn coordinate physically
         loc.world.setSpawnLocation(loc)

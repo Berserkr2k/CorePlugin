@@ -12,9 +12,11 @@ class SpawnFeature : Feature {
     private var spawnService: SpawnService? = null
 
     override fun onEnable(context: FeatureContext) {
+        val config = context.configService.getConfig("spawn")
+        
         val service = SpawnService(
             context.plugin,
-            context.configService,
+            config,
             context.taskScheduler,
             context.regionTaskScheduler,
             context.getService(com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService::class.java),
