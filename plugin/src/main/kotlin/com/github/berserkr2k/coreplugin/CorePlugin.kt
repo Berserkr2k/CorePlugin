@@ -95,7 +95,6 @@ class CorePlugin(
     private var economyService: EconomyService? = null
     private var utilityService: UtilityService? = null
     private var shopManager: com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopManager? = null
-    private var warpService: WarpService? = null
     private var scoreboardService: ScoreboardService? = null
     private var regionManager: RegionManager? = null
     private var spawnService: SpawnService? = null
@@ -194,6 +193,7 @@ class CorePlugin(
 
             // Registro centralizado de las nuevas features modulares
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())
+            manager.register(com.github.berserkr2k.coreplugin.infrastructure.warps.WarpFeature())
 
             // Habilitación masiva
             manager.enableAll()
@@ -422,13 +422,7 @@ class CorePlugin(
         }
 
         // 13. Inicializar Módulo de Teletransporte (Warps)
-        initModule("Puntos de Teletransporte") {
-            val wService = WarpService(this, configManager, messageRegistry, serviceRegistry)
-            warpService = wService
-            serviceRegistry.register(com.github.berserkr2k.coreplugin.api.feature.warps.WarpService::class.java, wService)
-            server.pluginManager.registerEvents(wService, this)
-            WarpCommand(this, commandManager, wService, messageRegistry, serviceRegistry)
-        }
+        // Lógica migrada al Kernel central de ciclo de vida en onEnable()
 
         // 14. Inicializar Módulo de Scoreboard Modular
         initModule("Scoreboard Modular") {
@@ -487,7 +481,6 @@ class CorePlugin(
         regionManager?.let { reloadCoordinator.register("regions", it) }
         hologramService?.let { reloadCoordinator.register("holograms", it) }
         shopManager?.let { reloadCoordinator.register("shops", it) }
-        warpService?.let { reloadCoordinator.register("warps", it) }
         utilityService?.let { reloadCoordinator.register("utility", it) }
 
         val trailService = serviceRegistry.getOptional(com.github.berserkr2k.coreplugin.api.feature.trails.ProjectileTrailService::class.java)

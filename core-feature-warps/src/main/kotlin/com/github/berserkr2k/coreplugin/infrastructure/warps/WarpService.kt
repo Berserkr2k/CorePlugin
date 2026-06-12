@@ -4,10 +4,9 @@ import com.github.berserkr2k.coreplugin.common.ColorUtility
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
 import com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
-import com.github.berserkr2k.coreplugin.infrastructure.config.ModularConfigManager
+import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
-import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
@@ -25,6 +24,10 @@ import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
+import org.spongepowered.configurate.CommentedConfigurationNode
+import org.spongepowered.configurate.hocon.HoconConfigurationLoader
+import org.spongepowered.configurate.objectmapping.ObjectMapper
+import org.spongepowered.configurate.util.NamingSchemes
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -38,18 +41,20 @@ val WARP_STATE = StateContainerType { WarpStateContainer() }
 
 class WarpService(
     private val plugin: Plugin,
-    private val configManager: ModularConfigManager,
+    private val featureConfig: FeatureConfig,
     private val messageService: MessageService,
-    private val registry: ServiceRegistry
+    private val taskScheduler: TaskScheduler,
+    private val regionTaskScheduler: RegionTaskScheduler,
+    private val stateService: PlayerStateService,
+    private val folderProvider: FeatureFolderProvider
 ) : Listener, com.github.berserkr2k.coreplugin.api.feature.warps.WarpService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
-    private val taskScheduler = registry.get(TaskScheduler::class.java)
-    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
-    private val stateService = registry.get(PlayerStateService::class.java)
-
-    private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
     private val warpsDir = folderProvider.getFeatureFolder("warps").resolve("warps").toFile()
     private val warps = ConcurrentHashMap<String, WarpConfig>()
+
+    private val mapperFactory = ObjectMapper.factoryBuilder()
+        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
+        .build()
 
     private fun getWarpState(uuid: UUID): WarpStateContainer {
         return stateService.getContainer(uuid, WARP_STATE)
@@ -72,9 +77,51 @@ class WarpService(
         }
         
         loadAllWarps()
+        loadMenuConfig()
+    }
 
-        configManager.loadModuleConfig("menus/warps-selector.conf", MenuConfig::class.java, menuConfig)
-            .thenAccept { this.menuConfig = it }
+    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
+        if (!file.exists()) {
+            file.parentFile?.mkdirs()
+            file.createNewFile()
+        }
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.load()
+        val mapper = mapperFactory.get(configClass)
+        return if (root.empty()) {
+            mapper.save(defaultInstance, root)
+            loader.save(root)
+            defaultInstance
+        } else {
+            mapper.load(root) ?: defaultInstance
+        }
+    }
+
+    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
+        val loader = HoconConfigurationLoader.builder()
+            .path(file.toPath())
+            .defaultOptions { options ->
+                options.serializers { builder ->
+                    builder.registerAnnotatedObjects(mapperFactory)
+                }
+            }
+            .build()
+        val root = loader.createNode()
+        val mapper = mapperFactory.get(configClass)
+        mapper.save(instance, root)
+        loader.save(root)
+    }
+
+    private fun loadMenuConfig() {
+        val menuConfigFile = File(plugin.dataFolder, "menus/warps-selector.conf")
+        this.menuConfig = loadHoconFile(menuConfigFile, MenuConfig::class.java, menuConfig)
     }
 
     fun loadAllWarps() {
@@ -82,17 +129,14 @@ class WarpService(
         val files = warpsDir.listFiles { _, name -> name.endsWith(".conf") } ?: return
         for (file in files) {
             val name = file.nameWithoutExtension.lowercase()
-            configManager.loadModuleConfig("warps/warps/${file.name}", WarpConfig::class.java, WarpConfig(name = file.nameWithoutExtension))
-                .thenAccept { loadedWarp ->
-                    warps[name] = loadedWarp
-                }.join()
+            val loadedWarp = loadHoconFile(file, WarpConfig::class.java, WarpConfig(name = file.nameWithoutExtension))
+            warps[name] = loadedWarp
         }
     }
 
     override suspend fun reload() {
         loadAllWarps()
-        configManager.loadModuleConfig("menus/warps-selector.conf", MenuConfig::class.java, menuConfig)
-            .thenAccept { this.menuConfig = it }.join()
+        loadMenuConfig()
     }
 
     fun getWarpConfig(name: String): WarpConfig? {
@@ -131,12 +175,11 @@ class WarpService(
         val loc = Location(Bukkit.getWorld(wConfig.world), wConfig.x, wConfig.y, wConfig.z, wConfig.yaw, wConfig.pitch)
         player.teleportAsync(loc).thenAccept { success ->
             if (success) {
-                regionTaskScheduler.runAtLocation(loc, Runnable {
-                    messageService.send(player, WarpMessages.SUCCESS, PlaceholderContext.of("name" to warp.name))
-                    val soundName = wConfig.teleportSound
-                    val sound = try { Sound.valueOf(soundName) } catch (e: Exception) { Sound.ENTITY_ENDERMAN_TELEPORT }
-                    player.playSound(loc, sound, 1.0f, 1.0f)
-                })
+                messageService.send(player, WarpMessages.SUCCESS, PlaceholderContext.of("name" to warp.name))
+                val soundName = wConfig.teleportSound
+                val sound = try { Sound.valueOf(soundName) } catch (e: Exception) { Sound.ENTITY_ENDERMAN_TELEPORT }
+                player.playSound(loc, sound, 1.0f, 1.0f)
+
                 if (wConfig.cooldownSeconds > 0) {
                     val expireTime = System.currentTimeMillis() + (wConfig.cooldownSeconds * 1000L)
                     val warpState = getWarpState(player.uniqueId)
@@ -176,7 +219,10 @@ class WarpService(
 
         warps[lowercaseName] = warpConfig
         // Guardar asíncronamente
-        configManager.saveModuleConfig("warps/warps/$name.conf", WarpConfig::class.java, warpConfig)
+        taskScheduler.runAsync {
+            val file = File(warpsDir, "$name.conf")
+            saveHoconFile(file, WarpConfig::class.java, warpConfig)
+        }
     }
 
     override fun deleteWarp(name: String): Boolean {
