@@ -124,6 +124,16 @@ class CorePlugin(
         registry.register(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java, commandServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java, itemBuilderFactoryImpl)
 
+        // 4. Inicializar Base de Datos (Módulo SQL)
+        val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger)
+        databaseService = db
+        val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
+        profileRegistry = reg
+        
+        registry.register(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java, db)
+        registry.register(com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry::class.java, reg)
+        registry.register(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java, reg)
+
         // 3. Inicializar Módulo de Regiones y Protecciones (Framework Layer)
         val regionManagerImpl = RegionManager(this, configService, taskScheduler)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.regions.RegionService::class.java, regionManagerImpl)
@@ -134,16 +144,6 @@ class CorePlugin(
         server.pluginManager.registerEvents(RegionTrackingListener(regionManagerImpl), this)
 
         RegionCommand(this, commandManager, regionManagerImpl, messageRegistry)
-
-        // 4. Inicializar Base de Datos (Módulo SQL)
-        val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger)
-        databaseService = db
-        val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
-        profileRegistry = reg
-        
-        registry.register(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java, db)
-        registry.register(com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry::class.java, reg)
-        registry.register(com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry::class.java, reg)
 
         server.pluginManager.registerEvents(
             com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, reg, stateService),

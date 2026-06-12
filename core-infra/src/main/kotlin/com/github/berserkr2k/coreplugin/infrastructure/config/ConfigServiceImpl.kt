@@ -24,19 +24,13 @@ class ConfigServiceImpl(
 
     override fun getConfig(featureId: String): FeatureConfig {
         val path = basePath.resolve("features").resolve(featureId).resolve("config.conf")
-        Files.createDirectories(path.parent)
-        if (Files.notExists(path)) {
-            Files.createFile(path)
-        }
+        java.nio.file.Files.createDirectories(path.parent)
         return configs.computeIfAbsent("${featureId.lowercase()}:config.conf") { HoconFeatureConfig(path, executor) }
     }
 
     override fun getCustomConfig(featureId: String, fileName: String): FeatureConfig {
         val path = basePath.resolve("features").resolve(featureId).resolve(fileName)
-        Files.createDirectories(path.parent)
-        if (Files.notExists(path)) {
-            Files.createFile(path)
-        }
+        java.nio.file.Files.createDirectories(path.parent)
         return configs.computeIfAbsent("${featureId.lowercase()}:$fileName") { HoconFeatureConfig(path, executor) }
     }
 
