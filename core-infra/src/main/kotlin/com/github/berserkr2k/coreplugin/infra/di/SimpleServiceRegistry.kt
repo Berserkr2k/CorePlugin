@@ -29,7 +29,6 @@ class SimpleServiceRegistry : ServiceRegistry {
         if (provider != null) {
             val resolved = provider() as T
             instances[type] = resolved
-            providers.remove(type)
             return resolved
         }
         return null

@@ -14,6 +14,8 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainer
 import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
+import com.github.berserkr2k.coreplugin.api.framework.warp.WarpService as APIWarpService
+import com.github.berserkr2k.coreplugin.api.framework.warp.CompiledWarp
 import org.bukkit.Bukkit
 import org.bukkit.Location
 import org.bukkit.Sound
@@ -47,7 +49,7 @@ class WarpService(
     private val regionTaskScheduler: RegionTaskScheduler,
     private val stateService: PlayerStateService,
     private val folderProvider: FeatureFolderProvider
-) : Listener, com.github.berserkr2k.coreplugin.api.feature.warps.WarpService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
+) : Listener, APIWarpService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
     private val warpsDir = folderProvider.getFeatureFolder("warps").resolve("warps").toFile()
     private val warps = ConcurrentHashMap<String, WarpConfig>()
@@ -147,10 +149,10 @@ class WarpService(
         return warps.values
     }
 
-    override fun getWarp(name: String): com.github.berserkr2k.coreplugin.api.feature.warps.CompiledWarp? {
+    override fun getWarp(name: String): CompiledWarp? {
         val w = warps[name.lowercase()] ?: return null
         val loc = resolveLocation(w) ?: return null
-        return com.github.berserkr2k.coreplugin.api.feature.warps.CompiledWarp(
+        return CompiledWarp(
             name = w.name,
             location = loc,
             permission = w.permission,
@@ -161,11 +163,11 @@ class WarpService(
         )
     }
 
-    override fun getAllWarps(): List<com.github.berserkr2k.coreplugin.api.feature.warps.CompiledWarp> {
+    override fun getAllWarps(): List<CompiledWarp> {
         return warps.values.mapNotNull { getWarp(it.name) }
     }
 
-    override fun teleport(player: Player, warp: com.github.berserkr2k.coreplugin.api.feature.warps.CompiledWarp): java.util.concurrent.CompletableFuture<Boolean> {
+    override fun teleport(player: Player, warp: CompiledWarp): java.util.concurrent.CompletableFuture<Boolean> {
         val future = java.util.concurrent.CompletableFuture<Boolean>()
         val wConfig = warps[warp.name.lowercase()]
         if (wConfig == null) {

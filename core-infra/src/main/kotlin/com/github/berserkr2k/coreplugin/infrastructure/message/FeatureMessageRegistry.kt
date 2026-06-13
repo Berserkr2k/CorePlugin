@@ -30,7 +30,7 @@ class FeatureMessageRegistry(
     /**
      * Registra y carga el archivo de mensajes para una feature específica.
      */
-    fun registerFeature(featureId: String, defaultMessages: Map<String, String> = emptyMap()) {
+    override fun registerFeature(featureId: String, defaultMessages: Map<String, String>) {
         val folder = folderProvider.getFeatureFolder(featureId)
         val file = folder.resolve("messages.conf")
 

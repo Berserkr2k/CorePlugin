@@ -18,7 +18,7 @@ import org.bukkit.event.player.PlayerInteractEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.event.entity.EntityDismountEvent
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
-import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.api.core.message.ChairMessages
 import org.bukkit.persistence.PersistentDataType
 import org.bukkit.plugin.Plugin
 import java.util.UUID
@@ -61,7 +61,7 @@ class ChairListener(
         val up1 = block.getRelative(org.bukkit.block.BlockFace.UP)
         val up2 = up1.getRelative(org.bukkit.block.BlockFace.UP)
         if (up1.type.isSolid || up2.type.isSolid || up1.isLiquid) {
-            messageService.send(player, CoreMessages.CHAIR_UNSAFE)
+            messageService.send(player, ChairMessages.CHAIR_UNSAFE)
             return
         }
 
@@ -86,7 +86,7 @@ class ChairListener(
             }.isNotEmpty()
 
             if (alreadyOccupied) {
-                messageService.send(player, CoreMessages.CHAIR_OCCUPIED)
+                messageService.send(player, ChairMessages.CHAIR_OCCUPIED)
                 return@runAtLocation
             }
 

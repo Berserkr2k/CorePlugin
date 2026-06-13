@@ -10,12 +10,14 @@ class WarpFeature : Feature {
     private var warpService: WarpService? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("warps", WarpMessages.defaults)
+
         val config = context.configService.getConfig("warps")
         val folderProvider = context.getService(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
 
         // Inicializamos el servicio pasando dependencias limpias extraídas del contexto
         val service = WarpService(
-            context.plugin,
+            context._plugin,
             config, // Pasamos FeatureConfig en lugar del Manager completo
             context.messageService,
             context.taskScheduler,
@@ -25,11 +27,13 @@ class WarpFeature : Feature {
         )
         this.warpService = service
 
+        context.registry.register(com.github.berserkr2k.coreplugin.api.framework.warp.WarpService::class.java, service)
+
         // Autoregister de Comandos y Eventos locales
-        context.plugin.server.pluginManager.registerEvents(service, context.plugin)
+        context.registerListener(service)
         
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)
-        WarpCommand(context.plugin, commandService.manager, service, context.messageService, context.registry)
+        WarpCommand(context._plugin, commandService.manager, service, context.messageService, context.registry)
 
         // Registrar en el coordinador de retransmisión/recarga en caliente
         val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)

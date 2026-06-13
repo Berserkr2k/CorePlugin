@@ -5,7 +5,7 @@ import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.api.framework.menu.*
 import com.github.berserkr2k.coreplugin.api.framework.item.*
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
-import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.framework.economy.EconomyService
 import com.github.berserkr2k.coreplugin.common.TransactionLockManager
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.Bukkit
@@ -592,7 +592,7 @@ class ShopGuis(
         }
 
         // 3. Modificar balance en Caché y Delegar base de datos de forma asíncrona (Síncrono/Atómico en Caché)
-        economyService.withdrawCacheBehind(uuid, shopManager.marketConfig.currencyId, totalCost, "SHOP_BUY")
+        economyService.withdraw(uuid, totalCost, shopManager.marketConfig.currencyId)
             .thenAccept { success ->
                 if (success) {
                     // 4. SQL Commit Exitoso -> Entregar ítems físicos de forma segura (Main Thread)
@@ -708,7 +708,7 @@ class ShopGuis(
         }
 
         // 3. Depositar fondos en caché y delegar base de datos de forma asíncrona (Síncrono/Atómico en Caché)
-        economyService.depositCacheBehind(uuid, shopManager.marketConfig.currencyId, totalPayout, "SHOP_SELL")
+        economyService.deposit(uuid, totalPayout, shopManager.marketConfig.currencyId)
             .thenAccept { success ->
                 if (success) {
                     // 4. SQL Commit Exitoso -> Remover físicamente los ítems del inventario (Main Thread)

@@ -40,7 +40,7 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
-import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardMessages
 
 data class ActivePodium(val uuid: UUID, val location: Location)
 
@@ -271,7 +271,7 @@ class LeaderboardService(
                     it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "entry")
                 }
             }
-            entryDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(CoreMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
+            entryDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(LeaderboardMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
 
             // 2. Holograma del Encabezado - Solo para Ranks <= headerAboveRank (e.g. Rank 1)
             val config = leaderboards[leaderboardId.lowercase()] ?: CustomLeaderboardConfig(id = leaderboardId)
@@ -291,7 +291,7 @@ class LeaderboardService(
                         it.persistentDataContainer.set(displayTypeKey, PersistentDataType.STRING, "header")
                     }
                 }
-                headerDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(CoreMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
+                headerDisplay.text(miniMessage.deserialize(messageService.getRawTemplate(LeaderboardMessages.LEADERBOARD_LOADING).ifEmpty { "<gold>Cargando...</gold>" }))
             } else {
                 headerDisplays.forEach { it.remove() }
             }
@@ -543,7 +543,7 @@ class LeaderboardService(
                             .replace("<player>", entry.key)
                             .replace("<balance>", String.format("%.2f", entry.value))
                     } else {
-                        messageService.getRawTemplate(CoreMessages.LEADERBOARD_VACANT)
+                        messageService.getRawTemplate(LeaderboardMessages.LEADERBOARD_VACANT)
                             .ifEmpty { "<gray>#<pos> - Vacante</gray>" }
                             .replace("<pos>", rank.toString())
                     }

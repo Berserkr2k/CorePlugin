@@ -1,9 +1,7 @@
 package com.github.berserkr2k.coreplugin.api.framework.menu
 
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
-import org.spongepowered.configurate.objectmapping.ConfigSerializable
 
-@ConfigSerializable
 data class FillerConfig(
     val enabled: Boolean = true,
     val item: ItemConfig = ItemConfig(
@@ -12,7 +10,6 @@ data class FillerConfig(
     )
 )
 
-@ConfigSerializable
 data class MenuItemConfig(
     val slots: List<Int> = emptyList(),
     val item: ItemConfig = ItemConfig(),
@@ -21,7 +18,6 @@ data class MenuItemConfig(
     val permission: String? = null
 )
 
-@ConfigSerializable
 data class MenuConfig(
     val title: String = "<gold>Menú</gold>",
     val size: Int = 27,

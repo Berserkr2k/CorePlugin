@@ -2,7 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Feature
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext
-import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.framework.economy.EconomyService
 import com.github.berserkr2k.coreplugin.api.framework.menu.MenuService
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.api.framework.command.CommandService
@@ -15,6 +15,8 @@ class ShopFeature : Feature {
     private var shopManager: ShopManager? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("shops", ShopMessages.defaults)
+
         val config = context.configService.getConfig("shop")
         val economyService = context.getService(EconomyService::class.java)
         val menuService = context.getService(MenuService::class.java)
@@ -23,7 +25,7 @@ class ShopFeature : Feature {
 
         // 1. Initialize ShopManager using only public API contracts
         val manager = ShopManager(
-            context.plugin,
+            context._plugin,
             config,
             economyService,
             context.messageService
@@ -31,7 +33,7 @@ class ShopFeature : Feature {
         this.shopManager = manager
 
         // 2. Register local events autonomously if any exist
-        context.plugin.server.pluginManager.registerEvents(manager, context.plugin)
+        context.registerListener(manager)
 
         // 3. Register shop commands cleanly using the Cloud V2 engine from CommandService
         ShopCommand(commandService.manager, manager, context.messageService, menuService, itemFactory)

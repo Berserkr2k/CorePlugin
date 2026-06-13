@@ -4,9 +4,9 @@ include(
     "core-platform-api",
     "core-platform-paper",
     "core-infra",
-    "core-feature-economy",
+    "core-framework-economy",
     "core-feature-warps",
-    "core-feature-holograms",
+    "core-framework-hologram",
     "core-feature-leaderboard",
     "core-feature-kits",
     "core-feature-trails",
@@ -14,7 +14,7 @@ include(
     "core-feature-utility",
     "core-feature-chat",
     "core-feature-scoreboard",
-    "core-feature-regions",
+    "core-framework-regions",
     "core-feature-spawn",
     "plugin"
 )

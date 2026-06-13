@@ -10,12 +10,14 @@ class ScoreboardFeature : Feature {
     private var scoreboardService: ScoreboardService? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("scoreboard", ScoreboardMessages.defaults)
+
         val config = context.configService.getConfig("scoreboard")
         val playerStateService = context.getService(PlayerStateService::class.java)
 
         // 1. Initialize the service utilizing only abstract API tools from the context
         val service = ScoreboardService(
-            context.plugin,
+            context._plugin,
             config,
             context.taskScheduler,
             playerStateService,
@@ -24,7 +26,7 @@ class ScoreboardFeature : Feature {
         this.scoreboardService = service
 
         // 2. Register local scoreboard events (e.g., PlayerJoin/Quit scoreboard setup) autonomously
-        context.plugin.server.pluginManager.registerEvents(service, context.plugin)
+        context.registerListener(service)
 
         // 3. Register commands using the framework's CommandService (Cloud V2)
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)

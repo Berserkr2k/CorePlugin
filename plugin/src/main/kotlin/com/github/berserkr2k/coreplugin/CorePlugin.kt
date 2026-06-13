@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin
 
 import com.github.berserkr2k.coreplugin.common.LegacyPlaceholderBridge
 import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
+import com.github.berserkr2k.coreplugin.api.platform.PluginHandle
 import com.github.berserkr2k.coreplugin.infra.di.SimpleServiceRegistry
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
@@ -9,6 +10,7 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.ThreadAssertion
 import com.github.berserkr2k.coreplugin.platform.paper.PaperTaskScheduler
 import com.github.berserkr2k.coreplugin.platform.paper.PaperRegionTaskScheduler
 import com.github.berserkr2k.coreplugin.platform.paper.PaperThreadAssertion
+import com.github.berserkr2k.coreplugin.platform.paper.PaperPluginHandle
 import com.github.berserkr2k.coreplugin.api.core.event.CoreEventBus
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.infra.state.SimplePlayerStateService
@@ -44,8 +46,9 @@ class CorePlugin(
         private set
     lateinit var commandManager: LegacyPaperCommandManager<CommandSender>
         private set
-    lateinit var reloadCoordinator: com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator
+    lateinit var reloadCoordinator: com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator
         private set
+    private lateinit var pluginHandle: PluginHandle
 
     private var databaseService: DatabaseServiceImpl? = null
     private var profileRegistry: com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry? = null
@@ -54,6 +57,7 @@ class CorePlugin(
     override fun onEnable() {
         val registry = SimpleServiceRegistry()
         serviceRegistry = registry
+        pluginHandle = PaperPluginHandle(this)
 
         val taskScheduler = PaperTaskScheduler(this)
         val regionTaskScheduler = PaperRegionTaskScheduler(this)
@@ -76,6 +80,7 @@ class CorePlugin(
         registry.register(org.bukkit.plugin.Plugin::class.java, this)
         registry.register(org.bukkit.plugin.java.JavaPlugin::class.java, this)
         registry.register(CorePlugin::class.java, this)
+        registry.register(PluginHandle::class.java, pluginHandle)
 
         // 1. Inicializar estructura modular de carpetas y migraciones
         val bootstrapper = com.github.berserkr2k.coreplugin.infrastructure.filesystem.RuntimeFolderBootstrapper(dataFolderPath, logger)
@@ -87,19 +92,12 @@ class CorePlugin(
 
         // 2b. Inicializar ReloadCoordinator
         reloadCoordinator = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator(logger)
-        registry.register(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator::class.java, reloadCoordinator)
+        registry.register(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java, reloadCoordinator)
 
-        messageRegistry.registerFeature("core", com.github.berserkr2k.coreplugin.api.core.message.CoreMessages.defaults)
-        messageRegistry.registerFeature("spawn", com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnMessages.defaults)
+        val coreDefaults = com.github.berserkr2k.coreplugin.api.core.message.CoreMessages.defaults +
+                com.github.berserkr2k.coreplugin.api.core.message.ChairMessages.defaults
+        messageRegistry.registerFeature("core", coreDefaults)
         messageRegistry.registerFeature("regions", com.github.berserkr2k.coreplugin.infrastructure.regions.RegionMessages.defaults)
-        messageRegistry.registerFeature("economy", com.github.berserkr2k.coreplugin.infrastructure.economy.EconomyMessages.defaults)
-        messageRegistry.registerFeature("utility", com.github.berserkr2k.coreplugin.infrastructure.utilitycommands.UtilityMessages.defaults)
-        messageRegistry.registerFeature("shops", com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop.ShopMessages.defaults)
-        messageRegistry.registerFeature("warps", com.github.berserkr2k.coreplugin.infrastructure.warps.WarpMessages.defaults)
-        messageRegistry.registerFeature("kits", com.github.berserkr2k.coreplugin.infrastructure.kits.KitMessages.defaults)
-        messageRegistry.registerFeature("holograms", com.github.berserkr2k.coreplugin.infrastructure.hologram.HologramMessages.defaults)
-        messageRegistry.registerFeature("leaderboards", com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardMessages.defaults)
-        messageRegistry.registerFeature("trails", com.github.berserkr2k.coreplugin.infrastructure.mechanics.trails.TrailMessages.defaults)
 
         placeholderBridge = LegacyPlaceholderBridge()
         registry.register(LegacyPlaceholderBridge::class.java, placeholderBridge)
@@ -189,14 +187,14 @@ class CorePlugin(
         try {
             // Inicializar Motor de Ciclo de Vida Enterprise para Características Modernas
             val context = com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext(
-                plugin = this,
+                platform = pluginHandle,
                 registry = serviceRegistry,
-                commandManager = commandManager,
                 taskScheduler = taskScheduler,
                 regionTaskScheduler = regionTaskScheduler,
                 messageService = messageRegistry,
                 configService = configService,
-                databaseService = databaseService
+                databaseService = databaseService,
+                _plugin = this
             )
 
             val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)

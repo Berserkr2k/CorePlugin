@@ -3,6 +3,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.chat
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatMessages
 import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver
@@ -39,7 +40,7 @@ class PrivateMessageCommand(
                         val message = context.get<String>("message")
 
                         if (sender is Player && sender.uniqueId == target.uniqueId) {
-                            messageService.send(sender, CoreMessages.CHAT_PM_CANNOT_MSG_SELF)
+                            messageService.send(sender, ChatMessages.CHAT_PM_CANNOT_MSG_SELF)
                             return@handler
                         }
 
@@ -64,13 +65,13 @@ class PrivateMessageCommand(
 
                         val targetUuid = lastMessagedTarget[sender.uniqueId]
                         if (targetUuid == null) {
-                            messageService.send(sender, CoreMessages.CHAT_REPLY_NO_TARGET)
+                            messageService.send(sender, ChatMessages.CHAT_REPLY_NO_TARGET)
                             return@handler
                         }
 
                         val target = Bukkit.getPlayer(targetUuid)
                         if (target == null || !target.isOnline) {
-                            messageService.send(sender, CoreMessages.CHAT_PM_PLAYER_NOT_FOUND)
+                            messageService.send(sender, ChatMessages.CHAT_PM_PLAYER_NOT_FOUND)
                             return@handler
                         }
 
@@ -93,14 +94,14 @@ class PrivateMessageCommand(
 
                     val profile = profileRegistry.getProfile(sender.uniqueId)
                     if (profile == null) {
-                        messageService.send(sender, CoreMessages.CHAT_PROFILE_ERROR)
+                        messageService.send(sender, ChatMessages.CHAT_PROFILE_ERROR)
                         return@handler
                     }
 
                     profile.socialSpy = !profile.socialSpy
                     profile.markDirty()
 
-                    val msgKey = if (profile.socialSpy) CoreMessages.CHAT_SOCIALSPY_ENABLED else CoreMessages.CHAT_SOCIALSPY_DISABLED
+                    val msgKey = if (profile.socialSpy) ChatMessages.CHAT_SOCIALSPY_ENABLED else ChatMessages.CHAT_SOCIALSPY_DISABLED
                     messageService.send(sender, msgKey)
                 }
         )
@@ -122,7 +123,7 @@ class PrivateMessageCommand(
         // Enviar al emisor
         messageService.send(
             sender,
-            CoreMessages.CHAT_PM_SENT_FORMAT,
+            ChatMessages.CHAT_PM_SENT_FORMAT,
             PlaceholderContext.of(
                 TagResolver.resolver(
                     Placeholder.parsed("target", targetName),
@@ -134,7 +135,7 @@ class PrivateMessageCommand(
         // Enviar al receptor
         messageService.send(
             target,
-            CoreMessages.CHAT_PM_RECEIVED_FORMAT,
+            ChatMessages.CHAT_PM_RECEIVED_FORMAT,
             PlaceholderContext.of(
                 TagResolver.resolver(
                     Placeholder.parsed("sender", senderName),
@@ -158,7 +159,7 @@ class PrivateMessageCommand(
             if (spyProfile != null && spyProfile.socialSpy) {
                 messageService.send(
                     spyPlayer,
-                    CoreMessages.CHAT_PM_SOCIALSPY_FORMAT,
+                    ChatMessages.CHAT_PM_SOCIALSPY_FORMAT,
                     PlaceholderContext.of(
                         TagResolver.resolver(
                             Placeholder.parsed("sender", sender.name),

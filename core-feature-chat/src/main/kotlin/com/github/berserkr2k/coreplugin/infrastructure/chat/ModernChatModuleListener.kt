@@ -12,6 +12,7 @@ import com.github.berserkr2k.coreplugin.api.core.state.StateContainerType
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatMessages
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import io.papermc.paper.chat.ChatRenderer
 import io.papermc.paper.event.player.AsyncChatEvent
@@ -78,7 +79,7 @@ class ModernChatModuleListener(
                 val remaining = (required - elapsed) / 1000.0
                 messageService.send(
                     player,
-                    CoreMessages.CHAT_COOLDOWN,
+                    ChatMessages.CHAT_COOLDOWN,
                     PlaceholderContext.of(Placeholder.parsed("cooldown", String.format("%.1f", remaining)))
                 )
                 return null
@@ -88,7 +89,7 @@ class ModernChatModuleListener(
         // 2. Link Blocker
         if (filter.blockLinks && !player.hasPermission("core.chat.bypass.links")) {
             if (LINK_PATTERN.matcher(rawMessage).find()) {
-                messageService.send(player, CoreMessages.CHAT_LINK_BLOCKED)
+                messageService.send(player, ChatMessages.CHAT_LINK_BLOCKED)
                 return null
             }
         }

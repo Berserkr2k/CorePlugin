@@ -1,7 +1,7 @@
 package com.github.berserkr2k.coreplugin.infrastructure.mechanics.shop
 
 import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
-import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.framework.economy.EconomyService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import org.bukkit.plugin.Plugin
 import java.io.File

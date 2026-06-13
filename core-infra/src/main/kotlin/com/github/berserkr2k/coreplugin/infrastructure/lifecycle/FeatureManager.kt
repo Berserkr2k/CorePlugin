@@ -15,11 +15,11 @@ class FeatureManager(private val context: FeatureContext) {
         for (feature in features.values) {
             // Validación Enterprise de dependencias críticas
             if (feature.requiresDatabase && context.databaseService == null) {
-                context.plugin.slF4JLogger.warn("⚠️ Módulo [${feature.id}] DESACTIVADO: Requiere una Base de Datos activa.")
+                context.platform.logger.warning("⚠️ Módulo [${feature.id}] DESACTIVADO: Requiere una Base de Datos activa.")
                 continue
             }
             if (feature.requiresEconomy && !isEconomyPresent()) {
-                context.plugin.slF4JLogger.warn("⚠️ Módulo [${feature.id}] DESACTIVADO: Requiere el módulo de Economía habilitado.")
+                context.platform.logger.warning("⚠️ Módulo [${feature.id}] DESACTIVADO: Requiere el módulo de Economía habilitado.")
                 continue
             }
 
@@ -27,9 +27,10 @@ class FeatureManager(private val context: FeatureContext) {
                 feature.onLoad(context)
                 feature.onEnable(context)
                 enabledFeatures.add(feature)
-                context.plugin.slF4JLogger.info("⚡ Módulo [${feature.id}] cargado exitosamente.")
+                context.platform.logger.info("⚡ Módulo [${feature.id}] cargado exitosamente.")
             }.onFailure { t ->
-                context.plugin.slF4JLogger.error("❌ Error crítico al inicializar el módulo [${feature.id}]: ${t.message}", t)
+                context.platform.logger.severe("❌ Error crítico al inicializar el módulo [${feature.id}]: ${t.message}")
+                t.printStackTrace()
             }
         }
     }
@@ -41,6 +42,7 @@ class FeatureManager(private val context: FeatureContext) {
     }
 
     private fun isEconomyPresent(): Boolean {
-        return context.registry.getOptional(com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService::class.java) != null
+        return context.registry.getOptional(com.github.berserkr2k.coreplugin.api.framework.economy.EconomyService::class.java) != null
     }
 }
+

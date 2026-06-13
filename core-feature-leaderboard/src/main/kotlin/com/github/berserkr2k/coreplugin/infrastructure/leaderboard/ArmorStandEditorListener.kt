@@ -37,7 +37,7 @@ import net.kyori.adventure.text.minimessage.MiniMessage
 import org.bukkit.Bukkit
 import com.github.berserkr2k.coreplugin.api.feature.leaderboard.LeaderboardService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
-import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.infrastructure.leaderboard.LeaderboardMessages
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 
 class ArmorStandEditorStateContainer(
@@ -120,7 +120,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
+                messageService.send(player, LeaderboardMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -142,7 +142,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
+                messageService.send(player, LeaderboardMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -165,7 +165,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
+                messageService.send(player, LeaderboardMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
             return
         }
@@ -209,7 +209,7 @@ class ArmorStandEditorListener(
             if (stand != null) {
                 ArmorStandEditorGui.open(plugin, player, stand)
             } else {
-                messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
+                messageService.send(player, LeaderboardMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             }
         }
     }
@@ -289,7 +289,7 @@ class ArmorStandEditorListener(
             }
             val scaleName = if (scale == ScaleMode.COARSE) "GRUESO" else "FINO"
             
-            val actionbarTemplate = messageService.getRawTemplate(CoreMessages.LEADERBOARD_POSE_ACTIONBAR).ifEmpty {
+            val actionbarTemplate = messageService.getRawTemplate(LeaderboardMessages.LEADERBOARD_POSE_ACTIONBAR).ifEmpty {
                 "<gold><bold><part> (<axis>): <angle>°</bold></gold> <gray>(Modo: <mode>)</gray>"
             }
             player.sendActionBar(miniMessage.deserialize(
@@ -343,14 +343,14 @@ class ArmorStandEditorListener(
         
         val stand = Bukkit.getEntity(targetStandUuid) as? ArmorStand
         if (stand == null) {
-            messageService.send(player, CoreMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
+            messageService.send(player, LeaderboardMessages.LEADERBOARD_ARMORSTAND_NOT_FOUND)
             return
         }
         
         regionTaskScheduler.runAtLocation(stand.location) {
             stand.customName(deserialized)
             stand.isCustomNameVisible = true
-            messageService.send(player, CoreMessages.LEADERBOARD_NAME_ASSIGNED)
+            messageService.send(player, LeaderboardMessages.LEADERBOARD_NAME_ASSIGNED)
         }
     }
 }

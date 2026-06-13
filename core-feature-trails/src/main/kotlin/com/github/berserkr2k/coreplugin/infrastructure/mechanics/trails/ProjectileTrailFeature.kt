@@ -12,13 +12,15 @@ class ProjectileTrailFeature : Feature {
     private var trailManager: ProjectileTrailManager? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("trails", TrailMessages.defaults)
+
         val config = context.configService.getConfig("trails")
         val menuService = context.getService(MenuService::class.java)
         val itemFactory = context.getService(ItemBuilderFactory::class.java)
 
         // 1. Initialize the manager using abstract API components from the context
         val manager = ProjectileTrailManager(
-            context.plugin,
+            context._plugin,
             config,
             context.taskScheduler,
             context.messageService
@@ -29,10 +31,7 @@ class ProjectileTrailFeature : Feature {
         context.registry.register(ProjectileTrailService::class.java, manager)
 
         // 3. Register local events autonomously 
-        context.plugin.server.pluginManager.registerEvents(
-            ProjectileTrailListener(context.plugin, manager, context.taskScheduler), 
-            context.plugin
-        )
+        context.registerListener(ProjectileTrailListener(context._plugin, manager, context.taskScheduler))
 
         // 4. Register commands using the CommandService abstraction (Cloud V2)
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)

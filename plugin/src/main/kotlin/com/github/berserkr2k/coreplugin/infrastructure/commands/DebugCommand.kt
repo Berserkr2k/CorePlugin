@@ -1,6 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.commands
 
-import com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator
+import com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator
 import com.github.berserkr2k.coreplugin.infrastructure.message.FeatureMessageRegistry
 import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService

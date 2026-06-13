@@ -8,14 +8,16 @@ import com.github.berserkr2k.coreplugin.infrastructure.spawn.command.SpawnComman
 
 class SpawnFeature : Feature {
     override val id = "spawn"
-    
+
     private var spawnService: SpawnService? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("spawn", SpawnMessages.defaults)
+
         val config = context.configService.getConfig("spawn")
-        
+
         val service = SpawnService(
-            context.plugin,
+            context._plugin,
             config,
             context.taskScheduler,
             context.regionTaskScheduler,
@@ -24,9 +26,8 @@ class SpawnFeature : Feature {
         )
         this.spawnService = service
 
-        // Autonomía: La feature registra sus propios listeners y comandos usando el contexto
-        context.plugin.server.pluginManager.registerEvents(SpawnListener(service, context.regionTaskScheduler), context.plugin)
-        
+        context.registerListener(SpawnListener(service, context.regionTaskScheduler))
+
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)
         SpawnCommand(commandService.manager, service, context.messageService)
 
@@ -34,3 +35,4 @@ class SpawnFeature : Feature {
         reloadCoordinator?.register("spawn", service)
     }
 }
+

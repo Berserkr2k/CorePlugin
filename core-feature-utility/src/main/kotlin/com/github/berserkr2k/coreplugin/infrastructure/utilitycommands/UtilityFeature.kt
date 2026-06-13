@@ -9,10 +9,12 @@ class UtilityFeature : Feature {
     private var utilityService: UtilityService? = null
 
     override fun onEnable(context: FeatureContext) {
+        context.messageService.registerFeature("utility", UtilityMessages.defaults)
+
         val config = context.configService.getConfig("utility")
 
         // 1. Initialize the Utility internal service
-        val service = UtilityService(context.plugin, config)
+        val service = UtilityService(context._plugin, config)
         this.utilityService = service
 
         // 2. Fetch the abstract CommandService from the context (Cloud V2 Engine)
@@ -20,16 +22,16 @@ class UtilityFeature : Feature {
         val manager = commandService.manager
 
         // 3. Register ALL utility sub-commands autonomously using the clean API manager
-        AnvilCommand(context.plugin, manager, service, context.messageService)
-        BroadcastCommand(context.plugin, manager, service, context.messageService)
-        EnderChestCommand(context.plugin, manager, context.messageService)
-        ExpCommand(context.plugin, manager, context.messageService)
-        FeedCommand(context.plugin, manager, context.messageService)
-        FlyCommand(context.plugin, manager, service, context.messageService)
-        HatCommand(context.plugin, manager, context.messageService)
-        HealCommand(context.plugin, manager, context.messageService)
-        SendTitleCommand(context.plugin, manager, service, context.messageService)
-        SpeedCommand(context.plugin, manager, context.messageService)
+        AnvilCommand(context._plugin, manager, service, context.messageService)
+        BroadcastCommand(context._plugin, manager, service, context.messageService)
+        EnderChestCommand(context._plugin, manager, context.messageService)
+        ExpCommand(context._plugin, manager, context.messageService)
+        FeedCommand(context._plugin, manager, context.messageService)
+        FlyCommand(context._plugin, manager, service, context.messageService)
+        HatCommand(context._plugin, manager, context.messageService)
+        HealCommand(context._plugin, manager, context.messageService)
+        SendTitleCommand(context._plugin, manager, service, context.messageService)
+        SpeedCommand(context._plugin, manager, context.messageService)
 
         // 4. Register into the reload coordinator if necessary
         val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)

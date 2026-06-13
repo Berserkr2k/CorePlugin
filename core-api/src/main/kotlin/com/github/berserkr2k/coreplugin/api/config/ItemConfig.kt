@@ -1,8 +1,5 @@
 package com.github.berserkr2k.coreplugin.api.config
 
-import org.spongepowered.configurate.objectmapping.ConfigSerializable
-
-@ConfigSerializable
 data class ItemConfig(
     val material: String = "AIR",
     val skullTexture: String? = null, // base64

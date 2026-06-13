@@ -9,6 +9,7 @@ import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
+import com.github.berserkr2k.coreplugin.infrastructure.chat.ChatMessages
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder
 import org.bukkit.Bukkit
 import org.bukkit.Material
@@ -76,7 +77,7 @@ class ColorCommand(
     private fun openColorMenu(player: Player) {
         val profile = profileRegistry.getProfile(player.uniqueId)
         if (profile == null) {
-            messageService.send(player, CoreMessages.CHAT_PROFILE_ERROR)
+            messageService.send(player, ChatMessages.CHAT_PROFILE_ERROR)
             return
         }
 
@@ -133,7 +134,7 @@ class ColorCommand(
                             
                             messageService.send(
                                 p,
-                                CoreMessages.CHAT_COLOR_CHANGED,
+                                ChatMessages.CHAT_COLOR_CHANGED,
                                 PlaceholderContext.of(Placeholder.parsed("color", option.displayName))
                             )
                             
@@ -143,7 +144,7 @@ class ColorCommand(
                             })
                         } else {
                             p.playSound(p.location, Sound.ENTITY_ITEM_BREAK, 1.0f, 0.8f)
-                            messageService.send(p, CoreMessages.CHAT_COLOR_NO_PERMISSION)
+                            messageService.send(p, ChatMessages.CHAT_COLOR_NO_PERMISSION)
                         }
                     }
                     .build()
@@ -173,7 +174,7 @@ class ColorCommand(
                     profile.chatColor = null
                     profile.markDirty()
                     p.playSound(p.location, Sound.BLOCK_LAVA_EXTINGUISH, 1.0f, 1.5f)
-                    messageService.send(p, CoreMessages.CHAT_COLOR_RESET)
+                    messageService.send(p, ChatMessages.CHAT_COLOR_RESET)
                     
                     regionTaskScheduler.runAtLocation(p.location, Runnable {
                         openColorMenu(p)

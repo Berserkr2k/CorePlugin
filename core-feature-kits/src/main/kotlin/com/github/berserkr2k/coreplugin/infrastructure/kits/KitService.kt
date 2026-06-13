@@ -7,7 +7,7 @@ import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
 import com.github.berserkr2k.coreplugin.api.core.config.FeatureConfig
 import com.github.berserkr2k.coreplugin.api.feature.kits.ClaimResult
-import com.github.berserkr2k.coreplugin.api.feature.economy.EconomyService
+import com.github.berserkr2k.coreplugin.api.framework.economy.EconomyService
 import com.github.berserkr2k.coreplugin.api.config.ItemConfig
 import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
@@ -211,7 +211,7 @@ class KitService(
 
             if (!isGift && config.cost > 0.0) {
                 val costBD = BigDecimal(config.cost)
-                val success = economyService.withdrawCacheBehind(player.uniqueId, config.currency, costBD, "KIT_PURCHASE_$kitId").join()
+                val success = economyService.withdraw(player.uniqueId, costBD, config.currency).join()
                 if (!success) {
                     return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.PURCHASE_FAILED).ifEmpty { "<red>Hubo un fallo al procesar la compra del kit.</red>" })
                 }

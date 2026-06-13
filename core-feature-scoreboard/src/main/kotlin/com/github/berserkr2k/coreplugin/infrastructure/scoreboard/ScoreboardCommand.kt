@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.scoreboard
 
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.CoreMessages
+import com.github.berserkr2k.coreplugin.infrastructure.scoreboard.ScoreboardMessages
 import com.github.berserkr2k.coreplugin.common.ColorUtility
 import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
@@ -35,9 +36,9 @@ class ScoreboardCommand(
                 state.visible = !state.visible
                 
                 if (state.visible) {
-                    messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_ON)
+                    messageService.send(sender, ScoreboardMessages.SCOREBOARD_TOGGLE_ON)
                 } else {
-                    messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_OFF)
+                    messageService.send(sender, ScoreboardMessages.SCOREBOARD_TOGGLE_OFF)
                 }
             }
         )
@@ -56,9 +57,9 @@ class ScoreboardCommand(
                     state.visible = !state.visible
                     
                     if (state.visible) {
-                        messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_ON)
+                        messageService.send(sender, ScoreboardMessages.SCOREBOARD_TOGGLE_ON)
                     } else {
-                        messageService.send(sender, CoreMessages.SCOREBOARD_TOGGLE_OFF)
+                        messageService.send(sender, ScoreboardMessages.SCOREBOARD_TOGGLE_OFF)
                     }
                 }
         )
@@ -74,7 +75,7 @@ class ScoreboardCommand(
                 .handler { context ->
                     val sender = context.sender()
                     scoreboardService.reloadConfig().thenRun {
-                        messageService.send(sender, CoreMessages.SCOREBOARD_RELOADED)
+                        messageService.send(sender, ScoreboardMessages.SCOREBOARD_RELOADED)
                     }
                 }
         )

@@ -17,7 +17,12 @@ enum class LeaderboardMessages(override val path: String) : MessageKey {
     WRITE_NAME("write-name"),
     SCALE_CHANGED("scale-changed"),
     EQUIP_SYNCED("equip-synced"),
-    POSE_TOOL("pose-tool");
+    POSE_TOOL("pose-tool"),
+    LEADERBOARD_LOADING("loading"),
+    LEADERBOARD_VACANT("vacant"),
+    LEADERBOARD_ARMORSTAND_NOT_FOUND("armorstand-not-found"),
+    LEADERBOARD_NAME_ASSIGNED("name-assigned"),
+    LEADERBOARD_POSE_ACTIONBAR("pose-actionbar");
 
     override val feature: String = "leaderboards"
 
@@ -37,7 +42,12 @@ enum class LeaderboardMessages(override val path: String) : MessageKey {
             "write-name" to "<gold>✏ Escribe el nombre del ArmorStand en el chat (Soporta colores con &):</gold>",
             "scale-changed" to "<green>✔ Escala de ajuste cambiada a <scale>.</green>",
             "equip-synced" to "<green>✔ ¡El equipamiento del ArmorStand se ha sincronizado exitosamente!</green>",
-            "pose-tool" to "<green>✔ ¡Recibiste la <gold>Herramienta de Pose</gold>! Ajusta libremente. Sneak + Click Derecho para volver.</green>"
+            "pose-tool" to "<green>✔ ¡Recibiste la <gold>Herramienta de Pose</gold>! Ajusta libremente. Sneak + Click Derecho para volver.</green>",
+            "loading" to "<gold>Cargando datos del podio...</gold>",
+            "vacant" to "<gray>#<pos> - Vacante</gray>",
+            "armorstand-not-found" to "<red>El ArmorStand ya no existe.</red>",
+            "name-assigned" to "<green>¡Nombre asignado con éxito!</green>",
+            "pose-actionbar" to "<gold><bold><part> (<axis>): <angle>°</bold></gold> <gray>(Modo: <mode>)</gray>"
         )
     }
 }

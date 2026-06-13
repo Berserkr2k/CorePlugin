@@ -21,4 +21,9 @@ interface MessageService {
      * Obtiene el template crudo (MiniMessage string) para una llave de mensaje específica.
      */
     fun getRawTemplate(key: MessageKey): String
+
+    /**
+     * Registra las llaves y mensajes por defecto de una característica.
+     */
+    fun registerFeature(featureId: String, defaultMessages: Map<String, String> = emptyMap())
 }
