@@ -41,9 +41,15 @@ class TrailGuis(
             occupiedSlots.add(22)
         }
 
+        org.bukkit.Bukkit.getLogger().info("[CorePlugin] Opening trails menu for player ${player.name}")
         val sortedTrails = trailManager.trails.values.sortedBy { it.id }
+        org.bukkit.Bukkit.getLogger().info("[CorePlugin] GUI received ${sortedTrails.size} trails.")
+        sortedTrails.forEach {
+            org.bukkit.Bukkit.getLogger().info("[CorePlugin]  - Trail ID: ${it.id}, permission: ${it.permission}, guiSlot: ${it.guiSlot}, material: ${it.item.material}")
+        }
 
         val drawTrail = { config: TrailConfig, slot: Int ->
+            org.bukkit.Bukkit.getLogger().info("[CorePlugin] Drawing trail ${config.id} in slot $slot")
             val trailId = config.id
             val hasPerm = player.hasPermission(config.permission)
             val isActive = activeTrail == trailId
