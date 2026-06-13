@@ -32,32 +32,9 @@ class TablistService(
     }
 
     private fun loadConfig(): TablistConfig {
-        val file = plugin.dataFolder.toPath().resolve("core/tablist.conf")
-        if (java.nio.file.Files.notExists(file)) {
-            java.nio.file.Files.createDirectories(file.parent)
-            java.nio.file.Files.createFile(file)
-        }
-        val mapperFactory = ObjectMapper.factoryBuilder()
-            .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-            .build()
-        val loader = HoconConfigurationLoader.builder()
-            .path(file)
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(TablistConfig::class.java)
-        return if (root.empty()) {
-            val defaultInstance = TablistConfig()
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: TablistConfig()
-        }
+        val file = plugin.dataFolder.toPath().resolve("config/tablist.conf").toFile()
+        val configService = registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!
+        return configService.loadConfig(file, TablistConfig::class.java, TablistConfig())
     }
 
     override suspend fun reload() {

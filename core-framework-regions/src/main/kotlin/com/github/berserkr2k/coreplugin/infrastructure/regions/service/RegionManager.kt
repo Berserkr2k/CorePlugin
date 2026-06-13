@@ -6,9 +6,6 @@ import com.github.berserkr2k.coreplugin.infrastructure.regions.RegionConfig
 import com.github.berserkr2k.coreplugin.infrastructure.regions.compiler.RegionCompiler
 import com.github.berserkr2k.coreplugin.infrastructure.regions.spatial.SpatialRegionIndex
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
 import org.bukkit.plugin.Plugin
 import java.io.File
 import java.util.concurrent.atomic.AtomicReference
@@ -110,18 +107,10 @@ class RegionManager(
     private val currentIndex = AtomicReference(SpatialRegionIndex())
     private val regionsMap = ConcurrentHashMap<String, RegionConfig>()
 
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
-
     private fun loadConfig() {
         try {
-            val featureConfig = configService.getCustomConfig("regions", "regions.conf")
-            val field = featureConfig.javaClass.getDeclaredField("rootNode")
-            field.isAccessible = true
-            val rootNode = field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
-            val mapper = mapperFactory.get(GlobalRegionConfig::class.java)
-            this.config = mapper.load(rootNode) ?: GlobalRegionConfig()
+            val file = File(plugin.dataFolder, "config/regions.conf")
+            this.config = configService.loadConfig(file, GlobalRegionConfig::class.java, GlobalRegionConfig())
         } catch (e: Exception) {
             plugin.logger.severe("Error al cargar la configuración global de regiones: ${e.message}")
             this.config = GlobalRegionConfig()
@@ -136,8 +125,6 @@ class RegionManager(
     }
 
     override suspend fun reload() {
-        val featureConfig = configService.getCustomConfig("regions", "regions.conf")
-        featureConfig.reload()
         loadConfig()
         loadAllRegions()
     }
@@ -220,11 +207,8 @@ class RegionManager(
     }
 
     private fun getRegionsDirectory(): File {
-        val dir = File(plugin.dataFolder, "regions/regions")
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        return dir
+        val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
+        return folderProvider.getFeatureDataFolder("regions").toFile()
     }
 
     private fun getRegionFile(id: String): File {
@@ -238,18 +222,8 @@ class RegionManager(
         regionsMap.clear()
         for (file in files) {
             try {
-                val loader = HoconConfigurationLoader.builder()
-                    .path(file.toPath())
-                    .defaultOptions { options ->
-                        options.serializers { builder ->
-                            builder.registerAnnotatedObjects(mapperFactory)
-                        }
-                    }
-                    .build()
-                val root = loader.load()
-                val mapper = mapperFactory.get(RegionConfig::class.java)
-                val region = mapper.load(root)
-                if (region != null && region.id.isNotEmpty()) {
+                val region = configService.loadConfig(file, RegionConfig::class.java, RegionConfig())
+                if (region.id.isNotEmpty()) {
                     regionsMap[region.id.lowercase()] = region
                 }
             } catch (e: Exception) {
@@ -257,24 +231,13 @@ class RegionManager(
             }
         }
         rebuildIndex()
-        plugin.logger.info("¡Se cargaron con éxito ${regionsMap.size} regiones desde la carpeta regions/!")
+        plugin.logger.info("¡Se cargaron con éxito ${regionsMap.size} regiones desde la carpeta data/regions!")
     }
 
     private fun saveRegionToFile(region: RegionConfig) {
         val file = getRegionFile(region.id)
         try {
-            val loader = HoconConfigurationLoader.builder()
-                .path(file.toPath())
-                .defaultOptions { options ->
-                    options.serializers { builder ->
-                        builder.registerAnnotatedObjects(mapperFactory)
-                    }
-                }
-                .build()
-            val root = loader.load()
-            val mapper = mapperFactory.get(RegionConfig::class.java)
-            mapper.save(region, root)
-            loader.save(root)
+            configService.saveConfig(file, RegionConfig::class.java, region)
         } catch (e: Exception) {
             plugin.logger.severe("Error al guardar la región ${region.id} en el archivo: ${e.message}")
         }

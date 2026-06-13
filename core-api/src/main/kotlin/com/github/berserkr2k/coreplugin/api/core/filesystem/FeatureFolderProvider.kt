@@ -8,4 +8,14 @@ interface FeatureFolderProvider {
      * Si el directorio no existe, se crea automáticamente.
      */
     fun getFeatureFolder(featureId: String): Path
+
+    /**
+     * Devuelve la ruta (Path) del subdirectorio de configuración de una feature específica.
+     */
+    fun getFeatureConfigFolder(featureId: String): Path
+
+    /**
+     * Devuelve la ruta (Path) del subdirectorio de datos (contenido generado) de una feature específica.
+     */
+    fun getFeatureDataFolder(featureId: String): Path
 }

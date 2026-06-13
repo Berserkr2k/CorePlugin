@@ -125,7 +125,7 @@ class CorePlugin(
         registry.register(com.github.berserkr2k.coreplugin.api.framework.permission.PermissionService::class.java, permissionServiceImpl)
 
         // 4. Inicializar Base de Datos (Módulo SQL)
-        val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger)
+        val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger, configService)
         databaseService = db
         val reg = com.github.berserkr2k.coreplugin.domain.user.ProfileRegistry(db, logger)
         profileRegistry = reg

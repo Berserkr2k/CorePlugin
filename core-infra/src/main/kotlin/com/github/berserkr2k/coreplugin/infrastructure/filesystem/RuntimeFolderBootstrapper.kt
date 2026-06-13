@@ -23,7 +23,7 @@ class RuntimeFolderBootstrapper(
 
     override fun getFeatureFolder(featureId: String): Path {
         return folderCache.computeIfAbsent(featureId.lowercase()) { id ->
-            val folder = dataFolder.resolve(id)
+            val folder = dataFolder.resolve("features").resolve(id)
             if (Files.notExists(folder)) {
                 Files.createDirectories(folder)
             }
@@ -31,21 +31,34 @@ class RuntimeFolderBootstrapper(
         }
     }
 
+    override fun getFeatureConfigFolder(featureId: String): Path {
+        val path = getFeatureFolder(featureId).resolve("config")
+        if (Files.notExists(path)) {
+            Files.createDirectories(path)
+        }
+        return path
+    }
+
+    override fun getFeatureDataFolder(featureId: String): Path {
+        val path = getFeatureFolder(featureId).resolve("data")
+        if (Files.notExists(path)) {
+            Files.createDirectories(path)
+        }
+        return path
+    }
+
     private fun bootstrap() {
         try {
-            // 1. Crear directorios runtime
+            // 1. Crear directorios runtime oficiales
             val folders = listOf(
-                "core", "core/storage",
-                "spawn",
-                "regions", "regions/regions",
-                "economy", "economy/currencies", "economy/leaderboards",
-                "kits", "kits/kits",
-                "holograms", "holograms/holograms",
-                "shops", "shops/shops",
-                "menus", "menus/layouts",
-                "utility",
-                "warps", "warps/warps",
-                "trails", "trails/trails"
+                "config",
+                "features",
+                "data",
+                "data/database",
+                "data/regions",
+                "data/cache",
+                "data/backups",
+                "logs"
             )
 
             for (f in folders) {
@@ -53,34 +66,59 @@ class RuntimeFolderBootstrapper(
                 if (Files.notExists(path)) {
                     Files.createDirectories(path)
                 }
-                // Cachear las carpetas raíz de las features
-                if (!f.contains("/")) {
-                    folderCache[f] = path
-                }
             }
 
-            // 2. Ejecutar migraciones de archivos de configuración
-            migrateFile("database.conf", "core/database.conf")
-            migrateFile("network.conf", "core/network.conf")
-            migrateFile("spawn.conf", "spawn/spawn.conf")
-            migrateFile("utility.conf", "utility/utility.conf")
-            migrateFile("data/database.db", "core/storage/database.db")
-            migrateFile("chat.conf", "core/chat.conf")
-            migrateFile("scoreboard.conf", "core/scoreboard.conf")
-            migrateFile("anvil.conf", "core/anvil.conf")
-            migrateFile("tablist.conf", "core/tablist.conf")
-            migrateFile("editor.conf", "core/editor.conf")
+            // 2. Ejecutar migraciones de carpetas y archivos antiguos
+            // Migrar carpetas de features antiguas
+            migrateFolder("warps", "features/warps/data")
+            migrateFolder("kits", "features/kits/data")
+            migrateFolder("trails", "features/trails/data")
+            migrateFolder("holograms", "features/holograms/data")
+            migrateFolder("shops/shops", "features/shop/data")
+            migrateFolder("shops/categories", "features/shop/data")
+            migrateFolder("shops", "features/shop/data")
+            migrateFolder("regions/regions", "data/regions")
+            migrateFolder("regions", "data/regions")
 
-            // Migrar subcarpetas y sus contenidos
-            migrateDirectoryContents("holograms", "holograms/holograms")
-            migrateDirectoryContents("kits", "kits/kits")
-            migrateDirectoryContents("leaderboards", "economy/leaderboards")
-            migrateDirectoryContents("shops/categories", "shops/shops")
-            migrateDirectoryContents("warps", "warps/warps")
-            migrateDirectoryContents("trails", "trails/trails")
+            // Migrar archivos sueltos a config/
+            migrateFile("database.conf", "config/database.conf")
+            migrateFile("core/database.conf", "config/database.conf")
+            migrateFile("network.conf", "config/network.conf")
+            migrateFile("core/network.conf", "config/network.conf")
+            migrateFile("anvil.conf", "config/anvil.conf")
+            migrateFile("core/anvil.conf", "config/anvil.conf")
+            migrateFile("tablist.conf", "config/tablist.conf")
+            migrateFile("core/tablist.conf", "config/tablist.conf")
+            migrateFile("regions.conf", "config/regions.conf")
+            migrateFile("core/messages.conf", "config/messages.conf")
+
+            // Migrar configs de features a sus respectivas carpetas config/
+            migrateFile("spawn.conf", "features/spawn/config/config.conf")
+            migrateFile("spawn/spawn.conf", "features/spawn/config/config.conf")
+            migrateFile("utility.conf", "features/utility/config/config.conf")
+            migrateFile("utility/utility.conf", "features/utility/config/config.conf")
+            migrateFile("chat.conf", "features/chat/config/config.conf")
+            migrateFile("core/chat.conf", "features/chat/config/config.conf")
+            migrateFile("scoreboard.conf", "features/scoreboard/config/config.conf")
+            migrateFile("core/scoreboard.conf", "features/scoreboard/config/config.conf")
+            migrateFile("core/editor.conf", "features/leaderboard/config/editor.conf")
+            migrateFile("editor.conf", "features/leaderboard/config/editor.conf")
+            
+            // Migrar selectores/menus a las carpetas config/ de la feature correspondiente
+            migrateFile("menus/armorstand-editor.conf", "features/leaderboard/config/armorstand-editor.conf")
+            migrateFile("menus/warps-selector.conf", "features/warps/config/warps-selector.conf")
+            migrateFile("menus/kits-selector.conf", "features/kits/config/kits-selector.conf")
+            migrateFile("menus/kits-showcase.conf", "features/kits/config/kits-showcase.conf")
+
+            // Migrar base de datos SQLite
+            migrateFile("data/database.db", "data/database/database.db")
+            migrateFile("core/storage/database.db", "data/database/database.db")
 
             // 3. Separar y migrar messages.conf global
             splitGlobalMessages()
+
+            // 4. Ejecutar auditoría de almacenamiento
+            runStorageAudit()
 
         } catch (e: Exception) {
             logger.severe("Error al inicializar la estructura de carpetas: ${e.message}")
@@ -106,26 +144,35 @@ class RuntimeFolderBootstrapper(
         }
     }
 
-    private fun migrateDirectoryContents(oldRelDir: String, newRelDir: String) {
-        val oldDir = dataFolder.resolve(oldRelDir)
-        val newDir = dataFolder.resolve(newRelDir)
+    private fun migrateFolder(oldRelPath: String, newRelPath: String) {
+        val oldDir = dataFolder.resolve(oldRelPath)
+        val newDir = dataFolder.resolve(newRelPath)
 
         if (Files.exists(oldDir) && Files.isDirectory(oldDir)) {
-            val files = oldDir.toFile().listFiles() ?: return
-            for (file in files) {
-                // Evitar mover el directorio destino si está dentro del origen
-                if (file.isDirectory && file.name == newDir.fileName.toString()) continue
-                if (file.isFile) {
-                    val destFile = newDir.resolve(file.name)
-                    if (Files.notExists(destFile)) {
-                        try {
-                            Files.move(file.toPath(), destFile, StandardCopyOption.REPLACE_EXISTING)
-                            logger.info("Migrado archivo de subcarpeta: ${file.name} -> $newRelDir")
-                        } catch (e: Exception) {
-                            logger.severe("Fallo al migrar contenido ${file.name}: ${e.message}")
+            try {
+                if (Files.notExists(newDir)) {
+                    Files.createDirectories(newDir.parent)
+                    Files.move(oldDir, newDir, StandardCopyOption.REPLACE_EXISTING)
+                    logger.info("Migrada carpeta: $oldRelPath -> $newRelPath")
+                } else {
+                    // Mover archivos individuales de la carpeta antigua a la nueva
+                    val files = oldDir.toFile().listFiles()
+                    if (files != null) {
+                        for (file in files) {
+                            val targetFile = newDir.resolve(file.name)
+                            if (Files.notExists(targetFile)) {
+                                Files.createDirectories(targetFile.parent)
+                                Files.move(file.toPath(), targetFile, StandardCopyOption.REPLACE_EXISTING)
+                            }
                         }
                     }
+                    // Eliminar la carpeta original si está vacía
+                    if (oldDir.toFile().listFiles()?.isEmpty() == true) {
+                        Files.delete(oldDir)
+                    }
                 }
+            } catch (e: Exception) {
+                logger.severe("Fallo al migrar carpeta $oldRelPath: ${e.message}")
             }
         }
     }
@@ -141,13 +188,12 @@ class RuntimeFolderBootstrapper(
                 .build()
             val root = loader.load()
 
-            // Mapear cada sección del HOCON global a su respectivo messages.conf en la feature
             val mappings = mapOf(
-                "spawn" to "spawn/messages.conf",
-                "regions" to "regions/messages.conf",
-                "economy" to "economy/messages.conf",
-                "utility" to "utility/messages.conf",
-                "shops" to "shops/messages.conf"
+                "spawn" to "features/spawn/config/messages.conf",
+                "regions" to "features/regions/config/messages.conf",
+                "economy" to "features/economy/config/messages.conf",
+                "utility" to "features/utility/config/messages.conf",
+                "shops" to "features/shop/config/messages.conf"
             )
 
             for ((key, targetRelPath) in mappings) {
@@ -155,9 +201,9 @@ class RuntimeFolderBootstrapper(
                 if (!section.empty()) {
                     val targetFile = dataFolder.resolve(targetRelPath)
                     if (Files.notExists(targetFile)) {
+                        Files.createDirectories(targetFile.parent)
                         val targetLoader = HoconConfigurationLoader.builder().path(targetFile).build()
                         val targetRoot = targetLoader.createNode()
-                        // Copiar todos los hijos de la sección al nodo raíz del nuevo archivo
                         for (entry in section.childrenMap().entries) {
                             targetRoot.node(entry.key).raw(entry.value.raw())
                         }
@@ -168,8 +214,9 @@ class RuntimeFolderBootstrapper(
             }
 
             // Crear core/messages.conf para chat, leaderboards y scoreboard
-            val coreFile = dataFolder.resolve("core/messages.conf")
+            val coreFile = dataFolder.resolve("features/core/config/messages.conf")
             if (Files.notExists(coreFile)) {
+                Files.createDirectories(coreFile.parent)
                 val coreLoader = HoconConfigurationLoader.builder().path(coreFile).build()
                 val coreRoot = coreLoader.createNode()
                 val sectionsToCore = listOf("chat", "leaderboards", "scoreboard")
@@ -180,7 +227,7 @@ class RuntimeFolderBootstrapper(
                     }
                 }
                 coreLoader.save(coreRoot)
-                logger.info("Dividido y creado: core/messages.conf")
+                logger.info("Dividido y creado: features/core/config/messages.conf")
             }
 
             // Renombrar messages.conf viejo para backup
@@ -191,6 +238,57 @@ class RuntimeFolderBootstrapper(
         } catch (e: Exception) {
             logger.severe("Error al dividir messages.conf: ${e.message}")
             e.printStackTrace()
+        }
+    }
+
+    private fun runStorageAudit() {
+        val root = dataFolder.toFile()
+        if (!root.exists() || !root.isDirectory) return
+
+        val knownLegacy = setOf("warps", "kits", "trails", "holograms", "regions", "menus", "core", "spawn", "utility", "shops")
+        val allowedRootDirs = setOf("config", "features", "data", "logs")
+
+        val files = root.listFiles() ?: return
+        val legacyFound = mutableListOf<String>()
+        val unknownFound = mutableListOf<String>()
+
+        for (file in files) {
+            if (file.isDirectory) {
+                val name = file.name.lowercase()
+                if (knownLegacy.contains(name)) {
+                    legacyFound.add(file.name)
+                } else if (!allowedRootDirs.contains(name)) {
+                    unknownFound.add(file.name)
+                }
+            } else {
+                val name = file.name.lowercase()
+                val legacyFiles = setOf("database.conf", "network.conf", "anvil.conf", "tablist.conf", "messages.conf", "chat.conf", "scoreboard.conf", "spawn.conf", "utility.conf")
+                if (legacyFiles.contains(name)) {
+                    legacyFound.add(file.name)
+                }
+            }
+        }
+
+        if (legacyFound.isNotEmpty()) {
+            logger.severe("""
+                ======================================================
+                ❌ ERROR: ERROR DE MIGRACIÓN / CARPETAS LEGACY DETECTADAS
+                Las siguientes rutas/archivos antiguos no se pudieron migrar:
+                ${legacyFound.joinToString(separator = "\n") { "  - $it" }}
+                Por favor, detén el servidor y muévelos manualmente a la nueva estructura.
+                ======================================================
+            """.trimIndent())
+        }
+
+        if (unknownFound.isNotEmpty()) {
+            logger.warning("""
+                ======================================================
+                ⚠️ WARNING: CARPETAS NO RECONOCIDAS DETECTADAS
+                Se encontraron directorios desconocidos en el directorio raíz del plugin:
+                ${unknownFound.joinToString(separator = "\n") { "  - $it" }}
+                Considera limpiarlos o moverlos si no son necesarios.
+                ======================================================
+            """.trimIndent())
         }
     }
 }

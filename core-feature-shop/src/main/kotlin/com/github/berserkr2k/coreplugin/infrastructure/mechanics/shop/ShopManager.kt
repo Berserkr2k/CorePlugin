@@ -69,32 +69,68 @@ class ShopManager(
         val future = CompletableFuture<Void>()
         taskScheduler.runAsync {
             try {
-                val configFile = File(plugin.dataFolder, "features/shop/config.conf")
+                val configFile = folderProvider.getFeatureConfigFolder("shop").resolve("config.conf").toFile()
                 this.marketConfig = configService.loadConfig(configFile, MarketConfig::class.java, MarketConfig())
                 
-                val categoriesDir = folderProvider.getFeatureFolder("shop").resolve("shops").toFile()
-                if (!categoriesDir.exists()) {
-                    categoriesDir.mkdirs()
-                    writeDefaultCategory(File(categoriesDir, "blocks.conf"), "blocks", "<yellow>Bloques</yellow>", listOf(
-                        ShopItemConfig("STONE", "2.0", guiSlot = 10),
-                        ShopItemConfig("COBBLESTONE", "1.0", guiSlot = 11),
-                        ShopItemConfig("OAK_LOG", "5.0", guiSlot = 12),
-                        ShopItemConfig("OAK_PLANKS", "1.5", guiSlot = 13),
-                        ShopItemConfig("GLASS", "3.0", guiSlot = 14)
-                    ))
-                    writeDefaultCategory(File(categoriesDir, "food.conf"), "food", "<gold>Alimentos</gold>", listOf(
-                        ShopItemConfig("BREAD", "4.0", guiSlot = 11),
-                        ShopItemConfig("COOKED_BEEF", "8.0", guiSlot = 13),
-                        ShopItemConfig("GOLDEN_APPLE", "50.0", guiSlot = 15)
-                    ))
-                    writeDefaultCategory(File(categoriesDir, "minerals.conf"), "minerals", "<aqua>Minerales</aqua>", listOf(
-                        ShopItemConfig("COAL", "5.0", guiSlot = 10),
-                        ShopItemConfig("IRON_INGOT", "15.0", guiSlot = 11),
-                        ShopItemConfig("GOLD_INGOT", "35.0", guiSlot = 12),
-                        ShopItemConfig("DIAMOND", "120.0", guiSlot = 14),
-                        ShopItemConfig("EMERALD", "150.0", guiSlot = 15),
-                        ShopItemConfig("NETHERITE_INGOT", "800.0", guiSlot = 16)
-                    ))
+                val categoriesDir = folderProvider.getFeatureDataFolder("shop").toFile()
+                
+                val blocksFile = File(categoriesDir, "blocks.conf")
+                if (!blocksFile.exists()) {
+                    configService.saveConfig(
+                        blocksFile,
+                        ShopConfig::class.java,
+                        ShopConfig(
+                            shopId = "blocks",
+                            displayName = "<yellow>Bloques</yellow>",
+                            guiSize = 45,
+                            items = listOf(
+                                ShopItemConfig("STONE", "2.0", guiSlot = 10),
+                                ShopItemConfig("COBBLESTONE", "1.0", guiSlot = 11),
+                                ShopItemConfig("OAK_LOG", "5.0", guiSlot = 12),
+                                ShopItemConfig("OAK_PLANKS", "1.5", guiSlot = 13),
+                                ShopItemConfig("GLASS", "3.0", guiSlot = 14)
+                            )
+                        )
+                    )
+                }
+                
+                val foodFile = File(categoriesDir, "food.conf")
+                if (!foodFile.exists()) {
+                    configService.saveConfig(
+                        foodFile,
+                        ShopConfig::class.java,
+                        ShopConfig(
+                            shopId = "food",
+                            displayName = "<gold>Alimentos</gold>",
+                            guiSize = 45,
+                            items = listOf(
+                                ShopItemConfig("BREAD", "4.0", guiSlot = 11),
+                                ShopItemConfig("COOKED_BEEF", "8.0", guiSlot = 13),
+                                ShopItemConfig("GOLDEN_APPLE", "50.0", guiSlot = 15)
+                            )
+                        )
+                    )
+                }
+                
+                val mineralsFile = File(categoriesDir, "minerals.conf")
+                if (!mineralsFile.exists()) {
+                    configService.saveConfig(
+                        mineralsFile,
+                        ShopConfig::class.java,
+                        ShopConfig(
+                            shopId = "minerals",
+                            displayName = "<aqua>Minerales</aqua>",
+                            guiSize = 45,
+                            items = listOf(
+                                ShopItemConfig("COAL", "5.0", guiSlot = 10),
+                                ShopItemConfig("IRON_INGOT", "15.0", guiSlot = 11),
+                                ShopItemConfig("GOLD_INGOT", "35.0", guiSlot = 12),
+                                ShopItemConfig("DIAMOND", "120.0", guiSlot = 14),
+                                ShopItemConfig("EMERALD", "150.0", guiSlot = 15),
+                                ShopItemConfig("NETHERITE_INGOT", "800.0", guiSlot = 16)
+                            )
+                        )
+                    )
                 }
                 
                 val files = categoriesDir.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
@@ -115,33 +151,6 @@ class ShopManager(
             }
         }
         return future
-    }
-
-    private fun writeDefaultCategory(file: File, id: String, title: String, items: List<ShopItemConfig>) {
-        val itemsStr = items.joinToString(",\n") { item ->
-            """        {
-            material = "${item.material}"
-            basePrice = "${item.basePrice}"
-            priceFloorPercent = null
-            priceCeilingPercent = null
-            saturationConstant = null
-            spread = null
-            guiSlot = ${item.guiSlot}
-            allowBuy = true
-            allowSell = true
-            customModelData = null
-            enchantments = {}
-        }"""
-        }
-        
-        file.writeText("""
-            shopId = "$id"
-            displayName = "$title"
-            guiSize = 45
-            items = [
-$itemsStr
-            ]
-        """.trimIndent())
     }
 
     fun loadMarketVolumes(): CompletableFuture<Void> {

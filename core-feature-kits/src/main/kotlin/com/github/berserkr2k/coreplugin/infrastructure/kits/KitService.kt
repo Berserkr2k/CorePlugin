@@ -52,7 +52,7 @@ class KitService(
     }
     
     private val folderProvider by lazy { registry.get(FeatureFolderProvider::class.java)!! }
-    private val kitsFolder by lazy { folderProvider.getFeatureFolder("kits").resolve("kits").toFile() }
+    private val kitsFolder by lazy { folderProvider.getFeatureDataFolder("kits").toFile() }
     
     private val regionTaskScheduler by lazy { registry.get(RegionTaskScheduler::class.java) }
     private val itemBuilderFactory by lazy { registry.get(ItemBuilderFactory::class.java)!! }
@@ -72,9 +72,6 @@ class KitService(
 
     override fun loadAllKits() {
         kits.clear()
-        if (!kitsFolder.exists()) {
-            kitsFolder.mkdirs()
-        }
 
         val starterFile = kitsFolder.resolve("starter.conf")
         if (!starterFile.exists()) {

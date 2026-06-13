@@ -26,34 +26,6 @@ class EconomyService(
     override val currencies = ConcurrentHashMap<String, CurrencyConfig>()
     val initFuture = CompletableFuture<Void>()
 
-    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
-        .build()
-
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
     init {
         try {
             setupCurrencies()
@@ -69,57 +41,58 @@ class EconomyService(
     }
 
     private fun setupCurrencies() {
-        val currenciesFolder = folderProvider.getFeatureFolder("economy").resolve("currencies").toFile()
-        if (!currenciesFolder.exists()) {
-            currenciesFolder.mkdirs()
-            // Escribir divisas predeterminadas
-            writeDefaultCurrencyFile(File(currenciesFolder, "credits.conf"), "credits", "Créditos", "$", "balance_credits", "100.0", "10000000.0", true, "##")
-            writeDefaultCurrencyFile(File(currenciesFolder, "points.conf"), "points", "Puntos", "🔶", "balance_points", "0", "5000000", false, null)
+        val currenciesFolder = folderProvider.getFeatureDataFolder("economy").toFile()
+        
+        val creditsFile = File(currenciesFolder, "credits.conf")
+        if (!creditsFile.exists()) {
+            configService.saveConfig(
+                creditsFile,
+                CurrencyConfig::class.java,
+                CurrencyConfig(
+                    id = "credits",
+                    displayName = "Créditos",
+                    symbol = "$",
+                    format = "%symbol%%amount%",
+                    isDecimal = true,
+                    maxDecimal = "##",
+                    initialBalance = "100.0",
+                    maxBalance = "10000000.0",
+                    dbColumn = "balance_credits",
+                    commands = listOf("money", "coins")
+                )
+            )
+        }
+        val pointsFile = File(currenciesFolder, "points.conf")
+        if (!pointsFile.exists()) {
+            configService.saveConfig(
+                pointsFile,
+                CurrencyConfig::class.java,
+                CurrencyConfig(
+                    id = "points",
+                    displayName = "Puntos",
+                    symbol = "🔶",
+                    format = "%symbol%%amount%",
+                    isDecimal = false,
+                    maxDecimal = null,
+                    initialBalance = "0",
+                    maxBalance = "5000000",
+                    dbColumn = "balance_points",
+                    commands = listOf("points")
+                )
+            )
         }
 
         currencies.clear()
         val configFiles = currenciesFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
         for (file in configFiles) {
             try {
-                val loadedConfig = loadHoconFile(file, CurrencyConfig::class.java, CurrencyConfig())
+                val loadedConfig = configService.loadConfig(file, CurrencyConfig::class.java, CurrencyConfig())
                 currencies[loadedConfig.id] = loadedConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la divisa desde ${file.name}: ${e.message}")
             }
         }
         plugin.logger.info("¡Módulo de Economía Multi-Divisa inicializado con ${currencies.size} monedas!")
-    }
-
-    private fun writeDefaultCurrencyFile(
-        file: File,
-        id: String,
-        displayName: String,
-        symbol: String,
-        dbColumn: String,
-        initialBalance: String,
-        maxBalance: String,
-        isDecimal: Boolean,
-        maxDecimal: String?
-    ) {
-        val decimalStr = if (isDecimal) "true" else "false"
-        val maxDecStr = if (maxDecimal != null) "\"$maxDecimal\"" else "null"
-        file.writeText("""
-            id = "$id"
-            displayName = "$displayName"
-            symbol = "$symbol"
-            format = "%symbol%%amount%"
-            isDecimal = $decimalStr
-            maxDecimal = $maxDecStr
-            initialBalance = "$initialBalance"
-            maxBalance = "$maxBalance"
-            permissionRequired = null
-            p2pEnabled = true
-            minTransfer = "1.0"
-            exchangeRates = {}
-            dbColumn = "$dbColumn"
-            crossServer = false
-            commands = ["$id"]
-        """.trimIndent())
     }
 
     /**

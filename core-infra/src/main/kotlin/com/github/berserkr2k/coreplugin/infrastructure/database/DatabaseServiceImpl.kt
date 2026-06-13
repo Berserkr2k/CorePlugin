@@ -16,7 +16,8 @@ import java.util.logging.Logger
 class DatabaseServiceImpl(
     private val dataFolder: File,
     private val taskScheduler: TaskScheduler,
-    private val logger: Logger
+    private val logger: Logger,
+    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 ) : com.github.berserkr2k.coreplugin.api.core.database.DatabaseService {
     private var dataSource: HikariDataSource? = null
     lateinit var config: DatabaseConfig
@@ -35,32 +36,8 @@ class DatabaseServiceImpl(
     }
 
     private fun loadConfig(): DatabaseConfig {
-        val file = dataFolder.resolve("core/database.conf")
-        if (!file.exists()) {
-            file.parentFile.mkdirs()
-            file.createNewFile()
-        }
-        val mapperFactory = ObjectMapper.factoryBuilder()
-            .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-            .build()
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(DatabaseConfig::class.java)
-        return if (root.empty()) {
-            val defaultInstance = DatabaseConfig()
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: DatabaseConfig()
-        }
+        val file = dataFolder.resolve("config/database.conf")
+        return configService.loadConfig(file, DatabaseConfig::class.java, DatabaseConfig())
     }
 
     private fun initializePool() {
@@ -75,7 +52,7 @@ class DatabaseServiceImpl(
             }
             else -> {
                 // SQLite as default local fallback
-                val dbFile = dataFolder.resolve("core/storage/database.db")
+                val dbFile = dataFolder.resolve("data/database/database.db")
                 val parent = dbFile.parentFile
                 if (!parent.exists()) {
                     parent.mkdirs()

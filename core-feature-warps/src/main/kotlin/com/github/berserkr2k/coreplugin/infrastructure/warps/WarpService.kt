@@ -48,7 +48,7 @@ class WarpService(
     private val folderProvider: FeatureFolderProvider
 ) : Listener, APIWarpService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
 
-    private val warpsDir = folderProvider.getFeatureFolder("warps").resolve("warps").toFile()
+    private val warpsDir = folderProvider.getFeatureDataFolder("warps").toFile()
     private val warps = ConcurrentHashMap<String, WarpConfig>()
 
     private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
@@ -70,17 +70,12 @@ class WarpService(
         private set
 
     init {
-        // Asegurar que la carpeta warps existe
-        if (!warpsDir.exists()) {
-            warpsDir.mkdirs()
-        }
-        
         loadAllWarps()
         loadMenuConfig()
     }
 
     private fun loadMenuConfig() {
-        val menuConfigFile = File(plugin.dataFolder, "menus/warps-selector.conf")
+        val menuConfigFile = folderProvider.getFeatureConfigFolder("warps").resolve("warps-selector.conf").toFile()
         this.menuConfig = configService.loadConfig(menuConfigFile, MenuConfig::class.java, menuConfig)
     }
 

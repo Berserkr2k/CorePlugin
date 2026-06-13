@@ -24,13 +24,13 @@ class ConfigServiceImpl(
     private val executor = Executor { command -> taskScheduler.runAsync(command) }
 
     override fun getConfig(featureId: String): FeatureConfig {
-        val path = basePath.resolve("features").resolve(featureId).resolve("config.conf")
+        val path = basePath.resolve("features").resolve(featureId).resolve("config").resolve("config.conf")
         java.nio.file.Files.createDirectories(path.parent)
         return configs.computeIfAbsent("${featureId.lowercase()}:config.conf") { HoconFeatureConfig(path, executor) }
     }
 
     override fun getCustomConfig(featureId: String, fileName: String): FeatureConfig {
-        val path = basePath.resolve("features").resolve(featureId).resolve(fileName)
+        val path = basePath.resolve("features").resolve(featureId).resolve("config").resolve(fileName)
         java.nio.file.Files.createDirectories(path.parent)
         return configs.computeIfAbsent("${featureId.lowercase()}:$fileName") { HoconFeatureConfig(path, executor) }
     }

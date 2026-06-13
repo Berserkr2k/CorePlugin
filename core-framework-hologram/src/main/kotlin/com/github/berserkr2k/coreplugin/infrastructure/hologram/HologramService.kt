@@ -17,9 +17,6 @@ import com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvide
 import com.github.berserkr2k.coreplugin.api.core.scheduler.TaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler
 import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
 
 class HologramService(
     private val plugin: Plugin,
@@ -31,20 +28,14 @@ class HologramService(
     private val configs = ConcurrentHashMap<String, HologramConfig>()
     
     private val folderProvider = registry.get(FeatureFolderProvider::class.java)!!
-    private val hologramsFolder = folderProvider.getFeatureFolder("holograms").resolve("holograms").toFile()
+    private val hologramsFolder = folderProvider.getFeatureDataFolder("holograms").toFile()
+    private val configService = registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!
     
     private val taskScheduler = registry.get(TaskScheduler::class.java)
     private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)
 
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
-
     init {
-        // 1. Crear carpeta de hologramas si no existe, y poblar con default si está vacía
-        setupDefaultHolograms()
-
-        // 3. Cargar todos los hologramas de forma síncrona/unificada en bootstrap
+        // Cargar todos los hologramas de forma síncrona/unificada en bootstrap
         loadAllHolograms()
 
         // 4. Tarea repetitiva asíncrona de seguimiento de rango de visión (cada 1 segundo)
@@ -65,48 +56,17 @@ class HologramService(
         reloadHolograms().join()
     }
 
-    private fun setupDefaultHolograms() {
-        if (!hologramsFolder.exists()) {
-            hologramsFolder.mkdirs()
-        }
-    }
-
     private fun loadConfig(file: java.io.File, id: String): HologramConfig {
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(HologramConfig::class.java)
-        return mapper.load(root) ?: HologramConfig(id = id)
+        return configService.loadConfig(file, HologramConfig::class.java, HologramConfig(id = id))
     }
 
     private fun saveConfig(file: java.io.File, config: HologramConfig) {
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(HologramConfig::class.java)
-        mapper.save(config, root)
-        loader.save(root)
+        configService.saveConfig(file, HologramConfig::class.java, config)
     }
 
     fun loadAllHolograms() {
         shutdown()
         configs.clear()
-
-        if (!hologramsFolder.exists()) {
-            hologramsFolder.mkdirs()
-        }
 
         val files = hologramsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
 

@@ -28,32 +28,9 @@ class AnvilModule(
     }
 
     private fun loadConfig(): AnvilConfig {
-        val file = plugin.dataFolder.toPath().resolve("core/anvil.conf")
-        if (java.nio.file.Files.notExists(file)) {
-            java.nio.file.Files.createDirectories(file.parent)
-            java.nio.file.Files.createFile(file)
-        }
-        val mapperFactory = ObjectMapper.factoryBuilder()
-            .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-            .build()
-        val loader = HoconConfigurationLoader.builder()
-            .path(file)
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(AnvilConfig::class.java)
-        return if (root.empty()) {
-            val defaultInstance = AnvilConfig()
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: AnvilConfig()
-        }
+        val file = plugin.dataFolder.toPath().resolve("config/anvil.conf").toFile()
+        val configService = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!
+        return configService.loadConfig(file, AnvilConfig::class.java, AnvilConfig())
     }
 
     override suspend fun reload() {

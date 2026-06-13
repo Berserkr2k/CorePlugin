@@ -66,7 +66,7 @@ class LeaderboardService(
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()
     
-    private val leaderboardsFolder = folderProvider.getFeatureFolder("economy").resolve("leaderboards").toFile()
+    private val leaderboardsFolder = folderProvider.getFeatureDataFolder("leaderboard").toFile()
 
     init {
         // Inicializar directorio e cargar clasificacións
@@ -96,9 +96,6 @@ class LeaderboardService(
     }
 
     private fun setupLeaderboardsFolder() {
-        if (!leaderboardsFolder.exists()) {
-            leaderboardsFolder.mkdirs()
-        }
 
         // Crear clasificaciones por defecto si está vacía
         val defaultCreditsFile = leaderboardsFolder.resolve("credits.conf")

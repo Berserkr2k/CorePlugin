@@ -31,7 +31,7 @@ class ProjectileTrailManager(
 
     val trails = ConcurrentHashMap<String, TrailConfig>()
     
-    private val trailsFolder = folderProvider.getFeatureFolder("trails").resolve("trails").toFile()
+    private val trailsFolder = folderProvider.getFeatureDataFolder("trails").toFile()
 
     var selectorConfig = MenuConfig(
         title = "<gold><bold>Estelas de Proyectil</bold></gold>",
@@ -43,7 +43,7 @@ class ProjectileTrailManager(
     )
         private set
 
-    private val selectorConfigFile = folderProvider.getFeatureFolder("trails").resolve("menus").resolve("trails-selector.conf").toFile()
+    private val selectorConfigFile = folderProvider.getFeatureConfigFolder("trails").resolve("trails-selector.conf").toFile()
 
     init {
         setupTrailsFolder()
@@ -63,9 +63,6 @@ class ProjectileTrailManager(
     }
 
     private fun setupTrailsFolder() {
-        if (!trailsFolder.exists()) {
-            trailsFolder.mkdirs()
-        }
 
         // 1. Estela Infernal (Fire)
         val defaultFireFile = trailsFolder.resolve("fire.conf")

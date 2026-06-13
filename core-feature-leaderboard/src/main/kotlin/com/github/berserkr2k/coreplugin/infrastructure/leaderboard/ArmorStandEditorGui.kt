@@ -57,10 +57,14 @@ object ArmorStandEditorGui {
     }
 
     fun reloadConfigs() {
-        val editorFile = File(plugin.dataFolder, "core/editor.conf")
+        val registry = org.bukkit.Bukkit.getServicesManager().load(ServiceRegistry::class.java)!!
+        val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
+        val configFolder = folderProvider.getFeatureConfigFolder("leaderboard")
+        
+        val editorFile = configFolder.resolve("editor.conf").toFile()
         this.editorConfig = configService.loadConfig(editorFile, EditorConfig::class.java, EditorConfig())
 
-        val guiFile = File(plugin.dataFolder, "menus/armorstand-editor.conf")
+        val guiFile = configFolder.resolve("armorstand-editor.conf").toFile()
         this.guiConfig = configService.loadConfig(guiFile, ArmorStandEditorGuiConfig::class.java, createDefaultGuiConfig())
     }
 

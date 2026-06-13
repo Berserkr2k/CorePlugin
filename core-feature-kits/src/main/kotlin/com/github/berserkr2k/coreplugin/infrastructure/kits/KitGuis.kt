@@ -29,13 +29,19 @@ class KitGuis(
 
 
 
+    private val folderProvider by lazy {
+        org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)!!
+            .get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
+    }
+
     init {
         reload()
     }
 
     fun reload() {
-        val selectorFile = File(plugin.dataFolder, "menus/kits-selector.conf")
-        val showcaseFile = File(plugin.dataFolder, "menus/kits-showcase.conf")
+        val configFolder = folderProvider.getFeatureConfigFolder("kits")
+        val selectorFile = configFolder.resolve("kits-selector.conf").toFile()
+        val showcaseFile = configFolder.resolve("kits-showcase.conf").toFile()
         selectorConfig = configService.loadConfig(selectorFile, MenuConfig::class.java, createDefaultSelectorConfig())
         showcaseConfig = configService.loadConfig(showcaseFile, MenuConfig::class.java, createDefaultShowcaseConfig())
     }
