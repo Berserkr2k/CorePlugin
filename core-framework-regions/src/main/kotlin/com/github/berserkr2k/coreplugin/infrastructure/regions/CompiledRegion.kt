@@ -2,6 +2,7 @@ package com.github.berserkr2k.coreplugin.infrastructure.regions
 
 import com.github.berserkr2k.coreplugin.api.framework.regions.Region
 import com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlag
+import com.github.berserkr2k.coreplugin.api.framework.regions.RegionType
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -35,7 +36,9 @@ data class CompiledRegion(
     val maxY: Int,
     val maxZ: Int,
     val allowMask: Long,
-    val denyMask: Long
+    val denyMask: Long,
+    override val tags: Map<String, String>,
+    override val type: RegionType
 ) : Region {
     override val worldUniqueId: UUID?
         get() = WorldIndexRegistry.getUuid(worldIndex)

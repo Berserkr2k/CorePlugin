@@ -48,7 +48,9 @@ object RegionCompiler {
             maxY = maxY,
             maxZ = maxZ,
             allowMask = allowMask,
-            denyMask = denyMask
+            denyMask = denyMask,
+            tags = dto.tags,
+            type = dto.type
         )
     }
 }

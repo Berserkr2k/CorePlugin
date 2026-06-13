@@ -99,6 +99,11 @@ class RegionManager(
         return active
     }
 
+    override fun getHighestPriorityRegion(location: org.bukkit.Location): com.github.berserkr2k.coreplugin.api.framework.regions.Region? {
+        val regions = getRegions(location)
+        return regions.maxByOrNull { it.priority }
+    }
+
     lateinit var config: GlobalRegionConfig
         private set
 
@@ -159,7 +164,36 @@ class RegionManager(
         }, { taskScheduler.runAsync(it) })
     }
 
-    fun removeRegion(id: String): CompletableFuture<Boolean> {
+    override fun createRegion(
+        id: String,
+        worldName: String,
+        priority: Int,
+        minX: Int,
+        minY: Int,
+        minZ: Int,
+        maxX: Int,
+        maxY: Int,
+        maxZ: Int,
+        allowFlags: List<String>,
+        denyFlags: List<String>,
+        tags: Map<String, String>,
+        type: com.github.berserkr2k.coreplugin.api.framework.regions.RegionType
+    ): CompletableFuture<Void> {
+        val region = RegionConfig(
+            id = id,
+            world = worldName,
+            priority = priority,
+            minX = minX, minY = minY, minZ = minZ,
+            maxX = maxX, maxY = maxY, maxZ = maxZ,
+            allowFlags = allowFlags,
+            denyFlags = denyFlags,
+            tags = tags,
+            type = type
+        )
+        return createRegion(region)
+    }
+
+    override fun removeRegion(id: String): CompletableFuture<Boolean> {
         return CompletableFuture.supplyAsync({
             val removed = regionsMap.remove(id.lowercase()) != null
             if (removed) {

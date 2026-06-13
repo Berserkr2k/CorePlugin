@@ -10,5 +10,7 @@ data class RegionConfig(
     val minX: Int = 0, val minY: Int = 0, val minZ: Int = 0,
     val maxX: Int = 0, val maxY: Int = 0, val maxZ: Int = 0,
     val allowFlags: List<String> = emptyList(),
-    val denyFlags: List<String> = emptyList()
+    val denyFlags: List<String> = emptyList(),
+    val tags: Map<String, String> = emptyMap(),
+    val type: com.github.berserkr2k.coreplugin.api.framework.regions.RegionType = com.github.berserkr2k.coreplugin.api.framework.regions.RegionType.STATIC
 )
