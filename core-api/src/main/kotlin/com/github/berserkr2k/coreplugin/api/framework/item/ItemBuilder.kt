@@ -41,9 +41,9 @@ interface ItemBuilder {
     fun skullProfile(profile: org.bukkit.profile.PlayerProfile?): ItemBuilder
 }
 
-@Deprecated("Use lore instead", ReplaceWith("lore(loreLines.map { net.kyori.adventure.text.Component.text(it) })"))
+@Deprecated("Use lore instead with Components")
 fun ItemBuilder.lore(loreLines: List<String>): ItemBuilder {
-    return this.lore(loreLines.map { Component.text(it) })
+    return this.lore(loreLines.map { com.github.berserkr2k.coreplugin.common.ColorUtility.parse(it) })
 }
 
 interface ItemFlagSelector : ItemBuilder

@@ -96,7 +96,12 @@ class WalletCommand(
                 }
                 val bal = economyService.getBalance(uuid, currency.id)
                 val formatted = economyService.formatBalance(currency.id, bal)
-                builder.append("<gray> - ${currency.displayName}: </gray><white>$formatted</white>\n")
+                val lineTemplate = messageService.getRawTemplate(EconomyMessages.WALLET_LINE)
+                    .ifEmpty { "  <gray>- <display_name>: </gray><white><balance></white>" }
+                val resolvedLine = lineTemplate
+                    .replace("<display_name>", currency.displayName)
+                    .replace("<balance>", formatted)
+                builder.append(resolvedLine).append("\n")
                 hasAny = true
             }
 

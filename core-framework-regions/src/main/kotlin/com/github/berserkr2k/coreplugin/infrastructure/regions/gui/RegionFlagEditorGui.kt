@@ -37,8 +37,9 @@ class RegionFlagEditorGui(
             return
         }
 
+        val titleTemplate = messageService.getRawTemplate(RegionMessages.GUI_MAIN_TITLE).ifEmpty { "<gold><bold>Editor: <id></bold></gold>" }
         val builder = menuService.createBuilder()
-            .title(ColorUtility.parse("<gold><bold>Editor: ${dto.id}</bold></gold>"))
+            .title(ColorUtility.parse(titleTemplate.replace("<id>", dto.id)))
             .slots(27)
 
         // Rellenar fondo decorativo
@@ -62,13 +63,16 @@ class RegionFlagEditorGui(
                 Material.BOOK
             }
 
+            val categoryDisplayName = messageService.getRawTemplate(RegionMessages.GUI_CATEGORY_DISPLAYNAME).ifEmpty { "<yellow><bold><display_name></bold></yellow>" }.replace("<display_name>", category.displayName)
+            val categoryLoreSuffix = messageService.getRawTemplate(RegionMessages.GUI_CATEGORY_LORE_SUFFIX).ifEmpty { "<yellow>⚡ Click para configurar banderas</yellow>" }
+
             val item = itemBuilderFactory.builder(iconMat)
-                .displayName("<yellow><bold>${category.displayName}</bold></yellow>")
+                .displayName(categoryDisplayName)
                 .lore(
                     listOf(
                         category.description,
                         "",
-                        "<yellow>⚡ Click para configurar banderas</yellow>"
+                        categoryLoreSuffix
                     )
                 )
                 .build()
@@ -87,7 +91,7 @@ class RegionFlagEditorGui(
 
         // Botón de salir
         val closeItem = itemBuilderFactory.builder(Material.BARRIER)
-            .displayName("<red><bold>❌ Cerrar</bold></red>")
+            .displayName(messageService.getRawTemplate(RegionMessages.GUI_CLOSE).ifEmpty { "<red><bold>❌ Cerrar</bold></red>" })
             .build()
         
         val closeBtn = Button.builder()
@@ -114,8 +118,11 @@ class RegionFlagEditorGui(
 
         val category = RegionFlags.CATEGORIES.firstOrNull { it.id == categoryId } ?: return
 
+        val flagsTitle = messageService.getRawTemplate(RegionMessages.GUI_FLAGS_TITLE).ifEmpty { "<gold><bold><display_name> - <id></bold></gold>" }
+            .replace("<display_name>", category.displayName)
+            .replace("<id>", dto.id)
         val builder = menuService.createBuilder()
-            .title(ColorUtility.parse("<gold><bold>${category.displayName} - ${dto.id}</bold></gold>"))
+            .title(ColorUtility.parse(flagsTitle))
             .slots(45)
 
         // Rellenar fondo decorativo
@@ -150,28 +157,37 @@ class RegionFlagEditorGui(
                 else -> Material.LIGHT_GRAY_WOOL
             }
 
+            val allowState = messageService.getRawTemplate(RegionMessages.GUI_FLAG_STATE_ALLOW).ifEmpty { "<green><bold>ALLOW (Permitir)</bold></green>" }
+            val denyState = messageService.getRawTemplate(RegionMessages.GUI_FLAG_STATE_DENY).ifEmpty { "<red><bold>DENY (Denegar)</bold></red>" }
+            val defaultState = messageService.getRawTemplate(RegionMessages.GUI_FLAG_STATE_DEFAULT).ifEmpty { "<gray>DEFAULT (Heredar)</gray>" }
+
             val stateText = when (state) {
-                "ALLOW" -> "<green><bold>ALLOW (Permitir)</bold></green>"
-                "DENY" -> "<red><bold>DENY (Denegar)</bold></red>"
-                else -> "<gray>DEFAULT (Heredar)</gray>"
+                "ALLOW" -> allowState
+                "DENY" -> denyState
+                else -> defaultState
             }
 
             val nextStateText = when (state) {
-                "ALLOW" -> "<red>DENY (Denegar)</red>"
-                "DENY" -> "<gray>DEFAULT (Heredar)</gray>"
-                else -> "<green>ALLOW (Permitir)</green>"
+                "ALLOW" -> denyState
+                "DENY" -> defaultState
+                else -> allowState
             }
 
+            val flagDisplayName = messageService.getRawTemplate(RegionMessages.GUI_FLAG_DISPLAYNAME).ifEmpty { "<yellow><bold><display_name></bold></yellow>" }.replace("<display_name>", flag.displayName)
+            val flagLoreName = messageService.getRawTemplate(RegionMessages.GUI_FLAG_LORE_NAME).ifEmpty { "<gray>Bandera: <white><name></white></gray>" }.replace("<name>", flag.name)
+            val flagLoreState = messageService.getRawTemplate(RegionMessages.GUI_FLAG_LORE_STATE).ifEmpty { "<gray>Estado: <state></gray>" }.replace("<state>", stateText)
+            val flagLoreClick = messageService.getRawTemplate(RegionMessages.GUI_FLAG_LORE_CLICK).ifEmpty { "<yellow>⚡ Click para cambiar a: <next_state></yellow>" }.replace("<next_state>", nextStateText)
+
             val item = itemBuilderFactory.builder(iconMat)
-                .displayName("<yellow><bold>${flag.displayName}</bold></yellow>")
+                .displayName(flagDisplayName)
                 .lore(
                     listOf(
-                        "<gray>Bandera: <white>${flag.name}</white></gray>",
-                        "<gray>Estado: $stateText</gray>",
+                        flagLoreName,
+                        flagLoreState,
                         "",
                         flag.description,
                         "",
-                        "<yellow>⚡ Click para cambiar a: $nextStateText</yellow>"
+                        flagLoreClick
                     )
                 )
                 .build()
@@ -221,7 +237,7 @@ class RegionFlagEditorGui(
 
         // Botón de Volver
         val backItem = itemBuilderFactory.builder(Material.ARROW)
-            .displayName("<yellow><bold>← Volver</bold></yellow>")
+            .displayName(messageService.getRawTemplate(RegionMessages.GUI_BACK).ifEmpty { "<yellow><bold>← Volver</bold></yellow>" })
             .build()
         
         val backBtn = Button.builder()

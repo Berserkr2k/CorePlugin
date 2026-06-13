@@ -25,7 +25,20 @@ enum class RegionMessages(override val path: String) : MessageKey {
     DEBUG_FLAGS("debug-flags"),
     NO_ENDERPEARL("no-enderpearl"),
     NO_CHORUS_FRUIT("no-chorus-fruit"),
-    NO_SLEEP("no-sleep");
+    NO_SLEEP("no-sleep"),
+    GUI_MAIN_TITLE("gui.main-title"),
+    GUI_CATEGORY_DISPLAYNAME("gui.category-displayname"),
+    GUI_CATEGORY_LORE_SUFFIX("gui.category-lore-suffix"),
+    GUI_CLOSE("gui.close"),
+    GUI_FLAGS_TITLE("gui.flags-title"),
+    GUI_FLAG_DISPLAYNAME("gui.flag-displayname"),
+    GUI_FLAG_LORE_NAME("gui.flag-lore-name"),
+    GUI_FLAG_LORE_STATE("gui.flag-lore-state"),
+    GUI_FLAG_LORE_CLICK("gui.flag-lore-click"),
+    GUI_FLAG_STATE_ALLOW("gui.flag-state-allow"),
+    GUI_FLAG_STATE_DENY("gui.flag-state-deny"),
+    GUI_FLAG_STATE_DEFAULT("gui.flag-state-default"),
+    GUI_BACK("gui.back");
 
     override val feature: String = "regions"
 
@@ -53,7 +66,20 @@ enum class RegionMessages(override val path: String) : MessageKey {
             "debug-flags" to "<yellow>Bypass general: <bypass>\nGameMode: <gamemode></yellow>",
             "no-enderpearl" to "<red>❌ No se permite el uso de enderpearls aquí.</red>",
             "no-chorus-fruit" to "<red>❌ No se permite el teletransporte con fruta de coro aquí.</red>",
-            "no-sleep" to "<red>❌ No tienes permiso para dormir aquí.</red>"
+            "no-sleep" to "<red>❌ No tienes permiso para dormir aquí.</red>",
+            "gui.main-title" to "<gold><bold>Editor: <id></bold></gold>",
+            "gui.category-displayname" to "<yellow><bold><display_name></bold></yellow>",
+            "gui.category-lore-suffix" to "<yellow>⚡ Click para configurar banderas</yellow>",
+            "gui.close" to "<red><bold>❌ Cerrar</bold></red>",
+            "gui.flags-title" to "<gold><bold><display_name> - <id></bold></gold>",
+            "gui.flag-displayname" to "<yellow><bold><display_name></bold></yellow>",
+            "gui.flag-lore-name" to "<gray>Bandera: <white><name></white></gray>",
+            "gui.flag-lore-state" to "<gray>Estado: <state></gray>",
+            "gui.flag-lore-click" to "<yellow>⚡ Click para cambiar a: <next_state></yellow>",
+            "gui.flag-state-allow" to "<green><bold>ALLOW (Permitir)</bold></green>",
+            "gui.flag-state-deny" to "<red><bold>DENY (Denegar)</bold></red>",
+            "gui.flag-state-default" to "<gray>DEFAULT (Heredar)</gray>",
+            "gui.back" to "<yellow><bold>← Volver</bold></yellow>"
         )
     }
 }

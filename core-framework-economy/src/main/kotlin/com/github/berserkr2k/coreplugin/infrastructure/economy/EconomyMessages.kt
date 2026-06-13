@@ -33,7 +33,8 @@ enum class EconomyMessages(override val path: String) : MessageKey {
     ECO_SET_FAILED("eco-set-failed"),
     ALIAS_NO_PERMISSION_OTHER("alias-no-permission-other"),
     ALIAS_USAGE("alias-usage"),
-    WALLET_HEADER("wallet-header");
+    WALLET_HEADER("wallet-header"),
+    WALLET_LINE("wallet-line");
 
     override val feature: String = "economy"
 
@@ -69,7 +70,8 @@ enum class EconomyMessages(override val path: String) : MessageKey {
             "eco-set-receiver" to "<green>Tu saldo ha sido establecido en <white><amount></white>.</green>",
             "eco-set-failed" to "<red>Error al establecer saldo. Fuera del límite máximo.</red>",
             "alias-no-permission-other" to "<red>No tienes permiso para ver el saldo de otros jugadores.</red>",
-            "alias-usage" to "<red>Uso: /<alias> <player></red>"
+            "alias-usage" to "<red>Uso: /<alias> <player></red>",
+            "wallet-line" to "  <gray>- <display_name>: </gray><white><balance></white>"
         )
     }
 }

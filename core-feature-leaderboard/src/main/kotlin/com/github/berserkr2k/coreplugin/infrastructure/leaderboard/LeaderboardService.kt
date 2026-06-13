@@ -334,7 +334,7 @@ class LeaderboardService(
 
     private fun saveScore(uuid: UUID, username: String, leaderboardId: String, score: Double) {
         val profile = profileRegistry.getProfile(uuid)
-        val db = databaseService.getDatabase("leaderboards")
+        val db = databaseService.getDatabase("leaderboard")
         val userIdFuture = if (profile != null) {
             CompletableFuture.completedFuture(profile.internalId)
         } else {
@@ -387,7 +387,7 @@ class LeaderboardService(
             ORDER BY s.score DESC 
             LIMIT 10
         """.trimIndent()
-        val db = databaseService.getDatabase("leaderboards")
+        val db = databaseService.getDatabase("leaderboard")
         return db.query(
             sql,
             { rs ->

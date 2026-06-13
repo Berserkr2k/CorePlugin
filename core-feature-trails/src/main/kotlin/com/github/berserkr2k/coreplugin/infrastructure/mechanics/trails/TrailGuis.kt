@@ -57,15 +57,15 @@ class TrailGuis(
 
             when {
                 isActive -> {
-                    loreLines.add("<green>⭐ ¡Estela Equipada!</green>")
-                    loreLines.add("<gray>Tu proyectil ya tiene este efecto.</gray>")
+                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_EQUIPPED).ifEmpty { "<green>⭐ ¡Estela Equipada!</green>" })
+                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_EQUIPPED_LORE).ifEmpty { "<gray>Tu proyectil ya tiene este efecto.</gray>" })
                 }
                 hasPerm -> {
-                    loreLines.add("<yellow>⚡ Click para Equipar</yellow>")
+                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_SELECT).ifEmpty { "<yellow>⚡ Click para Equipar</yellow>" })
                 }
                 else -> {
-                    loreLines.add("<red>❌ Bloqueado</red>")
-                    loreLines.add("<gray>Requiere permiso: <red>${config.permission}</red></gray>")
+                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_LOCKED).ifEmpty { "<red>❌ Bloqueado</red>" })
+                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_LOCKED_LORE).ifEmpty { "<gray>Requiere permiso: <red><permission></red></gray>" }.replace("<permission>", config.permission))
                 }
             }
 
@@ -125,20 +125,28 @@ class TrailGuis(
             slots = listOf(22),
             item = ItemConfig(
                 material = "BARRIER",
-                displayName = "<red><bold>❌ Quitar Estela</bold></red>",
-                lore = listOf(
-                    "<gray>Haz click aquí para remover tu</gray>",
-                    "<gray>estela de partículas activa.</gray>",
-                    " ",
-                    "<yellow>⚡ Click para remover</yellow>"
-                )
+                displayName = "",
+                lore = emptyList()
             ),
             action = "clear",
             sound = "BLOCK_LAVA_EXTINGUISH"
         )
 
         val clearSlot = clearBtnConfig.slots.firstOrNull() ?: 22
-        val clearItem = itemBuilderFactory.builder(clearBtnConfig.item).build()
+
+        val clearDisplayName = messageService.getRawTemplate(TrailMessages.GUI_CLEAR_NAME).ifEmpty {
+            clearBtnConfig.item.displayName?.ifEmpty { "<red><bold>❌ Quitar Estela</bold></red>" } ?: "<red><bold>❌ Quitar Estela</bold></red>"
+        }
+        val clearLoreRaw = messageService.getRawTemplate(TrailMessages.GUI_CLEAR_LORE).ifEmpty {
+            if (clearBtnConfig.item.lore.isNotEmpty()) {
+                clearBtnConfig.item.lore.joinToString("\n")
+            } else {
+                "<gray>Haz click aquí para remover tu</gray>\n<gray>estela de partículas activa.</gray>\n \n<yellow>⚡ Click para remover</yellow>"
+            }
+        }
+        val clearLore = clearLoreRaw.split("\n")
+
+        val clearItem = itemBuilderFactory.builder(clearBtnConfig.item.copy(displayName = clearDisplayName, lore = clearLore)).build()
 
         val clearBtn = Button.builder()
             .icon(clearItem)

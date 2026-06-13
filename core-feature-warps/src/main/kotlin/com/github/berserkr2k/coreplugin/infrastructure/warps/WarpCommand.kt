@@ -148,12 +148,13 @@ class WarpCommand(
 
             if (!hasPerm) {
                 loreLines.add(" ")
-                loreLines.add("<red>❌ Bloqueado</red>")
-                loreLines.add("<gray>Requiere permiso: <red>${warp.permission}</red></gray>")
+                loreLines.add(messageService.getRawTemplate(WarpMessages.GUI_WARP_LOCKED).ifEmpty { "<red>❌ Bloqueado</red>" })
+                loreLines.add(messageService.getRawTemplate(WarpMessages.GUI_WARP_REQUIRES_PERMISSION).ifEmpty { "<gray>Requiere permiso: <red><permission></red></gray>" }.replace("<permission>", warp.permission))
             }
 
+            val defaultDisplayName = messageService.getRawTemplate(WarpMessages.GUI_WARP_DEFAULT_DISPLAYNAME).ifEmpty { "<green><bold>Warp <name></bold></green>" }
             val processedItemConfig = baseItem.copy(
-                displayName = (baseItem.displayName ?: "<green><bold>Warp <name></bold></green>").replace("<name>", warp.name),
+                displayName = (baseItem.displayName ?: defaultDisplayName).replace("<name>", warp.name),
                 lore = loreLines.map { it.replace("<name>", warp.name) }
             )
 

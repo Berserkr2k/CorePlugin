@@ -24,11 +24,11 @@ class RegionRuleResolver(private val regionManager: RegionManager) {
     }
 
     fun isActionAllowed(worldIndex: Int, x: Int, y: Int, z: Int, flag: Long, context: RegionQueryContext): Boolean {
-        if (flag != RegionFlags.USE_WITHOUT_BREAK && (context.bypassPermission || context.gameMode == GameMode.CREATIVE)) return true
+        if (RegionFlags.bypassesFlag(flag) && (context.bypassPermission || context.gameMode == GameMode.CREATIVE)) return true
 
         val regions = resolveActiveRegions(worldIndex, x, y, z)
         if (regions.isEmpty()) {
-            return flag != RegionFlags.USE_WITHOUT_BREAK
+            return RegionFlags.isAllowedByDefault(flag)
         }
 
         val regionFlag = RegionFlags.getFlagByMask(flag)
@@ -56,7 +56,7 @@ class RegionRuleResolver(private val regionManager: RegionManager) {
             }
         }
 
-        return flag != RegionFlags.USE_WITHOUT_BREAK
+        return RegionFlags.isAllowedByDefault(flag)
     }
 
     private fun getFallbackFlag(flag: Long): Long? {

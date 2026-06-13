@@ -77,6 +77,7 @@ class RuntimeFolderBootstrapper(
             migrateFolder("shops/shops", "features/shop/data")
             migrateFolder("shops/categories", "features/shop/data")
             migrateFolder("shops", "features/shop/data")
+            migrateFolder("leaderboards", "features/leaderboard/data")
             migrateFolder("regions/regions", "data/regions")
             migrateFolder("regions", "data/regions")
 
@@ -109,6 +110,7 @@ class RuntimeFolderBootstrapper(
             migrateFile("menus/warps-selector.conf", "features/warps/config/warps-selector.conf")
             migrateFile("menus/kits-selector.conf", "features/kits/config/kits-selector.conf")
             migrateFile("menus/kits-showcase.conf", "features/kits/config/kits-showcase.conf")
+            migrateFile("menus/color-selector.conf", "features/chat/config/color-selector.conf")
 
             // Migrar base de datos SQLite
             migrateFile("data/database.db", "data/database/database.db")
@@ -116,6 +118,9 @@ class RuntimeFolderBootstrapper(
 
             // 3. Separar y migrar messages.conf global
             splitGlobalMessages()
+
+            // 3b. Limpiar carpetas legacy conocidas si están vacías
+            cleanKnownLegacyDirectories()
 
             // 4. Ejecutar auditoría de almacenamiento
             runStorageAudit()
@@ -193,7 +198,12 @@ class RuntimeFolderBootstrapper(
                 "regions" to "features/regions/config/messages.conf",
                 "economy" to "features/economy/config/messages.conf",
                 "utility" to "features/utility/config/messages.conf",
-                "shops" to "features/shop/config/messages.conf"
+                "shops" to "features/shop/config/messages.conf",
+                "shop" to "features/shop/config/messages.conf",
+                "leaderboards" to "features/leaderboard/config/messages.conf",
+                "leaderboard" to "features/leaderboard/config/messages.conf",
+                "chat" to "features/chat/config/messages.conf",
+                "scoreboard" to "features/scoreboard/config/messages.conf"
             )
 
             for ((key, targetRelPath) in mappings) {
@@ -213,13 +223,13 @@ class RuntimeFolderBootstrapper(
                 }
             }
 
-            // Crear core/messages.conf para chat, leaderboards y scoreboard
+            // Crear core/messages.conf para fallback
             val coreFile = dataFolder.resolve("features/core/config/messages.conf")
             if (Files.notExists(coreFile)) {
                 Files.createDirectories(coreFile.parent)
                 val coreLoader = HoconConfigurationLoader.builder().path(coreFile).build()
                 val coreRoot = coreLoader.createNode()
-                val sectionsToCore = listOf("chat", "leaderboards", "scoreboard")
+                val sectionsToCore = listOf("core")
                 for (sec in sectionsToCore) {
                     val section = root.node(sec)
                     if (!section.empty()) {
@@ -245,7 +255,7 @@ class RuntimeFolderBootstrapper(
         val root = dataFolder.toFile()
         if (!root.exists() || !root.isDirectory) return
 
-        val knownLegacy = setOf("warps", "kits", "trails", "holograms", "regions", "menus", "core", "spawn", "utility", "shops")
+        val knownLegacy = setOf("warps", "kits", "trails", "holograms", "regions", "menus", "core", "spawn", "utility", "shops", "leaderboards")
         val allowedRootDirs = setOf("config", "features", "data", "logs")
 
         val files = root.listFiles() ?: return
@@ -289,6 +299,50 @@ class RuntimeFolderBootstrapper(
                 Considera limpiarlos o moverlos si no son necesarios.
                 ======================================================
             """.trimIndent())
+        }
+    }
+
+    private fun cleanKnownLegacyDirectories() {
+        val knownLegacy = setOf("warps", "kits", "trails", "holograms", "regions", "menus", "core", "spawn", "utility", "shops", "leaderboards")
+        try {
+            val root = dataFolder.toFile()
+            if (root.exists() && root.isDirectory) {
+                val files = root.listFiles() ?: return
+                for (file in files) {
+                    if (file.isDirectory) {
+                        val name = file.name.lowercase()
+                        if (knownLegacy.contains(name)) {
+                            deleteEmptyDirectory(file.toPath())
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            logger.warning("No se pudieron limpiar las carpetas legacy: ${e.message}")
+        }
+    }
+
+    private fun deleteEmptyDirectory(dirPath: Path) {
+        if (Files.exists(dirPath) && Files.isDirectory(dirPath)) {
+            try {
+                // Primero intentar limpiar recursivamente los hijos
+                Files.list(dirPath).use { stream ->
+                    stream.forEach { child ->
+                        if (Files.isDirectory(child)) {
+                            deleteEmptyDirectory(child)
+                        }
+                    }
+                }
+                // Si ahora está vacía, borrar la carpeta
+                Files.list(dirPath).use { stream ->
+                    if (!stream.findAny().isPresent) {
+                        Files.delete(dirPath)
+                        logger.info("Eliminada carpeta vacía legacy: ${dataFolder.relativize(dirPath)}")
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignorar fallos
+            }
         }
     }
 }

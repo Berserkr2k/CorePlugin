@@ -13,7 +13,7 @@ class LeaderboardFeature : Feature {
     private var leaderboardService: LeaderboardService? = null
 
     override fun onEnable(context: FeatureContext) {
-        context.messageService.registerFeature("leaderboards", LeaderboardMessages.defaults)
+        context.messageService.registerFeature("leaderboard", LeaderboardMessages.defaults)
 
         val config = context.configService.getConfig("leaderboard")
         val menuService = context.getService(MenuService::class.java)

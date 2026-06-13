@@ -19,7 +19,14 @@ enum class ChatMessages(override val path: String) : MessageKey {
     CHAT_LINK_BLOCKED("link-blocked"),
     CHAT_PROFILE_ERROR("profile-error"),
     CHAT_COLOR_NO_PERMISSION("color-no-permission"),
-    CHAT_COLOR_RESET("color-reset");
+    CHAT_COLOR_RESET("color-reset"),
+    GUI_COLOR_EQUIPPED("gui.color-equipped"),
+    GUI_COLOR_EQUIPPED_LORE("gui.color-equipped-lore"),
+    GUI_COLOR_SELECT("gui.color-select"),
+    GUI_COLOR_LOCKED("gui.color-locked"),
+    GUI_COLOR_LOCKED_LORE("gui.color-locked-lore"),
+    GUI_COLOR_RESET_ACTIVE("gui.color-reset-active"),
+    GUI_COLOR_RESET_CLICK("gui.color-reset-click");
 
     override val feature: String = "chat"
 
@@ -41,7 +48,14 @@ enum class ChatMessages(override val path: String) : MessageKey {
             "link-blocked" to "<red>❌ No está permitido enviar enlaces o URLs en el chat.</red>",
             "profile-error" to "<red>Error al cargar tu perfil de usuario.</red>",
             "color-no-permission" to "<red>No tienes permisos para usar este color.</red>",
-            "color-reset" to "<yellow>Has restablecido tu color de chat al valor por defecto.</yellow>"
+            "color-reset" to "<yellow>Has restablecido tu color de chat al valor por defecto.</yellow>",
+            "gui.color-equipped" to "<green>⭐ ¡Color Equipado!</green>",
+            "gui.color-equipped-lore" to "<gray>Tu nombre en el chat ya tiene este color.</gray>",
+            "gui.color-select" to "<yellow>⚡ Click para Seleccionar</yellow>",
+            "gui.color-locked" to "<red>❌ Bloqueado</red>",
+            "gui.color-locked-lore" to "<gray>Requiere permiso: <red>core.chat.color.<id></red></gray>",
+            "gui.color-reset-active" to "<green>⭐ Ya restablecido</green>",
+            "gui.color-reset-click" to "<yellow>⚡ Click para restablecer</yellow>"
         )
     }
 }

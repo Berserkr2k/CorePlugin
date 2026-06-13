@@ -111,27 +111,29 @@ class KitGuis(
 
             when {
                 !hasPerm -> {
-                    loreLines.add("<red>❌ Bloqueado (Requiere Rango)</red>")
+                    loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_LOCKED).ifEmpty { "<red>❌ Bloqueado (Requiere Rango)</red>" })
                 }
                 isCooldownActive -> {
                     val timeStr = kitService.formatTime(remaining)
-                    loreLines.add("<red>⏳ En Cooldown (Espera: $timeStr)</red>")
+                    loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_COOLDOWN).ifEmpty { "<red>⏳ En Cooldown (Espera: <time>)</red>" }.replace("<time>", timeStr))
                 }
                 else -> {
                     if (config.cost > 0.0) {
-                        loreLines.add("<gold>⚖ Costo: ${config.cost} ${config.currency.uppercase()}</gold>")
+                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_COST).ifEmpty { "<gold>⚖ Costo: <cost> <currency></gold>" }
+                            .replace("<cost>", config.cost.toString())
+                            .replace("<currency>", config.currency.uppercase()))
                     }
                     if (remaining > 0 && hasBypass) {
-                        loreLines.add("<green>✔ ¡Disponible! (<yellow>Bypass de Cooldown Activo</yellow>)</green>")
+                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_BYPASS).ifEmpty { "<green>✔ ¡Disponible! (<yellow>Bypass de Cooldown Activo</yellow>)</green>" })
                     } else {
-                        loreLines.add("<green>✔ ¡Disponible para Reclamar!</green>")
+                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_AVAILABLE).ifEmpty { "<green>✔ ¡Disponible para Reclamar!</green>" })
                     }
                 }
             }
 
             loreLines.add(" ")
-            loreLines.add("<yellow>⚡ Click Izquierdo para Reclamar</yellow>")
-            loreLines.add("<aqua>⚡ Click Derecho para Previsualizar</aqua>")
+            loreLines.add(messageService.getRawTemplate(KitMessages.GUI_ACTION_CLAIM).ifEmpty { "<yellow>⚡ Click Izquierdo para Reclamar</yellow>" })
+            loreLines.add(messageService.getRawTemplate(KitMessages.GUI_ACTION_PREVIEW).ifEmpty { "<aqua>⚡ Click Derecho para Previsualizar</aqua>" })
 
             val kitIcon = itemBuilderFactory.builder(baseItem)
                 .lore(loreLines)
@@ -232,14 +234,26 @@ class KitGuis(
 
         // Cargar botones desde la configuración HOCON
         val backBtnConfig = showcaseConfig.items["back"] ?: MenuItemConfig(
-            item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Selector</red>", lore = listOf("<gray>Regresa al selector de kits principal.</gray>"))
+            item = ItemConfig(material = "BARRIER", displayName = "", lore = emptyList())
         )
         val claimBtnConfig = showcaseConfig.items["claim"] ?: MenuItemConfig(
-            item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green><bold>✔ ¡Reclamar Kit!</bold></green>", lore = listOf("%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>"))
+            item = ItemConfig(material = "GREEN_CONCRETE", displayName = "", lore = emptyList())
         )
 
         // Botón de Volver
-        val backItem = itemBuilderFactory.builder(backBtnConfig.item).build()
+        val backDisplayName = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_BACK_NAME).ifEmpty {
+            backBtnConfig.item.displayName?.ifEmpty { "<red>Volver al Selector</red>" } ?: "<red>Volver al Selector</red>"
+        }
+        val backLoreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_BACK_LORE).ifEmpty {
+            if (backBtnConfig.item.lore.isNotEmpty()) {
+                backBtnConfig.item.lore.joinToString("\n")
+            } else {
+                "<gray>Regresa al selector de kits principal.</gray>"
+            }
+        }
+        val backLore = backLoreRaw.split("\n")
+
+        val backItem = itemBuilderFactory.builder(backBtnConfig.item.copy(displayName = backDisplayName, lore = backLore)).build()
         val backBtn = Button.builder()
             .icon(backItem)
             .onClick { p ->
@@ -257,27 +271,42 @@ class KitGuis(
         val claimItemConfig = claimBtnConfig.item
         val actionItem: ItemStack = when {
             !hasPerm -> {
+                val name = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_LOCKED_NAME).ifEmpty { "<red><bold>❌ Kit Bloqueado</bold></red>" }
+                val loreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_LOCKED_LORE).ifEmpty { "<gray>Requiere el rango de permiso:</gray>\n<red><permission></red>" }
+                val resolvedLore = loreRaw.replace("<permission>", config.permission).split("\n")
                 itemBuilderFactory.builder(Material.RED_CONCRETE)
-                    .displayName("<red><bold>❌ Kit Bloqueado</bold></red>")
-                    .lore(listOf("<gray>Requiere el rango de permiso:</gray>", "<red>${config.permission}</red>"))
+                    .displayName(name)
+                    .lore(resolvedLore)
                     .build()
             }
             isCooldownActive -> {
                 val timeStr = kitService.formatTime(remaining)
+                val name = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_COOLDOWN_NAME).ifEmpty { "<yellow><bold>⏳ En Cooldown</bold></yellow>" }
+                val loreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_COOLDOWN_LORE).ifEmpty { "<gray>Debes esperar:</gray>\n<yellow><time></yellow>\n<gray>para reclamar nuevamente.</gray>" }
+                val resolvedLore = loreRaw.replace("<time>", timeStr).split("\n")
                 itemBuilderFactory.builder(Material.YELLOW_CONCRETE)
-                    .displayName("<yellow><bold>⏳ En Cooldown</bold></yellow>")
-                    .lore(listOf("<gray>Debes esperar:</gray>", "<yellow>$timeStr</yellow>", "<gray>para reclamar nuevamente.</gray>"))
+                    .displayName(name)
+                    .lore(resolvedLore)
                     .build()
             }
             else -> {
                 val priceLore = if (config.cost > 0.0) "<gray>Costo: </gray><gold>${config.cost} ${config.currency.uppercase()}</gold>\n" else ""
                 val bypassLore = if (remaining > 0 && hasBypass) "<yellow>¡Bypass de Cooldown Activo!</yellow>\n" else ""
                 
-                val processedLore = claimItemConfig.lore.map { line ->
-                    line.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore)
+                val claimDisplayName = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_CLAIM_NAME).ifEmpty {
+                    claimItemConfig.displayName?.ifEmpty { "<green><bold>✔ ¡Reclamar Kit!</bold></green>" } ?: "<green><bold>✔ ¡Reclamar Kit!</bold></green>"
                 }
                 
-                itemBuilderFactory.builder(claimItemConfig.copy(lore = processedLore)).build()
+                val rawLore = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_CLAIM_LORE).ifEmpty {
+                    if (claimItemConfig.lore.isNotEmpty()) {
+                        claimItemConfig.lore.joinToString("\n")
+                    } else {
+                        "%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>"
+                    }
+                }
+                val processedLore = rawLore.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore).split("\n")
+                
+                itemBuilderFactory.builder(claimItemConfig.copy(displayName = claimDisplayName, lore = processedLore)).build()
             }
         }
 

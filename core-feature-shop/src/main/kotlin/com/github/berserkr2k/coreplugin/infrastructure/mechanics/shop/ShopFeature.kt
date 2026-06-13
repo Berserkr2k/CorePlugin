@@ -14,7 +14,7 @@ class ShopFeature : Feature {
     private var shopManager: ShopManager? = null
 
     override fun onEnable(context: FeatureContext) {
-        context.messageService.registerFeature("shops", ShopMessages.defaults)
+        context.messageService.registerFeature("shop", ShopMessages.defaults)
 
         val config = context.configService.getConfig("shop")
         val economyService = context.getService(EconomyService::class.java)

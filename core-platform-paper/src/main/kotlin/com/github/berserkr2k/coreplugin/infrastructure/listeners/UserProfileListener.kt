@@ -11,7 +11,8 @@ import org.bukkit.plugin.Plugin
 class UserProfileListener(
     private val plugin: Plugin,
     private val profileRegistry: ProfileRegistry,
-    private val stateService: com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
+    private val stateService: com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService,
+    private val messageService: com.github.berserkr2k.coreplugin.api.core.message.MessageService
 ) : Listener {
 
     @EventHandler
@@ -40,9 +41,11 @@ class UserProfileListener(
         } catch (e: Exception) {
             plugin.logger.severe("❌ Fallo crítico al cargar el perfil de usuario para $name ($uuid): ${e.message}")
             e.printStackTrace()
+            val rawMsg = messageService.getRawTemplate(com.github.berserkr2k.coreplugin.api.core.message.CoreMessages.PROFILE_LOAD_ERROR)
+                .ifEmpty { "<red>Error al inicializar tu perfil de usuario. Por favor reintenta ingresar en unos momentos.</red>" }
             event.disallow(
                 AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                Component.text("§cError al inicializar tu perfil de usuario. Por favor reintenta ingresar en unos momentos.")
+                com.github.berserkr2k.coreplugin.common.ColorUtility.parse(rawMsg)
             )
         }
     }

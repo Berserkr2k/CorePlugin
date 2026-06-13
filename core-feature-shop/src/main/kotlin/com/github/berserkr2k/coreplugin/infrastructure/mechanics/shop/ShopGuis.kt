@@ -326,7 +326,7 @@ class ShopGuis(
         val sells = shopManager.sellVolumeCache[itemId] ?: 0
         val netVolume = buys - sells
 
-        val trend = if (netVolume > 0) "<green>▲ Al alza</green>" else if (netVolume < 0) "<red>▼ A la baja</red>" else "<gray>■ Estable</gray>"
+        val trend = if (netVolume > 0) getMsg("trend-up") else if (netVolume < 0) getMsg("trend-down") else getMsg("trend-stable")
 
         val newLore = mutableListOf<String>()
 

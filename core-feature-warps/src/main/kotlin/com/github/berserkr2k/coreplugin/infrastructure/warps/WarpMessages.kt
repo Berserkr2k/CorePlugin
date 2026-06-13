@@ -15,7 +15,10 @@ enum class WarpMessages(override val path: String) : MessageKey {
     MENU_TITLE("menu-title"),
     WORLD_NOT_LOADED("world-not-loaded"),
     TELEPORT_FAILED("teleport-failed"),
-    RELOADED("reloaded");
+    RELOADED("reloaded"),
+    GUI_WARP_LOCKED("gui.warp-locked"),
+    GUI_WARP_REQUIRES_PERMISSION("gui.warp-requires-permission"),
+    GUI_WARP_DEFAULT_DISPLAYNAME("gui.warp-default-displayname");
 
     override val feature: String = "warps"
 
@@ -33,7 +36,10 @@ enum class WarpMessages(override val path: String) : MessageKey {
             "menu-title" to "<dark_gray>Puntos de Teletransporte</dark_gray>",
             "world-not-loaded" to "<red>El mundo de destino '<world>' no está cargado.</red>",
             "teleport-failed" to "<red>No se pudo realizar la teletransportación.</red>",
-            "reloaded" to "<green>¡Configuraciones de warps recargadas con éxito!</green>"
+            "reloaded" to "<green>¡Configuraciones de warps recargadas con éxito!</green>",
+            "gui.warp-locked" to "<red>❌ Bloqueado</red>",
+            "gui.warp-requires-permission" to "<gray>Requiere permiso: <red><permission></red></gray>",
+            "gui.warp-default-displayname" to "<green><bold>Warp <name></bold></green>"
         )
     }
 }

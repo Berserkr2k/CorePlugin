@@ -95,7 +95,7 @@ class KitCommand(
                                 messageService.send(target, KitMessages.GIVE_SUCCESS_RECEIVER, PlaceholderContext.of("kit" to kitId))
                             }
                             is ClaimResult.Failure -> {
-                                messageService.sendRaw(sender, "<red>Error al entregar kit:</red> ${result.reason}")
+                                messageService.send(sender, KitMessages.GIVE_FAILED, PlaceholderContext.of("reason" to result.reason))
                             }
                         }
                     }

@@ -50,9 +50,12 @@ enum class ShopMessages(override val path: String) : MessageKey {
     SELL_QTY_MATERIAL("sell-qty-material"),
     BUY_MAX_MATERIAL("buy-max-material"),
     SELL_ALL_MATERIAL("sell-all-material"),
-    DISABLED_MATERIAL("disabled-material");
+    DISABLED_MATERIAL("disabled-material"),
+    TREND_UP("trend-up"),
+    TREND_DOWN("trend-down"),
+    TREND_STABLE("trend-stable");
 
-    override val feature: String = "shops"
+    override val feature: String = "shop"
 
     companion object {
         val defaults = mapOf(
@@ -103,7 +106,10 @@ enum class ShopMessages(override val path: String) : MessageKey {
             "sell-qty-material" to "RED_STAINED_GLASS_PANE",
             "buy-max-material" to "EMERALD_BLOCK",
             "sell-all-material" to "REDSTONE_BLOCK",
-            "disabled-material" to "RED_STAINED_GLASS_PANE"
+            "disabled-material" to "RED_STAINED_GLASS_PANE",
+            "trend-up" to "<green>▲ Al alza</green>",
+            "trend-down" to "<red>▼ A la baja</red>",
+            "trend-stable" to "<gray>■ Estable</gray>"
         )
     }
 }

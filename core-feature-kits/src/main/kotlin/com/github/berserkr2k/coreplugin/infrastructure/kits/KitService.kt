@@ -145,7 +145,7 @@ class KitService(
     override fun claimKit(player: Player, kitId: String, isGift: Boolean): CompletableFuture<ClaimResult> {
         return CompletableFuture.supplyAsync({
             val config = kits[kitId.lowercase()] ?: return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.NOT_FOUND).ifEmpty { "<red>El kit especificado no existe.</red>" })
-            val profile = profileRegistry.getProfile(player.uniqueId) ?: return@supplyAsync ClaimResult.Failure("<red>Tu perfil no está cargado en el sistema.</red>")
+            val profile = profileRegistry.getProfile(player.uniqueId) ?: return@supplyAsync ClaimResult.Failure(messageService.getRawTemplate(KitMessages.PROFILE_ERROR).ifEmpty { "<red>Tu perfil no está cargado en el sistema.</red>" })
 
             if (!isGift) {
                 if (!player.hasPermission(config.permission)) {

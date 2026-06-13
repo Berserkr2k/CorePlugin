@@ -279,15 +279,19 @@ class ArmorStandEditorListener(
             val formattedAngle = String.format(java.util.Locale.US, "%.1f", currentAngleDeg)
             
             val partsName = when(part.uppercase()) {
-                "HEAD" -> "Cabeza"
-                "BODY" -> "Cuerpo"
-                "LEFT_ARM" -> "Brazo Izquierdo"
-                "RIGHT_ARM" -> "Brazo Derecho"
-                "LEFT_LEG" -> "Pierna Izquierda"
-                "RIGHT_LEG" -> "Pierna Derecha"
+                "HEAD" -> messageService.getRawTemplate(LeaderboardMessages.PART_HEAD).ifEmpty { "Cabeza" }
+                "BODY" -> messageService.getRawTemplate(LeaderboardMessages.PART_BODY).ifEmpty { "Cuerpo" }
+                "LEFT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_ARM).ifEmpty { "Brazo Izquierdo" }
+                "RIGHT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_ARM).ifEmpty { "Brazo Derecho" }
+                "LEFT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_LEG).ifEmpty { "Pierna Izquierda" }
+                "RIGHT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_LEG).ifEmpty { "Pierna Derecha" }
                 else -> part
             }
-            val scaleName = if (scale == ScaleMode.COARSE) "GRUESO" else "FINO"
+            val scaleName = if (scale == ScaleMode.COARSE) {
+                messageService.getRawTemplate(LeaderboardMessages.SCALE_COARSE_NAME).ifEmpty { "GRUESO" }
+            } else {
+                messageService.getRawTemplate(LeaderboardMessages.SCALE_FINE_NAME).ifEmpty { "FINO" }
+            }
             
             val actionbarTemplate = messageService.getRawTemplate(LeaderboardMessages.LEADERBOARD_POSE_ACTIONBAR).ifEmpty {
                 "<gold><bold><part> (<axis>): <angle>°</bold></gold> <gray>(Modo: <mode>)</gray>"

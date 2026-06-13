@@ -34,7 +34,7 @@ class RegionManager(
         val x = location.blockX
         val y = location.blockY
         val z = location.blockZ
-        val candidates = getCurrentIndex().getRegionsInChunk(worldIdx, x shr 4, z shr 4) ?: return flag.mask != com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags.USE_WITHOUT_BREAK
+        val candidates = getCurrentIndex().getRegionsInChunk(worldIdx, x shr 4, z shr 4) ?: return com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags.isAllowedByDefault(flag.mask)
         
         for (i in candidates.indices.reversed()) {
             val region = candidates[i]
@@ -61,7 +61,7 @@ class RegionManager(
             }
         }
         
-        return flag.mask != com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags.USE_WITHOUT_BREAK
+        return com.github.berserkr2k.coreplugin.api.framework.regions.RegionFlags.isAllowedByDefault(flag.mask)
     }
 
     override fun getRegion(location: org.bukkit.Location): com.github.berserkr2k.coreplugin.api.framework.regions.Region? {

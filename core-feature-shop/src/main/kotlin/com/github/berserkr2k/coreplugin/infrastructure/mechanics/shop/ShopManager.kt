@@ -159,7 +159,7 @@ class ShopManager(
         val threshold = now - windowMillis
         
         val query = "SELECT item_id, transaction_type, SUM(quantity) FROM market_transactions WHERE timestamp >= ? GROUP BY item_id, transaction_type"
-        val db = databaseService.getDatabase("shops")
+        val db = databaseService.getDatabase("shop")
         return db.query(
             query,
             { rs -> Triple(rs.getString(1), rs.getString(2), rs.getInt(3)) },
@@ -184,7 +184,7 @@ class ShopManager(
     fun purgeOldMarketTransactions(): CompletableFuture<Void> {
         val sevenDaysAgo = System.currentTimeMillis() - (7L * 24L * 60L * 60L * 1000L)
         val sql = "DELETE FROM market_transactions WHERE timestamp < ?"
-        val db = databaseService.getDatabase("shops")
+        val db = databaseService.getDatabase("shop")
         return db.executeUpdate(sql, sevenDaysAgo).thenRun {
             plugin.logger.info("✔ Market transactions database purge completed. Deleted records older than 7 days.")
         }.exceptionally { e ->
@@ -201,7 +201,7 @@ class ShopManager(
         val tempBuy = ConcurrentHashMap<String, Int>()
         val tempSell = ConcurrentHashMap<String, Int>()
         
-        val db = databaseService.getDatabase("shops")
+        val db = databaseService.getDatabase("shop")
         db.executeTransaction { conn ->
             // Cargar volumen de transacciones de la ventana activa
             val query = "SELECT item_id, transaction_type, SUM(quantity) FROM market_transactions WHERE timestamp >= ? GROUP BY item_id, transaction_type"
@@ -254,7 +254,7 @@ class ShopManager(
         }
         
         // Impacto asíncrono e inmutable en base de datos
-        val db = databaseService.getDatabase("shops")
+        val db = databaseService.getDatabase("shop")
         return db.executeTransaction { conn ->
             var userId = -1
             conn.prepareStatement("SELECT id FROM core_users WHERE uuid = ?").use { ps ->
@@ -294,7 +294,7 @@ class ShopManager(
             ORDER BY t.timestamp DESC
         """.trimIndent()
 
-        val db = databaseService.getDatabase("shops")
+        val db = databaseService.getDatabase("shop")
         return db.query(
             sql,
             { rs ->

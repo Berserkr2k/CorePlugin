@@ -80,9 +80,9 @@ object ArmorStandEditorGui {
         val scale = state.scaleMode
         
         val scaleLore = if (scale == ScaleMode.COARSE) {
-            "<yellow>Modo actual: <bold>GRUESO</bold></yellow> (<gray>15° / 0.5m</gray>)"
+            messageService.getRawTemplate(LeaderboardMessages.GUI_SCALE_COARSE).ifEmpty { "<yellow>Modo actual: <bold>GRUESO</bold></yellow> (<gray>15° / 0.5m</gray>)" }
         } else {
-            "<yellow>Modo actual: <bold>FINO</bold></yellow> (<gray>1° / 0.05m</gray>)"
+            messageService.getRawTemplate(LeaderboardMessages.GUI_SCALE_FINE).ifEmpty { "<yellow>Modo actual: <bold>FINO</bold></yellow> (<gray>1° / 0.05m</gray>)" }
         }
         val placeholders = mapOf("%scale_status%" to scaleLore)
 
@@ -194,12 +194,12 @@ object ArmorStandEditorGui {
      */
     private fun openPartRotationMenu(plugin: Plugin, player: Player, stand: ArmorStand, part: String) {
         val partsName = when(part) {
-            "HEAD" -> "Cabeza"
-            "BODY" -> "Cuerpo"
-            "LEFT_ARM" -> "Brazo Izquierdo"
-            "RIGHT_ARM" -> "Brazo Derecho"
-            "LEFT_LEG" -> "Pierna Izquierda"
-            "RIGHT_LEG" -> "Pierna Derecha"
+            "HEAD" -> messageService.getRawTemplate(LeaderboardMessages.PART_HEAD).ifEmpty { "Cabeza" }
+            "BODY" -> messageService.getRawTemplate(LeaderboardMessages.PART_BODY).ifEmpty { "Cuerpo" }
+            "LEFT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_ARM).ifEmpty { "Brazo Izquierdo" }
+            "RIGHT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_ARM).ifEmpty { "Brazo Derecho" }
+            "LEFT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_LEG).ifEmpty { "Pierna Izquierda" }
+            "RIGHT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_LEG).ifEmpty { "Pierna Derecha" }
             else -> part
         }
  
@@ -231,12 +231,12 @@ object ArmorStandEditorGui {
         val meta = tool.itemMeta ?: return
         
         val partsName = when(part.uppercase()) {
-            "HEAD" -> "Cabeza"
-            "BODY" -> "Cuerpo"
-            "LEFT_ARM" -> "Brazo Izquierdo"
-            "RIGHT_ARM" -> "Brazo Derecho"
-            "LEFT_LEG" -> "Pierna Izquierda"
-            "RIGHT_LEG" -> "Pierna Derecha"
+            "HEAD" -> messageService.getRawTemplate(LeaderboardMessages.PART_HEAD).ifEmpty { "Cabeza" }
+            "BODY" -> messageService.getRawTemplate(LeaderboardMessages.PART_BODY).ifEmpty { "Cuerpo" }
+            "LEFT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_ARM).ifEmpty { "Brazo Izquierdo" }
+            "RIGHT_ARM" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_ARM).ifEmpty { "Brazo Derecho" }
+            "LEFT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_LEFT_LEG).ifEmpty { "Pierna Izquierda" }
+            "RIGHT_LEG" -> messageService.getRawTemplate(LeaderboardMessages.PART_RIGHT_LEG).ifEmpty { "Pierna Derecha" }
             else -> part
         }
 
@@ -320,8 +320,8 @@ object ArmorStandEditorGui {
      * Sub-Menú: Toggles de Propiedades Físicas
      */
     private fun openPropertiesMenu(plugin: Plugin, player: Player, stand: ArmorStand) {
-        val yes = "<green>✔ SÍ</green>"
-        val no = "<red>❌ NO</red>"
+        val yes = messageService.getRawTemplate(LeaderboardMessages.GUI_STATUS_YES).ifEmpty { "<green>✔ SÍ</green>" }
+        val no = messageService.getRawTemplate(LeaderboardMessages.GUI_STATUS_NO).ifEmpty { "<red>❌ NO</red>" }
  
         val placeholders = mapOf(
             "%arms_status%" to if (stand.hasArms()) yes else no,

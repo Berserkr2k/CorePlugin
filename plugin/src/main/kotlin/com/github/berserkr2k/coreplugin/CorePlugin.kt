@@ -146,7 +146,7 @@ class CorePlugin(
         RegionCommand(this, commandManager, regionManagerImpl, messageRegistry)
 
         server.pluginManager.registerEvents(
-            com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, reg, stateService),
+            com.github.berserkr2k.coreplugin.infrastructure.listeners.UserProfileListener(this, reg, stateService, messageRegistry),
             this
         )
 

@@ -142,4 +142,12 @@ object RegionFlags {
     fun toString(flagMask: Long): String {
         return getFlagByMask(flagMask)?.name ?: "NONE"
     }
+
+    fun isAllowedByDefault(mask: Long): Boolean {
+        return mask != USE_WITHOUT_BREAK && mask != INVINCIBLE
+    }
+
+    fun bypassesFlag(mask: Long): Boolean {
+        return mask != USE_WITHOUT_BREAK && mask != INVINCIBLE
+    }
 }

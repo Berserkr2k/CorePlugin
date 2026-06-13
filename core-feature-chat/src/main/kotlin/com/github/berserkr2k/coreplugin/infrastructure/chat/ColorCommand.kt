@@ -29,22 +29,15 @@ class ColorCommand(
     private val messageService: MessageService,
     private val registry: ServiceRegistry
 ) {
-    private val regionTaskScheduler = registry.get(RegionTaskScheduler::class.java)!!
-    private val menuService = registry.get(MenuService::class.java)!!
-    private val itemBuilderFactory = registry.get(ItemBuilderFactory::class.java)!!
+    private val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
+    private val menuService = registry.get(com.github.berserkr2k.coreplugin.api.framework.menu.MenuService::class.java)!!
+    private val itemBuilderFactory = registry.get(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java)!!
+    private val regionTaskScheduler = registry.get(com.github.berserkr2k.coreplugin.api.core.scheduler.RegionTaskScheduler::class.java)!!
     private var menuConfig = ColorMenuConfig()
 
-    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
-        .build()
-    private val mapper = mapperFactory.get(ColorMenuConfig::class.java)
-
     private fun loadConfig() {
-        val featureConfig = configService.getCustomConfig("chat", "menus/color-selector.conf")
-        val field = featureConfig.javaClass.getDeclaredField("rootNode")
-        field.isAccessible = true
-        val rootNode = field.get(featureConfig) as org.spongepowered.configurate.CommentedConfigurationNode
-        this.menuConfig = mapper.load(rootNode) ?: ColorMenuConfig()
+        val file = folderProvider.getFeatureConfigFolder("chat").resolve("color-selector.conf").toFile()
+        this.menuConfig = configService.loadConfig(file, ColorMenuConfig::class.java, ColorMenuConfig())
     }
 
     init {
@@ -58,16 +51,15 @@ class ColorCommand(
                     if (sender !is Player) {
                         messageService.send(sender, CoreMessages.ONLY_PLAYERS)
                         return@handler
-                    }
+                     }
 
-                    openColorMenu(sender)
+                     openColorMenu(sender)
                 }
         )
     }
 
     fun reload() {
         try {
-            configService.getCustomConfig("chat", "menus/color-selector.conf").reload()
             loadConfig()
         } catch (e: Exception) {
             plugin.logger.severe("Error al recargar color-selector.conf: ${e.message}")
@@ -101,15 +93,15 @@ class ColorCommand(
             val materialEnum = Material.matchMaterial(option.material) ?: Material.STONE
 
             val loreLines = mutableListOf<String>()
-            loreLines.add(" ")
             if (isActive) {
-                loreLines.add("<green>⭐ ¡Color Equipado!</green>")
-                loreLines.add("<gray>Tu nombre en el chat ya tiene este color.</gray>")
+                loreLines.add(" ")
+                loreLines.add(messageService.getRawTemplate(ChatMessages.GUI_COLOR_EQUIPPED).ifEmpty { "<green>⭐ ¡Color Equipado!</green>" })
+                loreLines.add(messageService.getRawTemplate(ChatMessages.GUI_COLOR_EQUIPPED_LORE).ifEmpty { "<gray>Tu nombre en el chat ya tiene este color.</gray>" })
             } else if (hasPerm) {
-                loreLines.add("<yellow>⚡ Click para Seleccionar</yellow>")
+                loreLines.add(messageService.getRawTemplate(ChatMessages.GUI_COLOR_SELECT).ifEmpty { "<yellow>⚡ Click para Seleccionar</yellow>" })
             } else {
-                loreLines.add("<red>❌ Bloqueado</red>")
-                loreLines.add("<gray>Requiere permiso: <red>core.chat.color.${option.id}</red></gray>")
+                loreLines.add(messageService.getRawTemplate(ChatMessages.GUI_COLOR_LOCKED).ifEmpty { "<red>❌ Bloqueado</red>" })
+                loreLines.add(messageService.getRawTemplate(ChatMessages.GUI_COLOR_LOCKED_LORE).ifEmpty { "<gray>Requiere permiso: <red>core.chat.color.<id></red></gray>" }.replace("<id>", option.id))
             }
 
             val item = itemBuilderFactory.builder(materialEnum)
@@ -158,7 +150,9 @@ class ColorCommand(
         
         val finalLore = menuConfig.resetItem.lore.toMutableList()
         if (finalLore.isNotEmpty()) {
-            finalLore.add(if (isResetActive) "<green>⭐ Ya restablecido</green>" else "<yellow>⚡ Click para restablecer</yellow>")
+            val resetActiveMsg = messageService.getRawTemplate(ChatMessages.GUI_COLOR_RESET_ACTIVE).ifEmpty { "<green>⭐ Ya restablecido</green>" }
+            val resetClickMsg = messageService.getRawTemplate(ChatMessages.GUI_COLOR_RESET_CLICK).ifEmpty { "<yellow>⚡ Click para restablecer</yellow>" }
+            finalLore.add(if (isResetActive) resetActiveMsg else resetClickMsg)
         }
         val finalResetItem = itemBuilderFactory.builder(menuConfig.resetItem).lore(finalLore).build()
 
