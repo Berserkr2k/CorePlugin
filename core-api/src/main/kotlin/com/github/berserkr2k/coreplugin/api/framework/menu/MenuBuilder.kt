@@ -7,6 +7,7 @@ import net.kyori.adventure.text.Component
 interface MenuBuilder {
     fun title(title: Component): MenuBuilder
     fun slots(slots: Int): MenuBuilder
+    fun rows(rows: Int): MenuBuilder
     fun button(slot: Int, button: Button): MenuBuilder
     fun fill(button: Button): MenuBuilder
     fun closeAction(action: (Player) -> Unit): MenuBuilder
@@ -16,8 +17,8 @@ interface MenuBuilder {
     fun <T> placePaginatedItems(
         config: MenuConfig,
         items: List<T>,
-        previousPageItem: ItemStack,
-        nextPageItem: ItemStack,
+        previousPageItem: com.github.berserkr2k.coreplugin.api.config.ItemConfig,
+        nextPageItem: com.github.berserkr2k.coreplugin.api.config.ItemConfig,
         render: (T, Int) -> Unit
     ): MenuBuilder
     fun <T> placeDynamicItems(

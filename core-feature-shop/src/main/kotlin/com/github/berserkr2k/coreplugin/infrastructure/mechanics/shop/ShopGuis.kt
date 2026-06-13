@@ -136,13 +136,11 @@ class ShopGuis(
                 builder.button(backSlot, backBtn)
 
                 // Elementos paginados
-                val prevArrow = itemBuilderFactory.builder(config.previousPageItem).build()
-                val nextArrow = itemBuilderFactory.builder(config.nextPageItem).build()
                 builder.placePaginatedItems(
                     config,
                     history,
-                    prevArrow,
-                    nextArrow
+                    config.previousPageItem,
+                    config.nextPageItem
                 ) { record, slot ->
                     val matName = record.itemId.substringBefore("_").uppercase()
                     val mat = Material.matchMaterial(matName) ?: org.bukkit.Material.PAPER
@@ -244,13 +242,11 @@ class ShopGuis(
                 items = mapOf("back" to MenuItemConfig(slots = listOf(backSlot))) // Proteger el slot de volver
             )
  
-            val prevArrow = itemBuilderFactory.builder(categoryConfig.previousPageItem).build()
-            val nextArrow = itemBuilderFactory.builder(categoryConfig.nextPageItem).build()
             builder.placePaginatedItems(
                 dummyMenuConfig,
                 categoryConfig.items,
-                prevArrow,
-                nextArrow
+                categoryConfig.previousPageItem,
+                categoryConfig.nextPageItem
             ) { itemConfig, slot ->
                 val baseItem = itemBuilderFactory.builder(
                     ItemConfig(

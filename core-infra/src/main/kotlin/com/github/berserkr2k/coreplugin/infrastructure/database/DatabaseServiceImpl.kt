@@ -115,7 +115,7 @@ class DatabaseServiceImpl(
         }
     }
 
-    fun getConnection(): Connection {
+    internal fun getConnection(): Connection {
         val ds = dataSource ?: throw IllegalStateException("El DataSource de base de datos no está inicializado.")
         return ds.connection
     }

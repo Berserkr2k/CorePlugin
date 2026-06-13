@@ -182,13 +182,11 @@ class KitGuis(
         }
 
         if (selectorConfig.paginated) {
-            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
-            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
             builder.placePaginatedItems(
                 selectorConfig,
                 sortedKits,
-                prevArrow,
-                nextArrow
+                selectorConfig.previousPageItem,
+                selectorConfig.nextPageItem
             ) { kitEntry, slot ->
                 drawKit(kitEntry, slot)
             }

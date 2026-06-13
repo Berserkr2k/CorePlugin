@@ -81,6 +81,8 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
     override fun title(title: Component) = apply { this.title = title }
     
     override fun slots(slots: Int) = apply { this.slots = slots }
+
+    override fun rows(rows: Int) = apply { this.slots = rows * 9 }
     
     override fun button(slot: Int, button: Button) = apply { this.buttons[slot] = button }
     
@@ -110,12 +112,12 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
     override fun <T> placePaginatedItems(
         config: MenuConfig,
         items: List<T>,
-        previousPageItem: ItemStack,
-        nextPageItem: ItemStack,
+        previousPageItem: ItemConfig,
+        nextPageItem: ItemConfig,
         render: (T, Int) -> Unit
     ) = apply {
         this.paginatedRunner = { customMenu ->
-            customMenu.placePaginatedItems(config, items, previousPageItem, nextPageItem, render)
+            customMenu.placePaginatedItems(config, items, previousPageItem.toItemStack(), nextPageItem.toItemStack(), render)
         }
     }
 

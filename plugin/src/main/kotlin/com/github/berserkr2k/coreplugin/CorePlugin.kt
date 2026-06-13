@@ -116,11 +116,13 @@ class CorePlugin(
         val menuServiceImpl = com.github.berserkr2k.coreplugin.common.gui.MenuServiceImpl(this)
         val commandServiceImpl = com.github.berserkr2k.coreplugin.infrastructure.commands.CommandServiceImpl(commandManager)
         val itemBuilderFactoryImpl = com.github.berserkr2k.coreplugin.platform.paper.ItemBuilderFactoryImpl()
+        val permissionServiceImpl = com.github.berserkr2k.coreplugin.platform.paper.PaperPermissionService()
 
         registry.register(ConfigService::class.java, configService)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.menu.MenuService::class.java, menuServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java, commandServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java, itemBuilderFactoryImpl)
+        registry.register(com.github.berserkr2k.coreplugin.api.framework.permission.PermissionService::class.java, permissionServiceImpl)
 
         // 4. Inicializar Base de Datos (Módulo SQL)
         val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger)

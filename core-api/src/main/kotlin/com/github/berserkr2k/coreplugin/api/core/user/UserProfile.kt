@@ -12,11 +12,21 @@ data class UserProfile(
     val kitCooldowns: ConcurrentHashMap<String, Long> = ConcurrentHashMap(),
     var activeTrailId: String? = null,
     var chatColor: String? = null,
-    var socialSpy: Boolean = false
+    var socialSpy: Boolean = false,
+    val featureData: ConcurrentHashMap<String, FeatureDataContainer> = ConcurrentHashMap()
 ) {
     @Volatile
     var isDirty: Boolean = false
         private set
+
+    inline fun <reified T : FeatureDataContainer> getFeatureData(key: String): T? {
+        return featureData[key.lowercase()] as? T
+    }
+
+    fun setFeatureData(key: String, data: FeatureDataContainer) {
+        featureData[key.lowercase()] = data
+        markDirty()
+    }
 
     fun markDirty() {
         isDirty = true

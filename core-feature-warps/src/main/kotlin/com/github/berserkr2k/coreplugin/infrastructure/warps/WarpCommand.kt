@@ -176,13 +176,11 @@ class WarpCommand(
         }
 
         if (selectorConfig.paginated) {
-            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
-            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
             builder.placePaginatedItems(
                 selectorConfig,
                 warpsList,
-                prevArrow,
-                nextArrow
+                selectorConfig.previousPageItem,
+                selectorConfig.nextPageItem
             ) { warp, slot ->
                 drawWarpItem(warp, slot)
             }

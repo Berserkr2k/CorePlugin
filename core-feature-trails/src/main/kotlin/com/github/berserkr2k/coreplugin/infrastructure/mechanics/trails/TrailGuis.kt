@@ -101,13 +101,11 @@ class TrailGuis(
         }
 
         if (selectorConfig.paginated) {
-            val prevArrow = itemBuilderFactory.builder(selectorConfig.previousPageItem).build()
-            val nextArrow = itemBuilderFactory.builder(selectorConfig.nextPageItem).build()
             builder.placePaginatedItems(
                 selectorConfig,
                 sortedTrails,
-                prevArrow,
-                nextArrow
+                selectorConfig.previousPageItem,
+                selectorConfig.nextPageItem
             ) { trailConfig, slot ->
                 drawTrail(trailConfig, slot)
             }
