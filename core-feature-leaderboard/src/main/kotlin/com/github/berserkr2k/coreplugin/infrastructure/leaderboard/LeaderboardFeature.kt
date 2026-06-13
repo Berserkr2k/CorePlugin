@@ -8,7 +8,7 @@ import com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory
 
 class LeaderboardFeature : Feature {
     override val id = "leaderboard"
-    override val requiresDatabase = true // Enforces that database infra must be ready
+    override val dependencies = setOf("database")
 
     private var leaderboardService: LeaderboardService? = null
 

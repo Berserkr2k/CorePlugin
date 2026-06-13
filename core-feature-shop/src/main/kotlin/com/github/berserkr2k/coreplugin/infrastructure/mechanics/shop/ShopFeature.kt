@@ -9,8 +9,7 @@ import com.github.berserkr2k.coreplugin.api.framework.command.CommandService
 
 class ShopFeature : Feature {
     override val id = "shop"
-    override val requiresDatabase = true
-    override val requiresEconomy = true // Enforces that Economy system must be loaded first
+    override val dependencies = setOf("database", "economy")
 
     private var shopManager: ShopManager? = null
 

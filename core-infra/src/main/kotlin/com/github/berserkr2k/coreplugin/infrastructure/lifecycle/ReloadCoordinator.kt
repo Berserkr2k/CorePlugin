@@ -1,11 +1,15 @@
 package com.github.berserkr2k.coreplugin.infrastructure.lifecycle
 
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import java.util.concurrent.ConcurrentHashMap
 import java.util.logging.Logger
 import kotlin.system.measureTimeMillis
 
-class ReloadCoordinator(private val logger: Logger) : com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator {
+class ReloadCoordinator(
+    private val registry: ServiceRegistry,
+    private val logger: Logger
+) : com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator {
     private val reloadables = ConcurrentHashMap<String, Reloadable>()
 
     /**
@@ -40,39 +44,32 @@ class ReloadCoordinator(private val logger: Logger) : com.github.berserkr2k.core
     override suspend fun reloadAll(): Map<String, Long> {
         val metrics = mutableMapOf<String, Long>()
         
-        // Orden recomendado para evitar desalineación de dependencias
-        val order = listOf(
-            "core",
-            "economy",
-            "regions",
-            "spawn",
-            "kits",
-            "holograms",
-            "shops",
-            "menus",
-            "utility"
-        )
+        // 1. Obtener el orden de dependencias de la base de datos de características activas
+        val featureManager = registry.getOptional(FeatureManager::class.java)
+        val sortedFeatures = featureManager?.getEnabledFeaturesInOrder() ?: emptyList()
+        val sortedFeatureIds = sortedFeatures.map { it.id.lowercase() }
         
-        // Recargar en el orden especificado
-        for (feature in order) {
-            if (reloadables.containsKey(feature)) {
-                try {
-                    val duration = reloadFeature(feature)
-                    metrics[feature] = duration
-                } catch (e: Exception) {
-                    logger.severe("❌ No se pudo completar la recarga del módulo '$feature'.")
-                }
+        // 2. Identificar recargables a nivel de sistema/framework que no son features tradicionales (ej. core, regions)
+        val systemReloadables = reloadables.keys.filter { it !in sortedFeatureIds }
+        
+        // 3. Recargar primero los módulos de sistema en el orden en que se registraron
+        for (featureId in systemReloadables) {
+            try {
+                val duration = reloadFeature(featureId)
+                metrics[featureId] = duration
+            } catch (e: Exception) {
+                logger.severe("❌ No se pudo completar la recarga del módulo de sistema '$featureId'.")
             }
         }
 
-        // Recargar cualquier módulo residual no ordenado
-        for (feature in reloadables.keys) {
-            if (!order.contains(feature) && !metrics.containsKey(feature)) {
+        // 4. Recargar los módulos de gameplay/features en el orden topológico derivado del grafo
+        for (featureId in sortedFeatureIds) {
+            if (reloadables.containsKey(featureId)) {
                 try {
-                    val duration = reloadFeature(feature)
-                    metrics[feature] = duration
+                    val duration = reloadFeature(featureId)
+                    metrics[featureId] = duration
                 } catch (e: Exception) {
-                    logger.severe("❌ No se pudo completar la recarga del módulo '$feature'.")
+                    logger.severe("❌ No se pudo completar la recarga del módulo '$featureId'.")
                 }
             }
         }

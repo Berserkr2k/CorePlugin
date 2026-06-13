@@ -8,7 +8,7 @@ import com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator
 
 class ChatFeature : Feature {
     override val id = "chat"
-    override val requiresDatabase = true // ⚡ El Kernel validará esto automáticamente
+    override val dependencies = setOf("database")
 
     private var chatModule: ChatModule? = null
 

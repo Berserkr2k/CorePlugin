@@ -91,7 +91,7 @@ class CorePlugin(
         registry.register(com.github.berserkr2k.coreplugin.api.core.message.MessageService::class.java, messageRegistry)
 
         // 2b. Inicializar ReloadCoordinator
-        reloadCoordinator = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator(logger)
+        reloadCoordinator = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator(registry, logger)
         registry.register(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java, reloadCoordinator)
 
         val coreDefaults = com.github.berserkr2k.coreplugin.api.core.message.CoreMessages.defaults +
@@ -201,6 +201,7 @@ class CorePlugin(
 
             val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)
             this.featureManager = manager
+            registry.register(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager::class.java, manager)
 
             // Registro centralizado de las nuevas features modulares
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())

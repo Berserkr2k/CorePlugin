@@ -8,7 +8,7 @@ import com.github.berserkr2k.coreplugin.api.core.scheduler.Task
 
 class EconomyFeature : Feature {
     override val id = "economy"
-    override val requiresDatabase = true // El Kernel validará que la DB esté lista
+    override val dependencies = setOf("database")
 
     private var ecoService: EconomyService? = null
     private var purgeTask: Task? = null
