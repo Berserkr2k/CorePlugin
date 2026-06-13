@@ -189,8 +189,10 @@ class MenuServiceImpl(private val plugin: Plugin) : MenuService {
 }
 
 fun ItemConfig.toItemStack(): ItemStack {
-    val factory = Bukkit.getServicesManager().load(ItemBuilderFactory::class.java)
-        ?: throw IllegalStateException("ItemBuilderFactory service is not registered in Bukkit's ServiceManager!")
+    val registry = Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in Bukkit's ServiceManager!")
+    val factory = registry.get(ItemBuilderFactory::class.java)
+        ?: throw IllegalStateException("ItemBuilderFactory is not registered in ServiceRegistry!")
     return factory.builder(this).build()
 }
 
@@ -268,7 +270,9 @@ class CustomMenu(
                         val sound = menuItemConfig.sound
                         val action = menuItemConfig.action
                         if (permission != null && !player.hasPermission(permission)) {
-                            Bukkit.getServicesManager().load(MessageService::class.java)?.send(player, CoreMessages.NO_PERMISSION)
+                            val registry = Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+                            val messageService = registry?.get(MessageService::class.java)
+                            messageService?.send(player, CoreMessages.NO_PERMISSION)
                             return@setItem
                         }
 

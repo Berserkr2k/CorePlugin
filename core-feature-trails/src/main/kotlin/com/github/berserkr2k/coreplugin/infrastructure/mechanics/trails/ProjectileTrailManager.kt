@@ -63,6 +63,15 @@ class ProjectileTrailManager(
     }
 
     private fun setupTrailsFolder() {
+        check(trailsFolder.exists()) { "Trails folder does not exist at absolute path: ${trailsFolder.absolutePath}" }
+        plugin.logger.info("Trails folder resolved: ${trailsFolder.absolutePath}")
+        
+        val filesBefore = trailsFolder.listFiles()
+        plugin.logger.info("Trail files found before setup: ${filesBefore?.size ?: 0}")
+        filesBefore?.forEach {
+            plugin.logger.info(" - ${it.name}")
+        }
+
 
         // 1. Estela Infernal (Fire)
         val defaultFireFile = trailsFolder.resolve("fire.conf")
@@ -291,7 +300,9 @@ class ProjectileTrailManager(
 
     override fun loadAllTrails() {
         trails.clear()
+        plugin.logger.info("Loading trails from folder: ${trailsFolder.absolutePath}")
         val files = trailsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
+        plugin.logger.info("Trail files found for loading: ${files.size}")
 
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
@@ -299,6 +310,7 @@ class ProjectileTrailManager(
                 val loadedConfig = configService.loadConfig(file, TrailConfig::class.java, TrailConfig(id = id))
                 
                 val finalId = if (loadedConfig.id.isNotEmpty()) loadedConfig.id.lowercase() else id
+                plugin.logger.info("Loading trail: $finalId")
                 trails[finalId] = loadedConfig
                 if (finalId != id) {
                     trails[id] = loadedConfig
@@ -307,6 +319,7 @@ class ProjectileTrailManager(
                 plugin.logger.severe("Error al cargar la estela desde ${file.name}: ${e.message}")
             }
         }
+        plugin.logger.info("Loaded ${trails.size} trails in memory.")
     }
 
 
