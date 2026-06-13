@@ -9,9 +9,7 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ConcurrentHashMap
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 
 class ShopManager(
     val plugin: Plugin,
@@ -32,6 +30,8 @@ class ShopManager(
     private val folderProvider = serviceRegistry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
         ?: throw IllegalStateException("FeatureFolderProvider not found")
 
+    private val configService = serviceRegistry.get(ConfigService::class.java)!!
+
     lateinit var marketConfig: MarketConfig
         private set
     
@@ -44,10 +44,6 @@ class ShopManager(
         private set
 
     val initFuture = CompletableFuture<Void>()
-
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
 
     init {
         purgeOldMarketTransactions().thenCompose {
@@ -73,11 +69,8 @@ class ShopManager(
         val future = CompletableFuture<Void>()
         taskScheduler.runAsync {
             try {
-                val field = config.javaClass.getDeclaredField("rootNode")
-                field.isAccessible = true
-                val rootNode = field.get(config) as org.spongepowered.configurate.CommentedConfigurationNode
-                val mapper = mapperFactory.get(MarketConfig::class.java)
-                this.marketConfig = mapper.load(rootNode) ?: MarketConfig()
+                val configFile = File(plugin.dataFolder, "features/shop/config.conf")
+                this.marketConfig = configService.loadConfig(configFile, MarketConfig::class.java, MarketConfig())
                 
                 val categoriesDir = folderProvider.getFeatureFolder("shop").resolve("shops").toFile()
                 if (!categoriesDir.exists()) {
@@ -108,18 +101,8 @@ class ShopManager(
                 categories.clear()
                 for (file in files) {
                     try {
-                        val loader = HoconConfigurationLoader.builder()
-                            .path(file.toPath())
-                            .defaultOptions { options ->
-                                options.serializers { builder ->
-                                    builder.registerAnnotatedObjects(mapperFactory)
-                                }
-                            }
-                            .build()
-                        val root = loader.load()
-                        val shopMapper = mapperFactory.get(ShopConfig::class.java)
-                        val category = shopMapper.load(root)
-                        if (category != null && category.shopId.isNotEmpty()) {
+                        val category = configService.loadConfig(file, ShopConfig::class.java, ShopConfig())
+                        if (category.shopId.isNotEmpty()) {
                             categories[category.shopId] = category
                         }
                     } catch (e: Exception) {

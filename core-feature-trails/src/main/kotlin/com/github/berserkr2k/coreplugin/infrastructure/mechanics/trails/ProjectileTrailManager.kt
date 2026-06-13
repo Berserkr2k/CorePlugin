@@ -26,53 +26,9 @@ class ProjectileTrailManager(
     private val databaseService = registry.get(com.github.berserkr2k.coreplugin.api.core.database.DatabaseService::class.java)
     private val profileRegistry = registry.get(ProfileRegistry::class.java)
     private val folderProvider = registry.get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)
+    private val configService = registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!
 
-    private val mapperFactory = org.spongepowered.configurate.objectmapping.ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(org.spongepowered.configurate.util.NamingSchemes.PASSTHROUGH)
-        .build()
 
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
-    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = org.spongepowered.configurate.hocon.HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        mapper.save(instance, root)
-        loader.save(root)
-    }
     val trails = ConcurrentHashMap<String, TrailConfig>()
     
     private val trailsFolder = folderProvider.getFeatureFolder("trails").resolve("trails").toFile()
@@ -97,7 +53,7 @@ class ProjectileTrailManager(
 
     private fun loadSelectorConfig(): CompletableFuture<Void> {
         return CompletableFuture.runAsync({
-            this.selectorConfig = loadHoconFile(selectorConfigFile, MenuConfig::class.java, createDefaultSelectorConfig())
+            this.selectorConfig = configService.loadConfig(selectorConfigFile, MenuConfig::class.java, createDefaultSelectorConfig())
         }, { taskScheduler.runAsync(it) })
     }
 
@@ -330,7 +286,7 @@ class ProjectileTrailManager(
 
     private fun saveDefaultTrail(file: File, trailConfig: TrailConfig) {
         try {
-            saveHoconFile(file, TrailConfig::class.java, trailConfig)
+            configService.saveConfig(file, TrailConfig::class.java, trailConfig)
         } catch (e: Exception) {
             plugin.logger.severe("Fallo al guardar estela por defecto: ${e.message}")
         }
@@ -343,7 +299,7 @@ class ProjectileTrailManager(
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val loadedConfig = loadHoconFile(file, TrailConfig::class.java, TrailConfig(id = id))
+                val loadedConfig = configService.loadConfig(file, TrailConfig::class.java, TrailConfig(id = id))
                 
                 val finalId = if (loadedConfig.id.isNotEmpty()) loadedConfig.id.lowercase() else id
                 trails[finalId] = loadedConfig

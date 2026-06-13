@@ -12,9 +12,7 @@ import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
 import org.bukkit.event.inventory.ClickType
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+// Configurate imports decoupled
 import java.io.File
 
 class KitGuis(
@@ -29,43 +27,17 @@ class KitGuis(
     var showcaseConfig: MenuConfig = createDefaultShowcaseConfig()
         private set
 
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
+
 
     init {
         reload()
     }
 
-    private fun <T : Any> loadMenuConfig(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
     fun reload() {
         val selectorFile = File(plugin.dataFolder, "menus/kits-selector.conf")
         val showcaseFile = File(plugin.dataFolder, "menus/kits-showcase.conf")
-        selectorConfig = loadMenuConfig(selectorFile, MenuConfig::class.java, createDefaultSelectorConfig())
-        showcaseConfig = loadMenuConfig(showcaseFile, MenuConfig::class.java, createDefaultShowcaseConfig())
+        selectorConfig = configService.loadConfig(selectorFile, MenuConfig::class.java, createDefaultSelectorConfig())
+        showcaseConfig = configService.loadConfig(showcaseFile, MenuConfig::class.java, createDefaultShowcaseConfig())
     }
 
     private fun createDefaultSelectorConfig(): MenuConfig {

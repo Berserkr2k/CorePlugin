@@ -16,9 +16,8 @@ import org.spongepowered.configurate.objectmapping.ConfigSerializable
 import com.github.berserkr2k.coreplugin.api.core.state.PlayerStateService
 import com.github.berserkr2k.coreplugin.api.core.message.MessageService
 import com.github.berserkr2k.coreplugin.api.core.message.PlaceholderContext
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 import java.io.File
 
 @ConfigSerializable
@@ -36,59 +35,33 @@ object ArmorStandEditorGui {
     private lateinit var plugin: Plugin
     private lateinit var playerStateService: PlayerStateService
     private lateinit var messageService: MessageService
+    private lateinit var configService: ConfigService
     lateinit var editorConfig: EditorConfig
         private set
     private lateinit var menuService: MenuService
 
     lateinit var guiConfig: ArmorStandEditorGuiConfig
 
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
-
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
     fun init(plugin: Plugin, menuService: MenuService) {
         this.plugin = plugin
         this.menuService = menuService
         
-        val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        val registry = org.bukkit.Bukkit.getServicesManager().load(ServiceRegistry::class.java)
             ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
             
         this.playerStateService = registry.get(PlayerStateService::class.java)!!
         this.messageService = registry.get(MessageService::class.java)!!
+        this.configService = registry.get(ConfigService::class.java)!!
         
         reloadConfigs()
     }
 
     fun reloadConfigs() {
         val editorFile = File(plugin.dataFolder, "core/editor.conf")
-        this.editorConfig = loadHoconFile(editorFile, EditorConfig::class.java, EditorConfig())
+        this.editorConfig = configService.loadConfig(editorFile, EditorConfig::class.java, EditorConfig())
 
         val guiFile = File(plugin.dataFolder, "menus/armorstand-editor.conf")
-        this.guiConfig = loadHoconFile(guiFile, ArmorStandEditorGuiConfig::class.java, createDefaultGuiConfig())
+        this.guiConfig = configService.loadConfig(guiFile, ArmorStandEditorGuiConfig::class.java, createDefaultGuiConfig())
     }
 
     private fun getEditorState(player: Player): ArmorStandEditorStateContainer {

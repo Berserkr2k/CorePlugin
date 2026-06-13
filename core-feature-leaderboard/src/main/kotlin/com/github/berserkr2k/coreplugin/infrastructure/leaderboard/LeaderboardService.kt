@@ -1,8 +1,6 @@
 package com.github.berserkr2k.coreplugin.infrastructure.leaderboard
 
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+import com.github.berserkr2k.coreplugin.api.core.config.ConfigService
 import com.github.berserkr2k.coreplugin.api.core.database.DatabaseService
 import com.github.berserkr2k.coreplugin.api.core.placeholder.PlaceholderService
 import com.github.berserkr2k.coreplugin.api.core.user.ProfileRegistry
@@ -63,54 +61,12 @@ class LeaderboardService(
     private val messageService = registry.get(MessageService::class.java)!!
     private val profileRegistry = registry.get(ProfileRegistry::class.java)!!
     private val placeholderBridge = registry.get(PlaceholderService::class.java)!!
+    private val configService = registry.get(ConfigService::class.java)!!
 
     val leaderboards = ConcurrentHashMap<String, CustomLeaderboardConfig>()
     val activePodiums = ConcurrentHashMap<String, ActivePodium>()
     
     private val leaderboardsFolder = folderProvider.getFeatureFolder("economy").resolve("leaderboards").toFile()
-
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
-
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
-    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        mapper.save(instance, root)
-        loader.save(root)
-    }
 
     init {
         // Inicializar directorio e cargar clasificacións
@@ -147,7 +103,7 @@ class LeaderboardService(
         // Crear clasificaciones por defecto si está vacía
         val defaultCreditsFile = leaderboardsFolder.resolve("credits.conf")
         if (!defaultCreditsFile.exists()) {
-            loadHoconFile(
+            configService.loadConfig(
                 defaultCreditsFile,
                 CustomLeaderboardConfig::class.java,
                 CustomLeaderboardConfig(
@@ -160,7 +116,7 @@ class LeaderboardService(
 
         val defaultKillsFile = leaderboardsFolder.resolve("kills.conf")
         if (!defaultKillsFile.exists()) {
-            loadHoconFile(
+            configService.loadConfig(
                 defaultKillsFile,
                 CustomLeaderboardConfig::class.java,
                 CustomLeaderboardConfig(
@@ -179,7 +135,7 @@ class LeaderboardService(
         for (file in files) {
             val id = file.nameWithoutExtension.lowercase()
             try {
-                val config = loadHoconFile(file, CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id))
+                val config = configService.loadConfig(file, CustomLeaderboardConfig::class.java, CustomLeaderboardConfig(id = id))
                 leaderboards[id] = config
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar la clasificación desde ${file.name}: ${e.message}")
@@ -318,7 +274,7 @@ class LeaderboardService(
 
             try {
                 val file = leaderboardsFolder.resolve("$leaderboardId.conf")
-                saveHoconFile(file, CustomLeaderboardConfig::class.java, updatedConfig)
+                configService.saveConfig(file, CustomLeaderboardConfig::class.java, updatedConfig)
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId: ${e.message}")
             }
@@ -344,7 +300,7 @@ class LeaderboardService(
 
             try {
                 val file = leaderboardsFolder.resolve("$leaderboardId.conf")
-                saveHoconFile(file, CustomLeaderboardConfig::class.java, updatedConfig)
+                configService.saveConfig(file, CustomLeaderboardConfig::class.java, updatedConfig)
             } catch (e: Exception) {
                 plugin.logger.severe("Fallo al guardar clasificación $leaderboardId tras remover podio: ${e.message}")
             }

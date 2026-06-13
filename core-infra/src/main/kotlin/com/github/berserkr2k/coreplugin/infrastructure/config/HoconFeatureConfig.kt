@@ -11,9 +11,7 @@ class HoconFeatureConfig(
     private val file: Path,
     private val executor: Executor = Executor { command -> command.run() }
 ) : FeatureConfig {
-    private val loader = HoconConfigurationLoader.builder()
-        .path(file)
-        .build()
+    private val loader = HoconLoaderFactory.create(file.toFile())
     private lateinit var rootNode: CommentedConfigurationNode
 
     init {

@@ -26,10 +26,7 @@ import org.bukkit.event.entity.EntityDamageEvent
 import org.bukkit.event.player.PlayerMoveEvent
 import org.bukkit.event.player.PlayerQuitEvent
 import org.bukkit.plugin.Plugin
-import org.spongepowered.configurate.CommentedConfigurationNode
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+// Configurate imports decoupled
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -54,9 +51,9 @@ class WarpService(
     private val warpsDir = folderProvider.getFeatureFolder("warps").resolve("warps").toFile()
     private val warps = ConcurrentHashMap<String, WarpConfig>()
 
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
+    private val registry = org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
+        ?: throw IllegalStateException("ServiceRegistry not found in ServicesManager")
+    private val configService = registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!
 
     private fun getWarpState(uuid: UUID): WarpStateContainer {
         return stateService.getContainer(uuid, WARP_STATE)
@@ -82,48 +79,9 @@ class WarpService(
         loadMenuConfig()
     }
 
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
-
-    private fun <T : Any> saveHoconFile(file: File, configClass: Class<T>, instance: T) {
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.createNode()
-        val mapper = mapperFactory.get(configClass)
-        mapper.save(instance, root)
-        loader.save(root)
-    }
-
     private fun loadMenuConfig() {
         val menuConfigFile = File(plugin.dataFolder, "menus/warps-selector.conf")
-        this.menuConfig = loadHoconFile(menuConfigFile, MenuConfig::class.java, menuConfig)
+        this.menuConfig = configService.loadConfig(menuConfigFile, MenuConfig::class.java, menuConfig)
     }
 
     fun loadAllWarps() {
@@ -131,7 +89,7 @@ class WarpService(
         val files = warpsDir.listFiles { _, name -> name.endsWith(".conf") } ?: return
         for (file in files) {
             val name = file.nameWithoutExtension.lowercase()
-            val loadedWarp = loadHoconFile(file, WarpConfig::class.java, WarpConfig(name = file.nameWithoutExtension))
+            val loadedWarp = configService.loadConfig(file, WarpConfig::class.java, WarpConfig(name = file.nameWithoutExtension))
             warps[name] = loadedWarp
         }
     }
@@ -223,7 +181,7 @@ class WarpService(
         // Guardar asíncronamente
         taskScheduler.runAsync {
             val file = File(warpsDir, "$name.conf")
-            saveHoconFile(file, WarpConfig::class.java, warpConfig)
+            configService.saveConfig(file, WarpConfig::class.java, warpConfig)
         }
     }
 

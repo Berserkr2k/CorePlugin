@@ -19,9 +19,7 @@ import org.bukkit.Particle
 import org.bukkit.entity.Player
 import org.bukkit.inventory.ItemStack
 import org.bukkit.plugin.Plugin
-import org.spongepowered.configurate.hocon.HoconConfigurationLoader
-import org.spongepowered.configurate.objectmapping.ObjectMapper
-import org.spongepowered.configurate.util.NamingSchemes
+// Configurate imports decoupled
 import java.io.File
 import java.math.BigDecimal
 import java.util.UUID
@@ -60,10 +58,7 @@ class KitService(
     private val itemBuilderFactory by lazy { registry.get(ItemBuilderFactory::class.java)!! }
     private val economyService by lazy { registry.get(EconomyService::class.java) }
     private val profileRegistry by lazy { registry.get(ProfileRegistry::class.java) }
-
-    private val mapperFactory = ObjectMapper.factoryBuilder()
-        .defaultNamingScheme(NamingSchemes.PASSTHROUGH)
-        .build()
+    private val configService by lazy { registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!! }
 
     init {
         loadAllKits()
@@ -73,29 +68,7 @@ class KitService(
         loadAllKits()
     }
 
-    private fun <T : Any> loadHoconFile(file: File, configClass: Class<T>, defaultInstance: T): T {
-        if (!file.exists()) {
-            file.parentFile?.mkdirs()
-            file.createNewFile()
-        }
-        val loader = HoconConfigurationLoader.builder()
-            .path(file.toPath())
-            .defaultOptions { options ->
-                options.serializers { builder ->
-                    builder.registerAnnotatedObjects(mapperFactory)
-                }
-            }
-            .build()
-        val root = loader.load()
-        val mapper = mapperFactory.get(configClass)
-        return if (root.empty()) {
-            mapper.save(defaultInstance, root)
-            loader.save(root)
-            defaultInstance
-        } else {
-            mapper.load(root) ?: defaultInstance
-        }
-    }
+
 
     override fun loadAllKits() {
         kits.clear()
@@ -105,7 +78,7 @@ class KitService(
 
         val starterFile = kitsFolder.resolve("starter.conf")
         if (!starterFile.exists()) {
-            loadHoconFile(starterFile, KitConfig::class.java, KitConfig())
+            configService.loadConfig(starterFile, KitConfig::class.java, KitConfig())
         }
 
         val confFiles = kitsFolder.listFiles { _, name -> name.endsWith(".conf") } ?: emptyArray()
@@ -113,7 +86,7 @@ class KitService(
         for (file in confFiles) {
             val kitId = file.nameWithoutExtension.lowercase()
             try {
-                val kitConfig = loadHoconFile(file, KitConfig::class.java, KitConfig())
+                val kitConfig = configService.loadConfig(file, KitConfig::class.java, KitConfig())
                 kits[kitId] = kitConfig
             } catch (e: Exception) {
                 plugin.logger.severe("Error al cargar el kit desde ${file.name}: ${e.message}")

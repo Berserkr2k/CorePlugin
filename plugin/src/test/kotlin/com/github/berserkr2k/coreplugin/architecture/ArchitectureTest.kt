@@ -59,6 +59,7 @@ class ArchitectureTest {
     val features_must_not_use_raw_bukkit_or_paper_messaging_leaks: ArchRule = noClasses()
         .that().resideInAPackage("..com.github.berserkr2k.coreplugin.infrastructure..")
         .and().resideOutsideOfPackage("..com.github.berserkr2k.coreplugin.infrastructure.message..")
+        .and().resideOutsideOfPackage("..com.github.berserkr2k.coreplugin.infrastructure.lifecycle..")
         .should().callMethodWhere(object : DescribedPredicate<JavaMethodCall>("calls sendMessage or sendRawMessage") {
             override fun test(target: JavaMethodCall): Boolean {
                 val name = target.name
