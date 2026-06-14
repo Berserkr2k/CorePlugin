@@ -77,6 +77,7 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
     
     private var paginatedRunner: ((CustomMenu) -> Unit)? = null
     private var configLoader: ((CustomMenu) -> Unit)? = null
+    private var activeMenu: CustomMenu? = null
 
     override fun title(title: Component) = apply { this.title = title }
     
@@ -84,7 +85,14 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
 
     override fun rows(rows: Int) = apply { this.slots = rows * 9 }
     
-    override fun button(slot: Int, button: Button) = apply { this.buttons[slot] = button }
+    override fun button(slot: Int, button: Button) = apply {
+        this.buttons[slot] = button
+        activeMenu?.let { menu ->
+            menu.setItem(slot, button.icon) { player, event ->
+                button.onClick(player, event.click)
+            }
+        }
+    }
     
     override fun fill(button: Button) = apply { this.fillerButton = button }
     
@@ -137,6 +145,7 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
 
     override fun build(): Menu {
         val customMenu = CustomMenu(title, slots, plugin)
+        this.activeMenu = customMenu
         
         // 1. Cargar relleno si existe
         fillerButton?.let { filler ->
