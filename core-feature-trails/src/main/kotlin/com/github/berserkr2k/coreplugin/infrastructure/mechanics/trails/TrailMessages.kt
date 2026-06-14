@@ -12,14 +12,7 @@ enum class TrailMessages(override val path: String) : MessageKey {
     ADMIN_EQUIPPED_TARGET("admin-equipped-target"),
     ADMIN_CLEARED_SENDER("admin-cleared-sender"),
     ADMIN_CLEARED_TARGET("admin-cleared-target"),
-    ONLY_PLAYERS("only-players"),
-    GUI_TRAIL_EQUIPPED("gui.trail-equipped"),
-    GUI_TRAIL_EQUIPPED_LORE("gui.trail-equipped-lore"),
-    GUI_TRAIL_SELECT("gui.trail-select"),
-    GUI_TRAIL_LOCKED("gui.trail-locked"),
-    GUI_TRAIL_LOCKED_LORE("gui.trail-locked-lore"),
-    GUI_CLEAR_NAME("gui.clear-name"),
-    GUI_CLEAR_LORE("gui.clear-lore");
+    ONLY_PLAYERS("only-players");
 
     override val feature: String = "trails"
 
@@ -34,14 +27,7 @@ enum class TrailMessages(override val path: String) : MessageKey {
             "admin-equipped-target" to "<green>¡Se te ha equipado la estela '<name>' por un administrador!</green>",
             "admin-cleared-sender" to "<green>¡Se ha removido la estela de <target> con éxito!</green>",
             "admin-cleared-target" to "<yellow>Tu estela de partículas ha sido removida por un administrador.</yellow>",
-            "only-players" to "<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>",
-            "gui.trail-equipped" to "<green>⭐ ¡Estela Equipada!</green>",
-            "gui.trail-equipped-lore" to "<gray>Tu proyectil ya tiene este efecto.</gray>",
-            "gui.trail-select" to "<yellow>⚡ Click para Equipar</yellow>",
-            "gui.trail-locked" to "<red>❌ Bloqueado</red>",
-            "gui.trail-locked-lore" to "<gray>Requiere permiso: <red><permission></red></gray>",
-            "gui.clear-name" to "<red><bold>❌ Quitar Estela</bold></red>",
-            "gui.clear-lore" to "<gray>Haz click aquí para remover tu</gray>\n<gray>estela de partículas activa.</gray>\n \n<yellow>⚡ Click para remover</yellow>"
+            "only-players" to "<red>Solo jugadores pueden abrir el menú de selección de estelas.</red>"
         )
     }
 }

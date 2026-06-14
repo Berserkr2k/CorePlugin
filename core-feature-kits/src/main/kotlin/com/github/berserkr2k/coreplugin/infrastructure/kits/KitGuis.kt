@@ -17,77 +17,31 @@ import java.io.File
 
 class KitGuis(
     private val plugin: Plugin,
-    private val configService: com.github.berserkr2k.coreplugin.api.core.config.ConfigService,
     private val kitService: KitService,
     private val messageService: MessageService
 ) {
-    var selectorConfig: MenuConfig = createDefaultSelectorConfig()
-        private set
+    val selectorConfig: KitsSelectorMenuConfig
+        get() = kitService.selectorConfig
     
-    var showcaseConfig: MenuConfig = createDefaultShowcaseConfig()
-        private set
-
-
-
-    private val folderProvider by lazy {
-        org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)!!
-            .get(com.github.berserkr2k.coreplugin.api.core.filesystem.FeatureFolderProvider::class.java)!!
-    }
+    val showcaseConfig: KitsShowcaseMenuConfig
+        get() = kitService.showcaseConfig
 
     init {
         reload()
     }
 
     fun reload() {
-        val configFolder = folderProvider.getFeatureConfigFolder("kits")
-        val selectorFile = configFolder.resolve("kits-selector.conf").toFile()
-        val showcaseFile = configFolder.resolve("kits-showcase.conf").toFile()
-        selectorConfig = configService.loadConfig(selectorFile, MenuConfig::class.java, createDefaultSelectorConfig())
-        showcaseConfig = configService.loadConfig(showcaseFile, MenuConfig::class.java, createDefaultShowcaseConfig())
-    }
-
-    private fun createDefaultSelectorConfig(): MenuConfig {
-        return MenuConfig(
-            title = "<gold><bold>Kits Disponibles</bold></gold>",
-            size = 27,
-            filler = FillerConfig(
-                enabled = true,
-                item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
-            )
-        )
-    }
-
-    private fun createDefaultShowcaseConfig(): MenuConfig {
-        return MenuConfig(
-            title = "<gold>Previsualizar: %kit_name%</gold>",
-            size = 27,
-            filler = FillerConfig(
-                enabled = true,
-                item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
-            ),
-            items = mapOf(
-                "back" to MenuItemConfig(
-                    slots = listOf(18),
-                    item = ItemConfig(material = "BARRIER", displayName = "<red>Volver al Selector</red>", lore = listOf("<gray>Regresa al selector de kits principal.</gray>")),
-                    action = "back"
-                ),
-                "claim" to MenuItemConfig(
-                    slots = listOf(22),
-                    item = ItemConfig(material = "GREEN_CONCRETE", displayName = "<green><bold>✔ ¡Reclamar Kit!</bold></green>", lore = listOf("%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>")),
-                    action = "claim"
-                )
-            )
-        )
+        // No-op, configuration reloads are now centrally managed by KitService
     }
 
     fun openKitSelector(player: Player, menuService: MenuService, itemBuilderFactory: ItemBuilderFactory) {
         val builder = menuService.createBuilder()
-            .title(ColorUtility.parse(selectorConfig.title))
-            .slots(selectorConfig.size)
+            .title(ColorUtility.parse(selectorConfig.menu.title))
+            .slots(selectorConfig.menu.size)
 
         // Rellenar con paneles decorativos
-        if (selectorConfig.filler.enabled) {
-            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+        if (selectorConfig.menu.filler.enabled) {
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.menu.filler.item).build()
             val fillerButton = Button.builder().icon(fillerItem).build()
             builder.fill(fillerButton)
         }
@@ -111,29 +65,29 @@ class KitGuis(
 
             when {
                 !hasPerm -> {
-                    loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_LOCKED).ifEmpty { "<red>❌ Bloqueado (Requiere Rango)</red>" })
+                    loreLines.add(selectorConfig.statusLocked)
                 }
                 isCooldownActive -> {
                     val timeStr = kitService.formatTime(remaining)
-                    loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_COOLDOWN).ifEmpty { "<red>⏳ En Cooldown (Espera: <time>)</red>" }.replace("<time>", timeStr))
+                    loreLines.add(selectorConfig.statusCooldown.replace("<time>", timeStr))
                 }
                 else -> {
                     if (config.cost > 0.0) {
-                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_COST).ifEmpty { "<gold>⚖ Costo: <cost> <currency></gold>" }
+                        loreLines.add(selectorConfig.statusCost
                             .replace("<cost>", config.cost.toString())
                             .replace("<currency>", config.currency.uppercase()))
                     }
                     if (remaining > 0 && hasBypass) {
-                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_BYPASS).ifEmpty { "<green>✔ ¡Disponible! (<yellow>Bypass de Cooldown Activo</yellow>)</green>" })
+                        loreLines.add(selectorConfig.statusBypass)
                     } else {
-                        loreLines.add(messageService.getRawTemplate(KitMessages.GUI_STATUS_AVAILABLE).ifEmpty { "<green>✔ ¡Disponible para Reclamar!</green>" })
+                        loreLines.add(selectorConfig.statusAvailable)
                     }
                 }
             }
 
             loreLines.add(" ")
-            loreLines.add(messageService.getRawTemplate(KitMessages.GUI_ACTION_CLAIM).ifEmpty { "<yellow>⚡ Click Izquierdo para Reclamar</yellow>" })
-            loreLines.add(messageService.getRawTemplate(KitMessages.GUI_ACTION_PREVIEW).ifEmpty { "<aqua>⚡ Click Derecho para Previsualizar</aqua>" })
+            loreLines.add(selectorConfig.actionClaim)
+            loreLines.add(selectorConfig.actionPreview)
 
             val kitIcon = itemBuilderFactory.builder(baseItem)
                 .lore(loreLines)
@@ -161,18 +115,18 @@ class KitGuis(
             builder.button(slot, btn)
         }
 
-        if (selectorConfig.paginated) {
+        if (selectorConfig.menu.paginated) {
             builder.placePaginatedItems(
-                selectorConfig,
+                selectorConfig.menu,
                 sortedKits,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                selectorConfig.menu.previousPageItem,
+                selectorConfig.menu.nextPageItem
             ) { kitEntry, slot ->
                 drawKit(kitEntry, slot)
             }
         } else {
             builder.placeDynamicItems(
-                selectorConfig,
+                selectorConfig.menu,
                 sortedKits,
                 { it.second.guiSlot }
             ) { kitEntry, slot ->
@@ -193,14 +147,14 @@ class KitGuis(
             else -> 54
         }
 
-        val titleText = showcaseConfig.title.replace("%kit_name%", config.displayName)
+        val titleText = showcaseConfig.menu.title.replace("%kit_name%", config.displayName)
         val builder = menuService.createBuilder()
             .title(ColorUtility.parse(titleText))
             .slots(slots)
 
         // Rellenar con paneles decorativos
-        if (showcaseConfig.filler.enabled) {
-            val fillerItem = itemBuilderFactory.builder(showcaseConfig.filler.item).build()
+        if (showcaseConfig.menu.filler.enabled) {
+            val fillerItem = itemBuilderFactory.builder(showcaseConfig.menu.filler.item).build()
             val fillerButton = Button.builder().icon(fillerItem).build()
             builder.fill(fillerButton)
         }
@@ -233,25 +187,16 @@ class KitGuis(
         val isCooldownActive = remaining > 0 && !hasBypass
 
         // Cargar botones desde la configuración HOCON
-        val backBtnConfig = showcaseConfig.items["back"] ?: MenuItemConfig(
+        val backBtnConfig = showcaseConfig.menu.items["back"] ?: MenuItemConfig(
             item = ItemConfig(material = "BARRIER", displayName = "", lore = emptyList())
         )
-        val claimBtnConfig = showcaseConfig.items["claim"] ?: MenuItemConfig(
+        val claimBtnConfig = showcaseConfig.menu.items["claim"] ?: MenuItemConfig(
             item = ItemConfig(material = "GREEN_CONCRETE", displayName = "", lore = emptyList())
         )
 
         // Botón de Volver
-        val backDisplayName = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_BACK_NAME).ifEmpty {
-            backBtnConfig.item.displayName?.ifEmpty { "<red>Volver al Selector</red>" } ?: "<red>Volver al Selector</red>"
-        }
-        val backLoreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_BACK_LORE).ifEmpty {
-            if (backBtnConfig.item.lore.isNotEmpty()) {
-                backBtnConfig.item.lore.joinToString("\n")
-            } else {
-                "<gray>Regresa al selector de kits principal.</gray>"
-            }
-        }
-        val backLore = backLoreRaw.split("\n")
+        val backDisplayName = showcaseConfig.backName
+        val backLore = showcaseConfig.backLore
 
         val backItem = itemBuilderFactory.builder(backBtnConfig.item.copy(displayName = backDisplayName, lore = backLore)).build()
         val backBtn = Button.builder()
@@ -271,9 +216,10 @@ class KitGuis(
         val claimItemConfig = claimBtnConfig.item
         val actionItem: ItemStack = when {
             !hasPerm -> {
-                val name = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_LOCKED_NAME).ifEmpty { "<red><bold>❌ Kit Bloqueado</bold></red>" }
-                val loreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_LOCKED_LORE).ifEmpty { "<gray>Requiere el rango de permiso:</gray>\n<red><permission></red>" }
-                val resolvedLore = loreRaw.replace("<permission>", config.permission).split("\n")
+                val name = showcaseConfig.lockedName
+                val resolvedLore = showcaseConfig.lockedLore.map { line ->
+                    line.replace("<permission>", config.permission)
+                }
                 itemBuilderFactory.builder(Material.RED_CONCRETE)
                     .displayName(name)
                     .lore(resolvedLore)
@@ -281,9 +227,10 @@ class KitGuis(
             }
             isCooldownActive -> {
                 val timeStr = kitService.formatTime(remaining)
-                val name = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_COOLDOWN_NAME).ifEmpty { "<yellow><bold>⏳ En Cooldown</bold></yellow>" }
-                val loreRaw = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_COOLDOWN_LORE).ifEmpty { "<gray>Debes esperar:</gray>\n<yellow><time></yellow>\n<gray>para reclamar nuevamente.</gray>" }
-                val resolvedLore = loreRaw.replace("<time>", timeStr).split("\n")
+                val name = showcaseConfig.cooldownName
+                val resolvedLore = showcaseConfig.cooldownLore.map { line ->
+                    line.replace("<time>", timeStr)
+                }
                 itemBuilderFactory.builder(Material.YELLOW_CONCRETE)
                     .displayName(name)
                     .lore(resolvedLore)
@@ -293,20 +240,12 @@ class KitGuis(
                 val priceLore = if (config.cost > 0.0) "<gray>Costo: </gray><gold>${config.cost} ${config.currency.uppercase()}</gold>\n" else ""
                 val bypassLore = if (remaining > 0 && hasBypass) "<yellow>¡Bypass de Cooldown Activo!</yellow>\n" else ""
                 
-                val claimDisplayName = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_CLAIM_NAME).ifEmpty {
-                    claimItemConfig.displayName?.ifEmpty { "<green><bold>✔ ¡Reclamar Kit!</bold></green>" } ?: "<green><bold>✔ ¡Reclamar Kit!</bold></green>"
+                val claimDisplayName = showcaseConfig.claimName
+                val resolvedLore = showcaseConfig.claimLore.flatMap { line ->
+                    line.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore).split("\n")
                 }
                 
-                val rawLore = messageService.getRawTemplate(KitMessages.GUI_SHOWCASE_CLAIM_LORE).ifEmpty {
-                    if (claimItemConfig.lore.isNotEmpty()) {
-                        claimItemConfig.lore.joinToString("\n")
-                    } else {
-                        "%price_lore%%bypass_lore%<gray>Haz click aquí para recibir los items.</gray>"
-                    }
-                }
-                val processedLore = rawLore.replace("%price_lore%", priceLore).replace("%bypass_lore%", bypassLore).split("\n")
-                
-                itemBuilderFactory.builder(claimItemConfig.copy(displayName = claimDisplayName, lore = processedLore)).build()
+                itemBuilderFactory.builder(claimItemConfig.copy(displayName = claimDisplayName, lore = resolvedLore)).build()
             }
         }
 

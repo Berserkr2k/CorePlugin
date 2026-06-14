@@ -24,8 +24,6 @@ class KitCommand(
 ) {
     private val guis = KitGuis(
         plugin,
-        org.bukkit.Bukkit.getServicesManager().load(com.github.berserkr2k.coreplugin.api.di.ServiceRegistry::class.java)
-            ?.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)!!,
         kitService,
         messageService
     )

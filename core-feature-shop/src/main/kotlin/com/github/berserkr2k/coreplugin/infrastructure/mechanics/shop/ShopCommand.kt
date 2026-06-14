@@ -36,7 +36,7 @@ class ShopCommand(
     }
 
     private fun registerGlobalActions() {
-        shopManager.marketConfig.categoriesMenu.items.forEach { (shopId, _) ->
+        shopManager.categoriesMenu.items.forEach { (shopId, _) ->
             try {
                 com.github.berserkr2k.coreplugin.common.gui.MenuActionRegistry.register("open_shop_$shopId") { player, _ ->
                     if (shopId == "history") {

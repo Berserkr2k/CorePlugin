@@ -33,17 +33,14 @@ class ProjectileTrailManager(
     
     private val trailsFolder = folderProvider.getFeatureDataFolder("trails").toFile()
 
-    var selectorConfig = MenuConfig(
-        title = "<gold><bold>Estelas de Proyectil</bold></gold>",
-        size = 27,
-        filler = FillerConfig(
-            enabled = true,
-            item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
-        )
-    )
+    var selectorConfig = TrailSelectorMenuConfig()
         private set
 
-    private val selectorConfigFile = folderProvider.getFeatureConfigFolder("trails").resolve("trails-selector.conf").toFile()
+    var displayConfig = TrailDisplayConfig()
+        private set
+
+    private val selectorConfigFile = folderProvider.getFeatureConfigFolder("trails").resolve("menus/selector.conf").toFile()
+    private val displayConfigFile = folderProvider.getFeatureConfigFolder("trails").resolve("display.conf").toFile()
 
     init {
         setupTrailsFolder()
@@ -53,7 +50,8 @@ class ProjectileTrailManager(
 
     private fun loadSelectorConfig(): CompletableFuture<Void> {
         return CompletableFuture.runAsync({
-            this.selectorConfig = configService.loadConfig(selectorConfigFile, MenuConfig::class.java, createDefaultSelectorConfig())
+            this.selectorConfig = configService.loadConfig(selectorConfigFile, TrailSelectorMenuConfig::class.java, TrailSelectorMenuConfig())
+            this.displayConfig = configService.loadConfig(displayConfigFile, TrailDisplayConfig::class.java, TrailDisplayConfig())
         }, { taskScheduler.runAsync(it) })
     }
 
@@ -324,33 +322,7 @@ class ProjectileTrailManager(
 
 
 
-    private fun createDefaultSelectorConfig(): MenuConfig {
-        return MenuConfig(
-            title = "<gold><bold>Estelas de Proyectil</bold></gold>",
-            size = 27,
-            filler = FillerConfig(
-                enabled = true,
-                item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
-            ),
-            items = mapOf(
-                "clear" to MenuItemConfig(
-                    slots = listOf(22),
-                    item = ItemConfig(
-                        material = "BARRIER",
-                        displayName = "<red><bold>❌ Quitar Estela</bold></red>",
-                        lore = listOf(
-                            "<gray>Haz click aquí para remover tu</gray>",
-                            "<gray>estela de partículas activa.</gray>",
-                            " ",
-                            "<yellow>⚡ Click para remover</yellow>"
-                        )
-                    ),
-                    action = "clear",
-                    sound = "BLOCK_LAVA_EXTINGUISH"
-                )
-            )
-        )
-    }
+
 
     override fun getActiveTrail(uuid: UUID): String? {
         return profileRegistry.getProfile(uuid)?.activeTrailId

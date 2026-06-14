@@ -46,6 +46,12 @@ class KitService(
 ) : org.bukkit.event.Listener, com.github.berserkr2k.coreplugin.api.feature.kits.KitService, com.github.berserkr2k.coreplugin.api.core.lifecycle.Reloadable {
     val kits = ConcurrentHashMap<String, KitConfig>()
     
+    lateinit var selectorConfig: KitsSelectorMenuConfig
+        private set
+    
+    lateinit var showcaseConfig: KitsShowcaseMenuConfig
+        private set
+    
     private val registry: ServiceRegistry by lazy {
         Bukkit.getServicesManager().load(ServiceRegistry::class.java)
             ?: throw IllegalStateException("ServiceRegistry not found")
@@ -68,10 +74,18 @@ class KitService(
         loadAllKits()
     }
 
-
-
     override fun loadAllKits() {
         kits.clear()
+
+        val configFolder = folderProvider.getFeatureConfigFolder("kits").toFile()
+        
+        // Cargar selector
+        val selectorFile = File(configFolder, "menus/selector.conf")
+        this.selectorConfig = configService.loadConfig(selectorFile, KitsSelectorMenuConfig::class.java, KitsSelectorMenuConfig())
+        
+        // Cargar showcase
+        val showcaseFile = File(configFolder, "menus/showcase.conf")
+        this.showcaseConfig = configService.loadConfig(showcaseFile, KitsShowcaseMenuConfig::class.java, KitsShowcaseMenuConfig())
 
         val starterFile = kitsFolder.resolve("starter.conf")
         if (!starterFile.exists()) {

@@ -2,26 +2,34 @@ package com.github.berserkr2k.coreplugin.infrastructure.utilitycommands
 
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.Feature
 import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureContext
+import com.github.berserkr2k.coreplugin.api.core.lifecycle.FeatureDescriptor
+import com.github.berserkr2k.coreplugin.api.di.ServiceRegistry
 
 class UtilityFeature : Feature {
-    override val id = "utility-commands"
+    override val descriptor = FeatureDescriptor(
+        id = "utility-commands",
+        provides = emptySet()
+    )
 
     private var utilityService: UtilityService? = null
+
+    override fun registerServices(registry: ServiceRegistry) {
+        val plugin = registry.get(org.bukkit.plugin.Plugin::class.java)
+        val configService = registry.get(com.github.berserkr2k.coreplugin.api.core.config.ConfigService::class.java)
+
+        val config = configService.getConfig("utility")
+        val service = UtilityService(plugin, config)
+        this.utilityService = service
+    }
 
     override fun onEnable(context: FeatureContext) {
         context.messageService.registerFeature("utility", UtilityMessages.defaults)
 
-        val config = context.configService.getConfig("utility")
+        val service = utilityService ?: throw IllegalStateException("UtilityService not initialized during registerServices")
 
-        // 1. Initialize the Utility internal service
-        val service = UtilityService(context._plugin, config)
-        this.utilityService = service
-
-        // 2. Fetch the abstract CommandService from the context (Cloud V2 Engine)
         val commandService = context.getService(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java)
         val manager = commandService.manager
 
-        // 3. Register ALL utility sub-commands autonomously using the clean API manager
         AnvilCommand(context._plugin, manager, service, context.messageService)
         BroadcastCommand(context._plugin, manager, service, context.messageService)
         EnderChestCommand(context._plugin, manager, context.messageService)
@@ -33,7 +41,6 @@ class UtilityFeature : Feature {
         SendTitleCommand(context._plugin, manager, service, context.messageService)
         SpeedCommand(context._plugin, manager, context.messageService)
 
-        // 4. Register into the reload coordinator if necessary
         val reloadCoordinator = context.getOptionalService(com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator::class.java)
         reloadCoordinator?.register("utility", service)
     }

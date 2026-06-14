@@ -43,13 +43,50 @@ class ConfigServiceImpl(
         val loader = HoconLoaderFactory.create(file)
         val root = loader.load()
         val mapper = HoconLoaderFactory.mapperFactory.get(configClass)
-        return if (root.empty()) {
+        val instance = if (root.empty()) {
             mapper.save(defaultInstance, root)
             loader.save(root)
             defaultInstance
         } else {
             mapper.load(root) ?: defaultInstance
         }
+
+        // 1. Check schemaVersion compatibility if property exists
+        val schemaVersionField = try {
+            configClass.getDeclaredField("schemaVersion").apply { isAccessible = true }
+        } catch (e: Exception) {
+            null
+        }
+        if (schemaVersionField != null) {
+            val expectedVersion = schemaVersionField.get(defaultInstance) as? Int ?: 1
+            val loadedVersion = schemaVersionField.get(instance) as? Int ?: 0
+            if (loadedVersion != expectedVersion) {
+                throw IllegalStateException("Configuration file '${file.name}' schema version '$loadedVersion' does not match expected version '$expectedVersion'!")
+            }
+        }
+
+        // 2. Perform ValidationEngine validation
+        val serviceRegistry = org.bukkit.Bukkit.getServicesManager().load(ServiceRegistry::class.java)
+        val validationRegistry = serviceRegistry?.getOptional(com.github.berserkr2k.coreplugin.api.core.validation.ValidationRegistry::class.java) 
+            as? com.github.berserkr2k.coreplugin.infrastructure.validation.ValidationEngine
+        if (validationRegistry != null) {
+            val errors = validationRegistry.validate(instance)
+            if (errors.isNotEmpty()) {
+                val warnings = errors.filter { it.startsWith("[WARNING]") || it.startsWith("[WARN]") }
+                val fatals = errors.filterNot { it.startsWith("[WARNING]") || it.startsWith("[WARN]") }
+                
+                warnings.forEach { warn ->
+                    plugin.logger.warning("Configuration warning in ${file.name}: $warn")
+                    validationRegistry.recordWarning(file.name, warn)
+                }
+                
+                if (fatals.isNotEmpty()) {
+                    throw IllegalStateException("Configuration validation failed for ${file.name}:\n" + fatals.joinToString("\n"))
+                }
+            }
+        }
+
+        return instance
     }
 
     override fun <T : Any> saveConfig(file: File, configClass: Class<T>, instance: T) {

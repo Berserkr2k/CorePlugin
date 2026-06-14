@@ -116,13 +116,15 @@ class CorePlugin(
         val menuServiceImpl = com.github.berserkr2k.coreplugin.common.gui.MenuServiceImpl(this)
         val commandServiceImpl = com.github.berserkr2k.coreplugin.infrastructure.commands.CommandServiceImpl(commandManager)
         val itemBuilderFactoryImpl = com.github.berserkr2k.coreplugin.platform.paper.ItemBuilderFactoryImpl()
-        val permissionServiceImpl = com.github.berserkr2k.coreplugin.platform.paper.PaperPermissionService()
+
+        val validationEngine = com.github.berserkr2k.coreplugin.infrastructure.validation.ValidationEngine()
 
         registry.register(ConfigService::class.java, configService)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.menu.MenuService::class.java, menuServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.command.CommandService::class.java, commandServiceImpl)
         registry.register(com.github.berserkr2k.coreplugin.api.framework.item.ItemBuilderFactory::class.java, itemBuilderFactoryImpl)
-        registry.register(com.github.berserkr2k.coreplugin.api.framework.permission.PermissionService::class.java, permissionServiceImpl)
+        registry.register(com.github.berserkr2k.coreplugin.infrastructure.validation.ValidationEngine::class.java, validationEngine)
+        registry.register(com.github.berserkr2k.coreplugin.api.core.validation.ValidationRegistry::class.java, validationEngine)
 
         // 4. Inicializar Base de Datos (Módulo SQL)
         val db = DatabaseServiceImpl(this.dataFolder, taskScheduler, this.logger, configService)
@@ -201,7 +203,7 @@ class CorePlugin(
 
             val manager = com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager(context)
             this.featureManager = manager
-            registry.register(com.github.berserkr2k.coreplugin.infrastructure.lifecycle.FeatureManager::class.java, manager)
+            (this.reloadCoordinator as? com.github.berserkr2k.coreplugin.infrastructure.lifecycle.ReloadCoordinator)?.featureManager = manager
 
             // Registro centralizado de las nuevas features modulares
             manager.register(com.github.berserkr2k.coreplugin.infrastructure.spawn.SpawnFeature())

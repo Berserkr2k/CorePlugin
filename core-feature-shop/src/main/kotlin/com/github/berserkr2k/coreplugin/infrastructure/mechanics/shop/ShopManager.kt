@@ -34,6 +34,18 @@ class ShopManager(
 
     lateinit var marketConfig: MarketConfig
         private set
+
+    lateinit var displayConfig: MarketDisplayConfig
+        private set
+
+    lateinit var categoriesMenu: com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
+        private set
+
+    lateinit var historyMenu: com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig
+        private set
+
+    lateinit var quantityMenu: QuantityMenuConfig
+        private set
     
     val categories = ConcurrentHashMap<String, ShopConfig>()
     val buyVolumeCache = ConcurrentHashMap<String, Int>()
@@ -42,6 +54,94 @@ class ShopManager(
     @Volatile
     var marketReady = false
         private set
+
+    private val defaultCategoriesMenu = com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig(
+        title = "<gold><bold>Mercado Dinámico</bold></gold>",
+        size = 27,
+        filler = com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig(
+            enabled = true,
+            item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                material = "GRAY_STAINED_GLASS_PANE",
+                displayName = " "
+            )
+        ),
+        items = mapOf(
+            "blocks" to com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig(
+                slots = listOf(11),
+                item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                    material = "BRICKS",
+                    displayName = "<yellow><bold>Bloques de Construcción</bold></yellow>",
+                    lore = listOf(
+                        "<gray>Explora y comercia con bloques</gray>",
+                        "<gray>estructurales y decorativos.</gray>",
+                        "",
+                        "<yellow>▶ Haz clic para abrir</yellow>"
+                    )
+                ),
+                action = "open_shop_blocks"
+            ),
+            "food" to com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig(
+                slots = listOf(13),
+                item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                    material = "COOKED_BEEF",
+                    displayName = "<gold><bold>Alimentos y Comida</bold></gold>",
+                    lore = listOf(
+                        "<gray>Compra raciones de comida o vende</gray>",
+                        "<gray>los excedentes de tus granjas.</gray>",
+                        "",
+                        "<yellow>▶ Haz clic para abrir</yellow>"
+                    )
+                ),
+                action = "open_shop_food"
+            ),
+            "minerals" to com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig(
+                slots = listOf(15),
+                item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                    material = "DIAMOND",
+                    displayName = "<aqua><bold>Minerales y Materiales</bold></aqua>",
+                    lore = listOf(
+                        "<gray>El corazón de la economía.</gray>",
+                        "<gray>Fluctuaciones constantes de precios.</gray>",
+                        "",
+                        "<yellow>▶ Haz clic para abrir</yellow>"
+                    )
+                ),
+                action = "open_shop_minerals"
+            ),
+            "history" to com.github.berserkr2k.coreplugin.api.framework.menu.MenuItemConfig(
+                slots = listOf(22),
+                item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                    material = "BOOK",
+                    displayName = "<gray><bold>📜 Historial de Transacciones</bold></gray>",
+                    lore = listOf(
+                        "<gray>Ver tus compras y ventas</gray>",
+                        "<gray>realizadas en los últimos 7 días.</gray>",
+                        "",
+                        "<yellow>▶ Haz clic para abrir historial</yellow>"
+                    )
+                ),
+                action = "open_shop_history"
+            )
+        )
+    )
+
+    private val defaultHistoryMenu = com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig(
+        title = "<dark_gray><bold>Historial (7 días)</bold></dark_gray>",
+        size = 54,
+        paginated = true,
+        dynamicSlots = (9..44).toList(),
+        previousPageSlot = 45,
+        nextPageSlot = 53,
+        previousPageItem = com.github.berserkr2k.coreplugin.api.config.ItemConfig(material = "ARROW", displayName = "<yellow>◀ Página Anterior</yellow>"),
+        nextPageItem = com.github.berserkr2k.coreplugin.api.config.ItemConfig(material = "ARROW", displayName = "<yellow>Siguiente Página ▶</yellow>"),
+        filler = com.github.berserkr2k.coreplugin.api.framework.menu.FillerConfig(
+            enabled = true,
+            item = com.github.berserkr2k.coreplugin.api.config.ItemConfig(
+                material = "GRAY_STAINED_GLASS_PANE",
+                displayName = " "
+            )
+        )
+    )
 
     val initFuture = CompletableFuture<Void>()
 
@@ -69,9 +169,34 @@ class ShopManager(
         val future = CompletableFuture<Void>()
         taskScheduler.runAsync {
             try {
-                val configFile = folderProvider.getFeatureConfigFolder("shop").resolve("config.conf").toFile()
+                val configFolder = folderProvider.getFeatureConfigFolder("shop").toFile()
+                
+                // 1. config.conf
+                val configFile = File(configFolder, "config.conf")
                 this.marketConfig = configService.loadConfig(configFile, MarketConfig::class.java, MarketConfig())
                 
+                // 2. display.conf
+                val displayFile = File(configFolder, "display.conf")
+                this.displayConfig = configService.loadConfig(displayFile, MarketDisplayConfig::class.java, MarketDisplayConfig())
+                
+                // 3. menus/categories.conf
+                val categoriesFile = File(configFolder, "menus/categories.conf")
+                if (!categoriesFile.exists()) {
+                    configService.saveConfig(categoriesFile, com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig::class.java, defaultCategoriesMenu)
+                }
+                this.categoriesMenu = configService.loadConfig(categoriesFile, com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig::class.java, defaultCategoriesMenu)
+                
+                // 4. menus/history.conf
+                val historyFile = File(configFolder, "menus/history.conf")
+                if (!historyFile.exists()) {
+                    configService.saveConfig(historyFile, com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig::class.java, defaultHistoryMenu)
+                }
+                this.historyMenu = configService.loadConfig(historyFile, com.github.berserkr2k.coreplugin.api.framework.menu.MenuConfig::class.java, defaultHistoryMenu)
+                
+                // 5. menus/quantity.conf
+                val quantityFile = File(configFolder, "menus/quantity.conf")
+                this.quantityMenu = configService.loadConfig(quantityFile, QuantityMenuConfig::class.java, QuantityMenuConfig())
+
                 val categoriesDir = folderProvider.getFeatureDataFolder("shop").toFile()
                 
                 val blocksFile = File(categoriesDir, "blocks.conf")
@@ -81,7 +206,7 @@ class ShopManager(
                         ShopConfig::class.java,
                         ShopConfig(
                             shopId = "blocks",
-                            displayName = "<yellow>Bloques</yellow>",
+                            displayName = "<yellow>Tienda de Bloques</yellow>",
                             guiSize = 45,
                             items = listOf(
                                 ShopItemConfig("STONE", "2.0", guiSlot = 10),
@@ -101,7 +226,7 @@ class ShopManager(
                         ShopConfig::class.java,
                         ShopConfig(
                             shopId = "food",
-                            displayName = "<gold>Alimentos</gold>",
+                            displayName = "<gold>Tienda de Comida</gold>",
                             guiSize = 45,
                             items = listOf(
                                 ShopItemConfig("BREAD", "4.0", guiSlot = 11),
@@ -119,7 +244,7 @@ class ShopManager(
                         ShopConfig::class.java,
                         ShopConfig(
                             shopId = "minerals",
-                            displayName = "<aqua>Minerales</aqua>",
+                            displayName = "<aqua>Tienda de Minerales</aqua>",
                             guiSize = 45,
                             items = listOf(
                                 ShopItemConfig("COAL", "5.0", guiSlot = 10),

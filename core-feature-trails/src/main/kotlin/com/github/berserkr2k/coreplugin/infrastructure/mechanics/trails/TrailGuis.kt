@@ -19,13 +19,14 @@ class TrailGuis(
 
     fun openTrailSelector(player: Player) {
         val selectorConfig = trailManager.selectorConfig
+        val displayConfig = trailManager.displayConfig
         val builder = menuService.createBuilder()
-            .title(ColorUtility.parse(selectorConfig.title))
-            .slots(selectorConfig.size)
+            .title(ColorUtility.parse(selectorConfig.menu.title))
+            .slots(selectorConfig.menu.size)
 
         // Rellenar con paneles decorativos
-        if (selectorConfig.filler.enabled) {
-            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+        if (selectorConfig.menu.filler.enabled) {
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.menu.filler.item).build()
             val fillerButton = Button.builder().icon(fillerItem).build()
             builder.fill(fillerButton)
         }
@@ -34,22 +35,16 @@ class TrailGuis(
 
         // 1. Determinar qué ranuras están ocupadas por botones estáticos
         val occupiedSlots = mutableSetOf<Int>()
-        val clearItemConfig = selectorConfig.items["clear"]
+        val clearItemConfig = selectorConfig.menu.items["clear"]
         if (clearItemConfig != null) {
             occupiedSlots.addAll(clearItemConfig.slots)
         } else {
             occupiedSlots.add(22)
         }
 
-        org.bukkit.Bukkit.getLogger().info("[CorePlugin] Opening trails menu for player ${player.name}")
         val sortedTrails = trailManager.trails.values.sortedBy { it.id }
-        org.bukkit.Bukkit.getLogger().info("[CorePlugin] GUI received ${sortedTrails.size} trails.")
-        sortedTrails.forEach {
-            org.bukkit.Bukkit.getLogger().info("[CorePlugin]  - Trail ID: ${it.id}, permission: ${it.permission}, guiSlot: ${it.guiSlot}, material: ${it.item.material}")
-        }
 
         val drawTrail = { config: TrailConfig, slot: Int ->
-            org.bukkit.Bukkit.getLogger().info("[CorePlugin] Drawing trail ${config.id} in slot $slot")
             val trailId = config.id
             val hasPerm = player.hasPermission(config.permission)
             val isActive = activeTrail == trailId
@@ -63,15 +58,15 @@ class TrailGuis(
 
             when {
                 isActive -> {
-                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_EQUIPPED).ifEmpty { "<green>⭐ ¡Estela Equipada!</green>" })
-                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_EQUIPPED_LORE).ifEmpty { "<gray>Tu proyectil ya tiene este efecto.</gray>" })
+                    loreLines.add(displayConfig.statusEquipped)
+                    loreLines.add(displayConfig.statusEquippedLore)
                 }
                 hasPerm -> {
-                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_SELECT).ifEmpty { "<yellow>⚡ Click para Equipar</yellow>" })
+                    loreLines.add(displayConfig.statusSelect)
                 }
                 else -> {
-                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_LOCKED).ifEmpty { "<red>❌ Bloqueado</red>" })
-                    loreLines.add(messageService.getRawTemplate(TrailMessages.GUI_TRAIL_LOCKED_LORE).ifEmpty { "<gray>Requiere permiso: <red><permission></red></gray>" }.replace("<permission>", config.permission))
+                    loreLines.add(displayConfig.statusLocked)
+                    loreLines.add(displayConfig.statusLockedLore.replace("<permission>", config.permission))
                 }
             }
 
@@ -106,18 +101,18 @@ class TrailGuis(
             builder.button(slot, btn)
         }
 
-        if (selectorConfig.paginated) {
+        if (selectorConfig.menu.paginated) {
             builder.placePaginatedItems(
-                selectorConfig,
+                selectorConfig.menu,
                 sortedTrails,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                selectorConfig.menu.previousPageItem,
+                selectorConfig.menu.nextPageItem
             ) { trailConfig, slot ->
                 drawTrail(trailConfig, slot)
             }
         } else {
             builder.placeDynamicItems(
-                selectorConfig,
+                selectorConfig.menu,
                 sortedTrails,
                 { it.guiSlot },
                 startSlot = 10
@@ -127,7 +122,7 @@ class TrailGuis(
         }
 
         // Botón de Quitar Estela cargado dinámicamente desde HOCON
-        val clearBtnConfig = selectorConfig.items["clear"] ?: MenuItemConfig(
+        val clearBtnConfig = selectorConfig.menu.items["clear"] ?: MenuItemConfig(
             slots = listOf(22),
             item = ItemConfig(
                 material = "BARRIER",
@@ -140,17 +135,8 @@ class TrailGuis(
 
         val clearSlot = clearBtnConfig.slots.firstOrNull() ?: 22
 
-        val clearDisplayName = messageService.getRawTemplate(TrailMessages.GUI_CLEAR_NAME).ifEmpty {
-            clearBtnConfig.item.displayName?.ifEmpty { "<red><bold>❌ Quitar Estela</bold></red>" } ?: "<red><bold>❌ Quitar Estela</bold></red>"
-        }
-        val clearLoreRaw = messageService.getRawTemplate(TrailMessages.GUI_CLEAR_LORE).ifEmpty {
-            if (clearBtnConfig.item.lore.isNotEmpty()) {
-                clearBtnConfig.item.lore.joinToString("\n")
-            } else {
-                "<gray>Haz click aquí para remover tu</gray>\n<gray>estela de partículas activa.</gray>\n \n<yellow>⚡ Click para remover</yellow>"
-            }
-        }
-        val clearLore = clearLoreRaw.split("\n")
+        val clearDisplayName = displayConfig.clearName
+        val clearLore = displayConfig.clearLore
 
         val clearItem = itemBuilderFactory.builder(clearBtnConfig.item.copy(displayName = clearDisplayName, lore = clearLore)).build()
 

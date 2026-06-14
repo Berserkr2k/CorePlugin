@@ -43,23 +43,7 @@ class ShopGuis(
         // Registrar acciones dinámicas para abrir las tiendas de forma local al instanciar el menú
     }
 
-    private fun getMsg(key: String, vararg placeholders: Pair<String, Any>): String {
-        val enumKey = try {
-            ShopMessages.valueOf(key.uppercase().replace("-", "_"))
-        } catch (e: Exception) {
-            null
-        }
-        if (enumKey == null) {
-            plugin.logger.warning("No se encontró clave enum ShopMessages para '$key'")
-            return ""
-        }
-        val raw = messageService.getRawTemplate(enumKey)
-        var msg = raw
-        for (ph in placeholders) {
-            msg = msg.replace("<${ph.first}>", ph.second.toString())
-        }
-        return msg
-    }
+
 
 
     fun openCategoriesMenu(player: Player) {
@@ -68,7 +52,7 @@ class ShopGuis(
             return
         }
  
-        val config = shopManager.marketConfig.categoriesMenu
+        val config = shopManager.categoriesMenu
         val title = ColorUtility.parse(config.title)
         val size = config.size
         
@@ -103,7 +87,7 @@ class ShopGuis(
             regionTaskScheduler.runAtEntity(player, Runnable {
                 if (!player.isOnline) return@Runnable
 
-                val config = shopManager.marketConfig.historyMenu
+                val config = shopManager.historyMenu
                 val title = ColorUtility.parse(config.title)
                 val size = config.size
                 val builder = menuService.createBuilder()
@@ -118,10 +102,10 @@ class ShopGuis(
                 }
 
                 // Botón de retorno al selector
-                val backMatStr = getMsg("back-item-material")
+                val backMatStr = shopManager.displayConfig.backItemMaterial
                 val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
-                val backName = getMsg("back-item-name")
-                val backLore = listOf(getMsg("back-item-lore"))
+                val backName = shopManager.displayConfig.backItemName
+                val backLore = shopManager.displayConfig.backItemLore
 
                 val backItem = itemFactory.create(backMat)
                     .name(ColorUtility.parse(backName))
@@ -146,13 +130,13 @@ class ShopGuis(
                     val mat = Material.matchMaterial(matName) ?: org.bukkit.Material.PAPER
                     
                     val nameFormat = if (record.type.equals("BUY", ignoreCase = true)) {
-                        shopManager.marketConfig.historyItemBuyFormat
+                        shopManager.displayConfig.historyItemBuyFormat
                     } else {
-                        shopManager.marketConfig.historyItemSellFormat
+                        shopManager.displayConfig.historyItemSellFormat
                     }
                     val displayName = nameFormat.replace("<material>", mat.name.replace("_", " "))
 
-                    val datePattern = shopManager.marketConfig.historyDateFormat
+                    val datePattern = shopManager.displayConfig.historyDateFormat
                     val sdf = try {
                         java.text.SimpleDateFormat(datePattern, java.util.Locale.US)
                     } catch (e: Exception) {
@@ -161,7 +145,7 @@ class ShopGuis(
                     val dateStr = sdf.format(java.util.Date(record.timestamp))
 
                     val totalFormatted = economyService.formatBalance(shopManager.marketConfig.currencyId, record.totalPrice)
-                    val lore = shopManager.marketConfig.historyItemLoreFormat.map { line ->
+                    val lore = shopManager.displayConfig.historyItemLoreFormat.map { line ->
                         line.replace("<category>", record.shopId)
                             .replace("<quantity>", record.quantity.toString())
                             .replace("<total>", totalFormatted)
@@ -208,10 +192,10 @@ class ShopGuis(
         builder.fill(fillerBtn)
  
         // Botón de retorno al selector configurable
-        val backMatStr = categoryConfig.backItemMaterial ?: getMsg("back-item-material")
+        val backMatStr = categoryConfig.backItemMaterial ?: shopManager.displayConfig.backItemMaterial
         val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
-        val backName = categoryConfig.backItemName ?: getMsg("back-item-name")
-        val backLoreStr = if (categoryConfig.backItemLore.isNotEmpty()) categoryConfig.backItemLore else listOf(getMsg("back-item-lore"))
+        val backName = categoryConfig.backItemName ?: shopManager.displayConfig.backItemName
+        val backLoreStr = if (categoryConfig.backItemLore.isNotEmpty()) categoryConfig.backItemLore else shopManager.displayConfig.backItemLore
  
         val backItem = itemBuilderFactory.builder(
             ItemConfig(
@@ -326,7 +310,7 @@ class ShopGuis(
         val sells = shopManager.sellVolumeCache[itemId] ?: 0
         val netVolume = buys - sells
 
-        val trend = if (netVolume > 0) getMsg("trend-up") else if (netVolume < 0) getMsg("trend-down") else getMsg("trend-stable")
+        val trend = if (netVolume > 0) shopManager.displayConfig.trendUp else if (netVolume < 0) shopManager.displayConfig.trendDown else shopManager.displayConfig.trendStable
 
         val newLore = mutableListOf<String>()
 
@@ -339,24 +323,24 @@ class ShopGuis(
         }
 
         // 2. Agregar formato transaccional genérico reutilizable (Estructura Genérica de messages.conf)
-        newLore.add(getMsg("lore-separator"))
+        newLore.add(shopManager.displayConfig.loreSeparator)
         if (item.allowBuy) {
-            newLore.add(getMsg("buy-price-format").replace("<price>", economyService.formatBalance(shopManager.marketConfig.currencyId, buyPrice)))
-            newLore.add(getMsg("buy-tax-format").replace("<tax>", economyService.formatBalance(shopManager.marketConfig.currencyId, taxBuy)))
+            newLore.add(shopManager.displayConfig.buyPriceFormat.replace("<price>", economyService.formatBalance(shopManager.marketConfig.currencyId, buyPrice)))
+            newLore.add(shopManager.displayConfig.buyTaxFormat.replace("<tax>", economyService.formatBalance(shopManager.marketConfig.currencyId, taxBuy)))
         } else {
-            newLore.add(getMsg("buy-disabled"))
+            newLore.add(shopManager.displayConfig.buyDisabled)
         }
         if (item.allowSell) {
-            newLore.add(getMsg("sell-price-format").replace("<price>", economyService.formatBalance(shopManager.marketConfig.currencyId, sellPrice)))
-            newLore.add(getMsg("sell-tax-format").replace("<tax>", economyService.formatBalance(shopManager.marketConfig.currencyId, taxSell)))
+            newLore.add(shopManager.displayConfig.sellPriceFormat.replace("<price>", economyService.formatBalance(shopManager.marketConfig.currencyId, sellPrice)))
+            newLore.add(shopManager.displayConfig.sellTaxFormat.replace("<tax>", economyService.formatBalance(shopManager.marketConfig.currencyId, taxSell)))
         } else {
-            newLore.add(getMsg("sell-disabled"))
+            newLore.add(shopManager.displayConfig.sellDisabled)
         }
-        newLore.add(getMsg("lore-separator"))
-        newLore.add(getMsg("lore-volume").replace("<volume>", (buys + sells).toString()))
-        newLore.add(getMsg("lore-trend").replace("<trend>", trend))
-        newLore.add(getMsg("lore-separator"))
-        newLore.add(getMsg("lore-click"))
+        newLore.add(shopManager.displayConfig.loreSeparator)
+        newLore.add(shopManager.displayConfig.loreVolume.replace("<volume>", (buys + sells).toString()))
+        newLore.add(shopManager.displayConfig.loreTrend.replace("<trend>", trend))
+        newLore.add(shopManager.displayConfig.loreSeparator)
+        newLore.add(shopManager.displayConfig.loreClick)
 
         val combinedLore = ArrayList<net.kyori.adventure.text.Component>()
         newLore.forEach { combinedLore.add(ColorUtility.parse(it)) }
@@ -366,14 +350,14 @@ class ShopGuis(
     }
 
     fun openQuantitySubGui(player: Player, shopId: String, itemConfig: ShopItemConfig) {
-        val title = ColorUtility.parse(getMsg("quantity-gui-title"))
+        val title = ColorUtility.parse(shopManager.quantityMenu.title)
         val builder = menuService.createBuilder()
             .title(title)
             .slots(27)
  
         // Rellenar fondo decorativo
         val filler = itemBuilderFactory.builder(
-            ItemConfig(material = getMsg("quantity-gui-background-material"), displayName = " ")
+            ItemConfig(material = shopManager.quantityMenu.backgroundMaterial, displayName = " ")
         ).build()
         builder.fill(Button.builder().icon(filler).build())
  
@@ -390,15 +374,15 @@ class ShopGuis(
  
         // Slot 13: Divisor Central Tintado
         val divisor = itemBuilderFactory.builder(
-            ItemConfig(material = getMsg("quantity-gui-divisor-material"), displayName = " ")
+            ItemConfig(material = shopManager.quantityMenu.divisorMaterial, displayName = " ")
         ).build()
         builder.button(13, Button.builder().icon(divisor).build())
  
         // Slot 22: Botón de Volver configurable
-        val backMatStr = getMsg("back-item-material")
+        val backMatStr = shopManager.displayConfig.backItemMaterial
         val backMat = Material.matchMaterial(backMatStr) ?: Material.BARRIER
-        val backName = getMsg("back-item-name")
-        val backLoreStr = listOf(getMsg("back-item-lore"))
+        val backName = shopManager.displayConfig.backItemName
+        val backLoreStr = shopManager.displayConfig.backItemLore
  
         val backItem = itemBuilderFactory.builder(
             ItemConfig(
@@ -432,12 +416,15 @@ class ShopGuis(
             val totalCost = maxBuyRes.second
             
             val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)
-            val rawLore = getMsg("buy-max-lore", "qty" to count.toString(), "price" to formattedPrice)
+            val resolvedLore = shopManager.quantityMenu.buyMaxLore.map { line ->
+                line.replace("<qty>", count.toString())
+                    .replace("<price>", formattedPrice)
+            }
             val maxBuyItem = itemBuilderFactory.builder(
                 ItemConfig(
-                    material = getMsg("buy-max-material"),
-                    displayName = getMsg("buy-max-name"),
-                    lore = rawLore.split("\n")
+                    material = shopManager.quantityMenu.buyMaxMaterial,
+                    displayName = shopManager.quantityMenu.buyMaxName,
+                    lore = resolvedLore
                 )
             ).build()
             
@@ -455,12 +442,15 @@ class ShopGuis(
             val totalVal = sellRes.first
  
             val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)
-            val rawLore = getMsg("sell-all-lore", "qty" to itemsCount.toString(), "price" to formattedPrice)
+            val resolvedLore = shopManager.quantityMenu.sellAllLore.map { line ->
+                line.replace("<qty>", itemsCount.toString())
+                    .replace("<price>", formattedPrice)
+            }
             val sellAllItem = itemBuilderFactory.builder(
                 ItemConfig(
-                    material = getMsg("sell-all-material"),
-                    displayName = getMsg("sell-all-name"),
-                    lore = rawLore.split("\n")
+                    material = shopManager.quantityMenu.sellAllMaterial,
+                    displayName = shopManager.quantityMenu.sellAllName,
+                    lore = resolvedLore
                 )
             ).build()
  
@@ -477,7 +467,7 @@ class ShopGuis(
     private fun setupBuyButton(builder: MenuBuilder, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
         if (!item.allowBuy) {
             val disabled = itemBuilderFactory.builder(
-                ItemConfig(material = getMsg("disabled-material"), displayName = getMsg("buy-disabled-name"))
+                ItemConfig(material = shopManager.quantityMenu.disabledMaterial, displayName = shopManager.quantityMenu.buyDisabledName)
             ).build()
             builder.button(slot, Button.builder().icon(disabled).build())
             return
@@ -487,12 +477,15 @@ class ShopGuis(
         val totalCost = sim.first
  
         val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalCost)
-        val rawLore = getMsg("buy-qty-lore", "qty" to qty.toString(), "price" to formattedPrice)
+        val resolvedLore = shopManager.quantityMenu.buyQtyLore.map { line ->
+            line.replace("<qty>", qty.toString())
+                .replace("<price>", formattedPrice)
+        }
         val btn = itemBuilderFactory.builder(
             ItemConfig(
-                material = getMsg("buy-qty-material"),
-                displayName = getMsg("buy-qty-name").replace("<qty>", qty.toString()),
-                lore = rawLore.split("\n")
+                material = shopManager.quantityMenu.buyQtyMaterial,
+                displayName = shopManager.quantityMenu.buyQtyName.replace("<qty>", qty.toString()),
+                lore = resolvedLore
             )
         ).build()
  
@@ -506,7 +499,7 @@ class ShopGuis(
     private fun setupSellButton(builder: MenuBuilder, slot: Int, qty: Int, item: ShopItemConfig, shopId: String) {
         if (!item.allowSell) {
             val disabled = itemBuilderFactory.builder(
-                ItemConfig(material = getMsg("disabled-material"), displayName = getMsg("sell-disabled-name"))
+                ItemConfig(material = shopManager.quantityMenu.disabledMaterial, displayName = shopManager.quantityMenu.sellDisabledName)
             ).build()
             builder.button(slot, Button.builder().icon(disabled).build())
             return
@@ -516,12 +509,15 @@ class ShopGuis(
         val totalVal = sim.first
  
         val formattedPrice = economyService.formatBalance(shopManager.marketConfig.currencyId, totalVal)
-        val rawLore = getMsg("sell-qty-lore", "qty" to qty.toString(), "price" to formattedPrice)
+        val resolvedLore = shopManager.quantityMenu.sellQtyLore.map { line ->
+            line.replace("<qty>", qty.toString())
+                .replace("<price>", formattedPrice)
+        }
         val btn = itemBuilderFactory.builder(
             ItemConfig(
-                material = getMsg("sell-qty-material"),
-                displayName = getMsg("sell-qty-name").replace("<qty>", qty.toString()),
-                lore = rawLore.split("\n")
+                material = shopManager.quantityMenu.sellQtyMaterial,
+                displayName = shopManager.quantityMenu.sellQtyName.replace("<qty>", qty.toString()),
+                lore = resolvedLore
             )
         ).build()
  

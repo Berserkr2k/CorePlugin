@@ -120,21 +120,21 @@ class WarpCommand(
 
     private fun openWarpsMenu(player: Player) {
         val selectorConfig = warpService.menuConfig
-        val menuTitle = ColorUtility.parse(selectorConfig.title)
+        val menuTitle = ColorUtility.parse(selectorConfig.menu.title)
         
         val builder = menuService.createBuilder()
             .title(menuTitle)
-            .slots(selectorConfig.size)
+            .slots(selectorConfig.menu.size)
 
         // 1. Relleno de fondo si está activo
-        if (selectorConfig.filler.enabled) {
-            val fillerItem = itemBuilderFactory.builder(selectorConfig.filler.item).build()
+        if (selectorConfig.menu.filler.enabled) {
+            val fillerItem = itemBuilderFactory.builder(selectorConfig.menu.filler.item).build()
             val fillerButton = Button.builder().icon(fillerItem).build()
             builder.fill(fillerButton)
         }
 
         // 2. Cargar ítems estáticos
-        builder.loadFromConfig(selectorConfig)
+        builder.loadFromConfig(selectorConfig.menu)
 
         // 3. Cargar warps dinámicos
         val warpsList = warpService.getAllWarpConfigs().sortedBy { it.name.lowercase() }
@@ -148,11 +148,11 @@ class WarpCommand(
 
             if (!hasPerm) {
                 loreLines.add(" ")
-                loreLines.add(messageService.getRawTemplate(WarpMessages.GUI_WARP_LOCKED).ifEmpty { "<red>❌ Bloqueado</red>" })
-                loreLines.add(messageService.getRawTemplate(WarpMessages.GUI_WARP_REQUIRES_PERMISSION).ifEmpty { "<gray>Requiere permiso: <red><permission></red></gray>" }.replace("<permission>", warp.permission))
+                loreLines.add(selectorConfig.statusLocked)
+                loreLines.add(selectorConfig.statusRequiresPermission.replace("<permission>", warp.permission))
             }
 
-            val defaultDisplayName = messageService.getRawTemplate(WarpMessages.GUI_WARP_DEFAULT_DISPLAYNAME).ifEmpty { "<green><bold>Warp <name></bold></green>" }
+            val defaultDisplayName = selectorConfig.defaultDisplayName
             val processedItemConfig = baseItem.copy(
                 displayName = (baseItem.displayName ?: defaultDisplayName).replace("<name>", warp.name),
                 lore = loreLines.map { it.replace("<name>", warp.name) }
@@ -176,18 +176,18 @@ class WarpCommand(
             builder.button(slot, btn)
         }
 
-        if (selectorConfig.paginated) {
+        if (selectorConfig.menu.paginated) {
             builder.placePaginatedItems(
-                selectorConfig,
+                selectorConfig.menu,
                 warpsList,
-                selectorConfig.previousPageItem,
-                selectorConfig.nextPageItem
+                selectorConfig.menu.previousPageItem,
+                selectorConfig.menu.nextPageItem
             ) { warp, slot ->
                 drawWarpItem(warp, slot)
             }
         } else {
             builder.placeDynamicItems(
-                selectorConfig,
+                selectorConfig.menu,
                 warpsList,
                 { it.guiSlot },
                 startSlot = 0

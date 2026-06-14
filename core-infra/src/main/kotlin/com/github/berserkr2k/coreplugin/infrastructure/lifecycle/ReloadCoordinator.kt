@@ -12,6 +12,8 @@ class ReloadCoordinator(
 ) : com.github.berserkr2k.coreplugin.api.core.lifecycle.ReloadCoordinator {
     private val reloadables = ConcurrentHashMap<String, Reloadable>()
 
+    var featureManager: FeatureManager? = null
+
     /**
      * Registra una feature recargable en el coordinador.
      */
@@ -45,7 +47,6 @@ class ReloadCoordinator(
         val metrics = mutableMapOf<String, Long>()
         
         // 1. Obtener el orden de dependencias de la base de datos de características activas
-        val featureManager = registry.getOptional(FeatureManager::class.java)
         val sortedFeatures = featureManager?.getEnabledFeaturesInOrder() ?: emptyList()
         val sortedFeatureIds = sortedFeatures.map { it.id.lowercase() }
         

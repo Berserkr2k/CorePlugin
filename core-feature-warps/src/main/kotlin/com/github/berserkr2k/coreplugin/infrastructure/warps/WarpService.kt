@@ -59,14 +59,7 @@ class WarpService(
         return stateService.getContainer(uuid, WARP_STATE)
     }
 
-    var menuConfig = MenuConfig(
-        title = "<dark_gray>Puntos de Teletransporte</dark_gray>",
-        size = 27,
-        filler = FillerConfig(
-            enabled = true,
-            item = ItemConfig(material = "GRAY_STAINED_GLASS_PANE", displayName = " ")
-        )
-    )
+    var menuConfig = WarpsSelectorMenuConfig()
         private set
 
     init {
@@ -75,8 +68,8 @@ class WarpService(
     }
 
     private fun loadMenuConfig() {
-        val menuConfigFile = folderProvider.getFeatureConfigFolder("warps").resolve("warps-selector.conf").toFile()
-        this.menuConfig = configService.loadConfig(menuConfigFile, MenuConfig::class.java, menuConfig)
+        val menuConfigFile = folderProvider.getFeatureConfigFolder("warps").resolve("menus/selector.conf").toFile()
+        this.menuConfig = configService.loadConfig(menuConfigFile, WarpsSelectorMenuConfig::class.java, WarpsSelectorMenuConfig())
     }
 
     fun loadAllWarps() {
