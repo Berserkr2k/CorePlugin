@@ -181,8 +181,10 @@ class MenuBuilderImpl(private val plugin: Plugin) : MenuBuilder {
         dynamicRunner?.invoke(customMenu)
 
         // 7. Cargar acción de cierre
-        closeAction?.let { action ->
-            customMenu.onClose = action
+        val originalCloseAction = closeAction
+        customMenu.onClose = { player ->
+            originalCloseAction?.invoke(player)
+            this.activeMenu = null
         }
 
         return MenuImpl(customMenu)
